@@ -5,13 +5,13 @@ use thiserror::Error;
 use crate::actr_package::{
     self, ActrPackageManifest, ContractGateStatus as DomainContractGateStatus, ManifestError,
 };
-use crate::realm_link;
 use crate::auth;
 use crate::bridge;
 use crate::browser;
 use crate::browser_data;
 use crate::domain::{AppSourceType, Contract, SystemAppType, Tag as DomainTag};
 use crate::persistence;
+use crate::realm_link;
 use crate::runtime_persistence;
 use crate::speech;
 
@@ -752,7 +752,9 @@ pub fn generate_installation_id() -> String {
 /// Validate an installation id against the `.actr.alt` domain rules.
 pub fn validate_installation_id(id: String) -> Result<(), CoreError> {
     let valid = id.len() == 26
-        && id.bytes().all(|byte| matches!(byte, b'a'..=b'z' | b'2'..=b'7'));
+        && id
+            .bytes()
+            .all(|byte| matches!(byte, b'a'..=b'z' | b'2'..=b'7'));
     if valid {
         Ok(())
     } else {
@@ -764,7 +766,7 @@ pub fn validate_installation_id(id: String) -> Result<(), CoreError> {
 /// characters, matching the shape `ActrUri::normalize_domain` accepts.
 fn encode_base32_lowercase(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
-    let mut output = String::with_capacity((bytes.len() * 8 + 4) / 5);
+    let mut output = String::with_capacity((bytes.len() * 8).div_ceil(5));
     let mut buffer = 0u32;
     let mut bits = 0u32;
     for &byte in bytes {
@@ -788,10 +790,7 @@ fn encode_base32_lowercase(bytes: &[u8]) -> String {
 /// rejects authority-only URIs, then dispatches a matching local Realm to
 /// `open_local` and a DNS Realm to `discover_remote`. Both arms produce the
 /// same shape; `is_local` tells the shell which follow-up flow applies.
-pub fn parse_actr_uri(
-    uri: String,
-    installation_id: String,
-) -> Result<ActrUriInfo, CoreError> {
+pub fn parse_actr_uri(uri: String, installation_id: String) -> Result<ActrUriInfo, CoreError> {
     realm_link::open_realm_link::<ActrUriInfo, CoreError>(
         &uri,
         &installation_id,
@@ -4804,9 +4803,11 @@ mod tests {
 
     #[test]
     fn parse_actr_uri_reads_realm_and_actor_links() {
-        let realm =
-            parse_actr_uri("actr://Acme.COM/k7m2q9xh".to_string(), INSTALLATION_ID.to_string())
-                .unwrap();
+        let realm = parse_actr_uri(
+            "actr://Acme.COM/k7m2q9xh".to_string(),
+            INSTALLATION_ID.to_string(),
+        )
+        .unwrap();
         assert_eq!(realm.domain, "acme.com");
         assert_eq!(realm.realm_id.as_deref(), Some("k7m2q9xh"));
         assert_eq!(realm.serial, None);
@@ -4857,30 +4858,38 @@ mod tests {
 
     #[test]
     fn parse_actr_uri_rejects_bad_scheme_and_legacy_forms() {
-        let scheme =
-            parse_actr_uri("https://acme.com/k7m2q9xh".to_string(), INSTALLATION_ID.to_string())
-                .unwrap_err();
+        let scheme = parse_actr_uri(
+            "https://acme.com/k7m2q9xh".to_string(),
+            INSTALLATION_ID.to_string(),
+        )
+        .unwrap_err();
         assert!(matches!(scheme, CoreError::UriSchemeInvalid));
 
         // A legacy form must be rejected, never silently normalized:
         // `actr://<publisher>/<program>@<version>` (uri.rs `is_legacy`).
-        let legacy =
-            parse_actr_uri("actr://acme.com/counter@1.0.0".to_string(), INSTALLATION_ID.to_string())
-                .unwrap_err();
+        let legacy = parse_actr_uri(
+            "actr://acme.com/counter@1.0.0".to_string(),
+            INSTALLATION_ID.to_string(),
+        )
+        .unwrap_err();
         assert!(matches!(legacy, CoreError::UriLegacyForm));
 
         // Ports are not a legacy form; they are a plain domain rejection.
-        let port =
-            parse_actr_uri("actr://acme.com:8443/k7m2q9xh".to_string(), INSTALLATION_ID.to_string())
-                .unwrap_err();
+        let port = parse_actr_uri(
+            "actr://acme.com:8443/k7m2q9xh".to_string(),
+            INSTALLATION_ID.to_string(),
+        )
+        .unwrap_err();
         assert!(matches!(port, CoreError::UriDomainInvalid));
     }
 
     #[test]
     fn parse_actr_uri_rejects_invalid_labels() {
-        let label =
-            parse_actr_uri("actr://acme.com/Bad_Label".to_string(), INSTALLATION_ID.to_string())
-                .unwrap_err();
+        let label = parse_actr_uri(
+            "actr://acme.com/Bad_Label".to_string(),
+            INSTALLATION_ID.to_string(),
+        )
+        .unwrap_err();
         assert!(matches!(label, CoreError::UriLabelInvalid));
     }
 
