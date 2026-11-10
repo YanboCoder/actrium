@@ -67,7 +67,7 @@ Actrium 要把 Actor 程序变成普通用户可以理解、安装、创建、�
 
 ### 3.4 Realm 签名 key 持有方与 Realm 所有者
 
-Realm 域名的所有者即 Realm 签名 key 持有方：在 authority descriptor 中发布 Realm 签名 key，按自己的策略认证请求方后授权在该域名下创建 Realm，决定使用哪个 Realm Infra Provider，并负责 Realm 签名 key 轮换；也可以委托 Realm Infra Provider 代持 key。没有域名就不分配 Realm（本机 Realm 除外）。
+Realm 域名的所有者即 Realm 签名 key 持有方：在 authority descriptor 中发布 Realm 签名 key，按自己的策略认证请求方后授权在该域名下创建 Realm，决定使用哪个 Actr Facility Provider，并负责 Realm 签名 key 轮换；也可以委托 Actr Facility Provider 代持 key。没有域名就不分配 Realm（本机 Realm 除外）。
 
 Realm 所有者即应用实例的创建者，管理该实例 Realm 的成员身份、Actor 准入、连接 ACL、Realm 邀请、客户端撤销与审计。
 

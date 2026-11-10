@@ -66,7 +66,7 @@ def check_dependencies(root, expected_version=None):
 check_dependencies(repo)
 upstream_names = ("webrtc", "rtc", "rtc-rtp", "turn_crate", "webrtc-stun", "stun-protocol", "webrtc-util")
 workspace_deps = tomllib.loads((repo / "Cargo.toml").read_text())["workspace"]["dependencies"]
-upstream_sources = {name: (workspace_deps[name]["git"], workspace_deps[name]["rev"]) for name in upstream_names}
+upstream_sources = {name: {key: workspace_deps[name].get(key) for key in ("version", "git", "rev")} for name in upstream_names}
 # Execute the real release version updater against isolated copies, never the checkout.
 updater = script.split("update_versions() {", 1)[1].split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
 with tempfile.TemporaryDirectory(prefix="actr-relay-release-") as directory:
@@ -87,6 +87,6 @@ with tempfile.TemporaryDirectory(prefix="actr-relay-release-") as directory:
     check_dependencies(copied, version)
     updated_deps = tomllib.loads((copied / "Cargo.toml").read_text())["workspace"]["dependencies"]
     for name, source in upstream_sources.items():
-        assert (updated_deps[name]["git"], updated_deps[name]["rev"]) == source, (name, "release bump changed upstream source")
+        assert {key: updated_deps[name].get(key) for key in source} == source, (name, "release bump changed upstream source")
 print("Release dependency order, publishable versions and isolated version bump passed.")
 PY

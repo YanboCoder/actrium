@@ -1,6 +1,6 @@
 # PR #325 TURN 上游来源与差异清单
 
-源码核验日期：2026-10-12；上游合并状态核验日期：2026-11-02（UTC+8）。本清单覆盖 #325 中 TURN/STUN 的标准化改动；WSS 业务 relay 的协议与产品功能另见 [验收记录](wss-relay-acceptance.zh.md)。本文件为中文文档。
+源码核验日期：2026-10-12；上游合并状态核验日期：2026-11-02；依赖发布状态核验日期：2026-11-09（UTC+8）。本清单覆盖 #325 中 TURN/STUN 的标准化改动；WSS 业务 relay 的协议与产品功能另见 [验收记录](wss-relay-acceptance.zh.md)。本文件为中文文档。
 
 收敛规则：上游已有则采用对应版本或提交；上游缺少的通用实现必须有已提交的 issue/PR；项目配置和接线不能包含独有的 RFC 报文实现。
 
@@ -10,11 +10,11 @@
 | --- | --- | --- |
 | `webrtc` | 官方上游 `8ea6e2a69b0c4c97f38b0e81e5a77e1c066f3757` | 包含 [#928](https://github.com/webrtc-rs/webrtc/pull/928)、已合并的 [#944](https://github.com/webrtc-rs/webrtc/pull/944) 和 TURN 发送修复 [#946](https://github.com/webrtc-rs/webrtc/pull/946) |
 | `rtc`、`rtc-turn`、`rtc-rtp` | 同一 WebRTC 提交中的 RTC 子模块 `cd3f08a243ced3714c965070b4fa7105dfe89c0e` | 包含 [rtc #274](https://github.com/webrtc-rs/rtc/pull/274) 及后续 RTC 修复 |
-| `turn`、`stun`、`webrtc-util` | `c229349e67cc235e6737bbf92bd7dd48fdc135fa` | [#936](https://github.com/webrtc-rs/webrtc/pull/936) 及其前置修复 |
+| `turn`、`stun`、`webrtc-util` | crates.io `0.17.3` | [#936](https://github.com/webrtc-rs/webrtc/pull/936) 及其前置修复 |
 
 #936 的合并提交包含 #927/#930/#932/#934 的前置修复，以及剩余通用实现和回归；这些 PR 现均已合并，同一修复不能重复计数为新增贡献。Cargo 覆盖配置与外部消费者的要求见[上游依赖说明](upstream-patches.md)。
 
-客户端及服务端的源码依赖均固定为官方上游提交；依赖图核验需要同时检查 `rtc-turn` 的实际来源及 RTC 子模块提交。
+客户端依赖固定为官方上游提交，服务端依赖固定为已发布版本；依赖图核验需要同时检查 `rtc-turn` 的实际来源及 RTC 子模块提交。
 
 客户端 Refresh(0)、原 socket 释放、close 完成等待、自 driver 回调避免自等待，直接采用 0.21.1（上游 #895/#911/#912），删除原本地重复实现；等待上限采用上游 100ms。Allocate 重传直接采用已合入 legacy 的 [#896](https://github.com/webrtc-rs/webrtc/pull/896) 缓存结构和处理，不保留本地另一套 raw 缓存。
 
@@ -30,7 +30,7 @@
 | 认证错误和完整性/nonce 检查顺序 | [webrtc #933](https://github.com/webrtc-rs/webrtc/issues/933) | [webrtc #934](https://github.com/webrtc-rs/webrtc/pull/934) | `v0.17.x`，2026-10-25 |
 | 剩余通用认证、报文、allocation 和 peer 校验 | [webrtc #935](https://github.com/webrtc-rs/webrtc/issues/935) | [webrtc #936](https://github.com/webrtc-rs/webrtc/pull/936) | `v0.17.x`，2026-10-26 |
 
-以上七个 PR 均已合并；合并状态与 crates.io 版本发布状态是两回事。本 PR 使用上述固定 Git 提交。
+以上七个 PR 均已合并；合并状态与 crates.io 版本发布状态是两回事。服务端修复已包含在 0.17.3 中，客户端修复仍需使用上述固定 Git 提交。
 
 ## 逐项映射
 
@@ -89,7 +89,7 @@ RFC 8489 §9.2 指定 feature 0 的线上编码为 `80 00 00`（`gAAA`），rust
 - `loran-stun`：socket 循环、关闭信号、observer 和错误类型。Binding 报文处理与接收缓冲常量来自 #936，不保留独立解析器。
 - `loran-platform` / `loran-server`：静态用户或共享密钥模式选择、advertised IP、端口范围、URL 与服务接线。URL 使用标准 `SocketAddr` 格式化，不自行实现 TURN URI parser。
 - 原生 SDK 把配置交给 WebRTC adapter；浏览器 coordinator 调用浏览器 `RTCPeerConnection.setConfiguration`，维护本项目的消息桥接和路径观察，不实现 TURN wire 认证或 allocation 状态机。
-- 上游 TURN、STUN 和 `webrtc-util` 使用同一 0.17.2 Git 来源，RTC 使用另一固定的上游 WebRTC 快照。Git/path 消费者可直接继承这些依赖；registry 消费者在上游发布包含修复的版本前仍需配置工作区 patch。
+- 上游 TURN、STUN 和 `webrtc-util` 使用同一 crates.io 0.17.3 版本，RTC 使用固定的上游 WebRTC 快照。Git/path 消费者可直接继承这些依赖；registry 消费者在上游发布包含客户端修复的版本前仍需配置 RTC 工作区 patch。
 
 ## 验证证据
 

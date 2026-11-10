@@ -13,7 +13,7 @@ cargo test -p loran-stun -- --nocapture --test-threads=1
 TURN integration test 使用独立的 `turn` client API 连接 Loran server，覆盖：
 
 1. STUN Binding 和 mapped address；
-2. 带 Realm/Realm Infra Provider/audience/Actor scope 的时效 TURN credential；
+2. 带 Realm/Actr Facility Provider/audience/Actor scope 的时效 TURN credential；
 3. TURN Allocate；
 4. CreatePermission；
 5. client → peer 与 peer → client 双向 UDP relay；
@@ -84,7 +84,7 @@ fixture 每次运行生成独立 TURN secret，credential 十分钟过期，只�
 - full-cone、restricted、port-restricted、symmetric NAT 和双 NAT；
 - UDP 被屏蔽时的 TURN/TCP 与 TURN/TLS；当前 v1 若尚未实现，应明确列为能力缺口，
   不能以 UDP 结果代替；
-- 过期、错误 Realm/Realm Infra Provider/audience、重放和错误 MESSAGE-INTEGRITY；
+- 过期、错误 Realm/Actr Facility Provider/audience、重放和错误 MESSAGE-INTEGRITY；
 - allocation/permission/channel bind 洪泛、超大包、随机包、慢速连接和 relay 带宽
   耗尽；
 - 持续测试下的 CPU、内存、FD、socket、队列长度、丢包率和 P95/P99。

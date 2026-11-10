@@ -43,7 +43,7 @@ impl AIdCredentialValidator {
     ///
     /// `realm` is the Realm name of the requesting ActorId. The claims' `realm`,
     /// `issuer` and the Realm of `actor_id` must all equal it; `provider` is
-    /// this Realm Infra Provider's ID.
+    /// this Actr Facility Provider's ID.
     ///
     /// # Returns
     /// `Ok((IdentityClaims, false))` — Ed25519 mode has no grace period concept, the second value is always `false`

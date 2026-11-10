@@ -15,12 +15,12 @@ Realms and Realm Profiles are defined in [Actr Realm Profile](realm-profile.md).
 This document applies only to Realms under DNS domains; a local Realm has no
 members and no invites.
 
-- **Member**: a party the Realm Infra Provider records for a Realm, with a
+- **Member**: a party the Actr Facility Provider records for a Realm, with a
   `member_id` and one role.
 - **Role**: `owner`, `editor` or `viewer`. Each Realm has exactly one owner,
   which holds both the right to manage the Realm's members and the owner role
   inside the application. What `editor` and `viewer` mean is up to the
-  application; the Realm Infra Provider only records the role and writes it into
+  application; the Actr Facility Provider only records the role and writes it into
   Actor credentials, it does not enforce application permissions.
 - **Realm client key**: an Ed25519 key that one client of a member generates
   for this Realm. A member may have several (several devices or installs),
@@ -32,7 +32,7 @@ members and no invites.
   either carries a role (inviting a new member) or names an existing member
   (adding a client for them).
 
-Version 1 defines no Realm Infra Provider accounts, no multiple owners and no
+Version 1 defines no Actr Facility Provider accounts, no multiple owners and no
 domain-wide SSO.
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT** and **MAY**
@@ -44,9 +44,9 @@ are to be interpreted as described in BCP 14.
   the SHA-256 of the Ed25519 public key (32 bytes).
 - Invite `secret`: 32 random bytes, written as base64url without padding. The
   invite's `invite_id`: the first 16 lowercase hex characters of the SHA-256
-  of the secret bytes. The Realm Infra Provider stores only the SHA-256 of the
+  of the secret bytes. The Actr Facility Provider stores only the SHA-256 of the
   secret.
-- `member_id`: 16 lowercase hex characters assigned by the Realm Infra Provider,
+- `member_id`: 16 lowercase hex characters assigned by the Actr Facility Provider,
   never reused within the Realm.
 
 ## 3. Realm invite
@@ -97,14 +97,14 @@ no `requester`.
 | `set_role` | `member_id`, `role` (`editor`/`viewer`) | The owner (not for itself) | Changes only the role |
 | `transfer_owner` | `member_id`, optional `previous_owner_role` (default `editor`) | The owner | Atomically hands ownership to another active member that has at least one unrevoked client key; the previous owner takes the given role |
 | `leave` | none | A member other than the owner | Removes itself, with the effect of `remove_member` |
-| `update_realm` | optional `package`, `display_name`, or `status: "retired"` | The owner; only for Realms under the Realm Infra Provider's domain | The Realm Infra Provider signs and publishes a Realm Profile with a higher sequence (Realm Profile sections 7.2 and 7.4); responds `{realm, sequence}` |
+| `update_realm` | optional `package`, `display_name`, or `status: "retired"` | The owner; only for Realms under the Actr Facility Provider's domain | The Actr Facility Provider signs and publishes a Realm Profile with a higher sequence (Realm Profile sections 7.2 and 7.4); responds `{realm, sequence}` |
 
 In a `join` request, `signature.key_id` **MUST** equal the `key_id` computed
 from `public_key`; the signature is the proof of possession. For every other
 request the signing key **MUST** be a registered, unrevoked Realm client key of
 an `active` member of the Realm.
 
-The Realm Infra Provider checks the role before looking up the target: a request
+The Actr Facility Provider checks the role before looking up the target: a request
 the sender may not make always gets `forbidden`, so `not_found` never reveals
 whether a target exists. Other Realms are still updated and retired by the
 Realm signing key holder through Realm management requests; `update_realm` for
@@ -116,7 +116,7 @@ after issuance.
 
 ### 4.1 Redemption
 
-The Realm Infra Provider redeems an invite in a single transaction: it marks the
+The Actr Facility Provider redeems an invite in a single transaction: it marks the
 invite used, creates the new member or finds the target member, and registers
 the key. Of two concurrent redemptions at most one succeeds; when a quota would be
 exceeded (`quota`) the invite is not consumed. Redeeming the same invite again
@@ -125,7 +125,7 @@ long as the key is still unrevoked and the member still `active`; otherwise
 the answer is `invite_used`.
 
 - An invite with a `role` creates a new member. Invites with the `owner` role
-  (owner invites) are issued only by the Realm signing key holder or the Realm Infra
+  (owner invites) are issued only by the Realm signing key holder or the Actr Facility
   Provider operator (section 5): if the Realm has no owner yet, redeeming one
   creates the owner; if it has one, the new key becomes a client of the owner
   member and all of the owner's previous Realm client keys are revoked.
@@ -141,7 +141,7 @@ the answer is `invite_used`.
 
 ### 4.3 Errors
 
-The Realm Infra Provider returns errors as JSON `{"error": "<code>", "message":
+The Actr Facility Provider returns errors as JSON `{"error": "<code>", "message":
 "<text>"}`; `code` is stable so that Actr Hosts can branch on it:
 
 | HTTP | `code` | Meaning |
@@ -175,7 +175,7 @@ new owner invite invalidates the Realm's earlier unused owner invites.
   once; afterwards the holder issues new ones with `reissue_owner_invite`
   (Realm Profile section 8) to recover when the owner has lost all its
   clients.
-- **Realms under the Realm Infra Provider's domain.** In version 1 only the Realm Infra
+- **Realms under the Actr Facility Provider's domain.** In version 1 only the Actr Facility
   Provider's operator creates them and receives the owner invite at creation,
   handing it to the user out of band; the operator also issues recovery
   invites. How it does so is outside this protocol. The owner then updates or
@@ -227,7 +227,7 @@ limit of that decision and read the role again when the Front presents a
 renewed credential.
 
 When a Realm client key is revoked (including by removing a member, `leave`
-and owner recovery), the Realm Infra Provider **MUST** immediately:
+and owner recovery), the Actr Facility Provider **MUST** immediately:
 
 - refuse new requests signed with the key, including Actor credential
   issuance, and revoke the unused invites it issued;
@@ -238,7 +238,7 @@ and owner recovery), the Realm Infra Provider **MUST** immediately:
 The ActorIds are not voided: the same `active` member can reissue with another
 of its unrevoked keys (item 2 above), which brings the Actor back. A removed
 member, or one that has left, has no usable key, so its Actors stay disabled
-for good. Actor credentials already issued stop working outside the Realm Infra
+for good. Actor credentials already issued stop working outside the Actr Facility
 Provider (for example, where a peer Actor verifies them) when they expire. Changing a role
 revokes no key; it takes effect in the member's next Actor credential.
 
@@ -269,14 +269,14 @@ to Guest workloads.
 - The holder of the Realm signing key and the operator can recover ownership
   through owner invites, so they sit inside the Realm's trust boundary, which
   is consistent with their existing power to sign Realm Profiles or suspend the
-  Realm (the Realm Infra Provider also holds the Realm issuer key).
+  Realm (the Actr Facility Provider also holds the Realm issuer key).
 - Owner recovery revokes all of the owner's previous client keys and the unused
   invites they issued, so a stolen owner key cannot keep fighting the
   recovering party. While it was stolen, the other party may have invited
   members or transferred ownership; after recovery the owner **SHOULD** review
   `list_members` and remove them.
 - An Actor credential's lifetime bounds how long a revocation takes to reach
-  places outside the Realm Infra Provider; Realm Infra Providers **SHOULD** keep it short.
+  places outside the Actr Facility Provider; Actr Facility Providers **SHOULD** keep it short.
 
 ## 8. Test vectors and schema
 

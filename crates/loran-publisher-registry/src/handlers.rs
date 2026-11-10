@@ -34,7 +34,7 @@ pub fn create_public_router(state: PublisherRegistryState) -> Router {
 pub fn create_admin_router(state: PublisherRegistryState) -> Router {
     Router::new()
         // Publishers register themselves with a signed `register_publisher`
-        // request at the Realm Infra Provider's `realm-management` endpoint.
+        // request at the Actr Facility Provider's `realm-management` endpoint.
         .route("/{id}/status", get(get_status))
         .route("/resolve/{name}", get(resolve_by_name))
         // Package management

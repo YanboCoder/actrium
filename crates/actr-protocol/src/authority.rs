@@ -192,7 +192,7 @@ pub struct PinnedKey {
     pub status: PinnedStatus,
 }
 
-/// What a client or Realm Infra Provider keeps for one domain's signing keys
+/// What a client or Actr Facility Provider keeps for one domain's signing keys
 /// (`actr/protocols/authority-discovery.md` section 4.4): every key it ever
 /// accepted with its last status, and the accepted `sequence`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

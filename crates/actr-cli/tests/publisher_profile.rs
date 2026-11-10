@@ -1,5 +1,5 @@
 //! Drive the offline Publisher tooling through the real CLI and verify its
-//! output with the same protocol entry points used by Realm Infra Providers.
+//! output with the same protocol entry points used by Actr Facility Providers.
 
 use std::fs;
 use std::path::Path;

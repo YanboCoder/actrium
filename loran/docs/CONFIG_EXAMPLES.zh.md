@@ -1,7 +1,7 @@
 # Loran Realm v1 配置示例
 
-v1 只推荐一种生产拓扑：单节点、SQLite、单一 Realm Infra Provider、all-in-one。这个单节点作为
-共享 Realm Infra Provider 承载多个 Realm，无需为每个 Realm 另起实例（见
+v1 只推荐一种生产拓扑：单节点、SQLite、单一 Actr Facility Provider、all-in-one。这个单节点作为
+共享 Actr Facility Provider 承载多个 Realm，无需为每个 Realm 另起实例（见
 [架构契约](REALM_V1_ARCHITECTURE.zh.md)）。本文不提供集群、跨区域或 federation 示例，
 因为实现不承诺这些能力。
 
@@ -95,7 +95,7 @@ LORAN_SIGNER_KEK="<64-hex-or-44-base64>" \
 - 在 authority descriptor 中的 Realm 签名 key 生成完成前，`GET /.well-known/actr` 返回
   503，这是正确行为；
 - 之后 Realm 由经 Realm 签名 key 持有方授权的创建请求建立，`publish_profile` 验证通过后
-  激活；Realm Infra Provider 域名下的 Realm 目前由管理员在 Admin UI 中经 Admin API 代办创建。
+  激活；Actr Facility Provider 域名下的 Realm 目前由管理员在 Admin UI 中经 Admin API 代办创建。
   实例本身不需要预先 provision 任何 Realm。
 
 ## 本地开发

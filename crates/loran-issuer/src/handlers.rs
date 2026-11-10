@@ -42,7 +42,7 @@ pub struct IssuerState {
     pub counters: Option<Arc<ServiceCounters>>,
     /// Membership limits (`[realm]`).
     pub(crate) limits: Limits,
-    /// Signs Realm Profiles for `update_realm` when this Loran is a Realm Infra
+    /// Signs Realm Profiles for `update_realm` when this Loran is an Actr Facility
     /// Provider.
     pub(crate) profiles: Option<Arc<crate::realm_profile::RealmProfiles>>,
 }
@@ -67,7 +67,7 @@ impl IssuerState {
         }
     }
 
-    /// Membership limits and, when this Loran is a Realm Infra Provider, the Realm
+    /// Membership limits and, when this Loran is an Actr Facility Provider, the Realm
     /// Profiles `update_realm` signs.
     pub fn with_membership(
         mut self,
@@ -269,9 +269,9 @@ fn from_membership(error: membership::MembershipError) -> ErrorResponse {
     membership_error(error.code.as_str(), error.message)
 }
 
-/// The Realm Infra Provider ID a request for `realm` may name: this Realm Infra
+/// The Actr Facility Provider ID a request for `realm` may name: this Actr Facility
 /// Provider's, or for a Realm without a Realm Profile (served by a Loran
-/// that is no Realm Infra Provider) the authority of the Issuer URL, the request's
+/// that is no Actr Facility Provider) the authority of the Issuer URL, the request's
 /// `Host`.
 pub(crate) async fn expected_provider_id(
     state: &IssuerState,

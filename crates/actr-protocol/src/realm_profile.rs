@@ -1,7 +1,7 @@
 //! Realm Profile (`actr/protocols/realm-profile.md`).
 //!
 //! A Realm Profile is a signed public document naming the package a Realm
-//! runs and the Issuer and Realm Infra Provider that serve it. It is signed by a
+//! runs and the Issuer and Actr Facility Provider that serve it. It is signed by a
 //! Realm signing key listed in the domain's `realm_signing_keys` member.
 
 use crate::authority::{
@@ -47,7 +47,7 @@ pub struct RealmProfile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package: Option<RealmPackage>,
     pub issuer: RealmIssuer,
-    pub provider: RealmInfraProvider,
+    pub provider: ActrFacilityProvider,
     pub policy: RealmPolicy,
     /// RFC 3339 signing time, informational only.
     pub issued_at: String,
@@ -168,8 +168,8 @@ pub struct IssuerKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RealmInfraProvider {
-    /// Realm Infra Provider ID: the provider's normalized DNS authority.
+pub struct ActrFacilityProvider {
+    /// Actr Facility Provider ID: the provider's normalized DNS authority.
     pub id: String,
     pub signaling: Vec<SignalingEndpoint>,
     pub ice: Vec<IceEndpoint>,
@@ -221,7 +221,7 @@ impl RealmProfileError {
         match self {
             Self::Invalid(_) => "REALM_PROFILE_INVALID",
             Self::Rollback { .. } => "REALM_PROFILE_ROLLBACK",
-            Self::ProviderMismatch { .. } => "REALM_INFRA_PROVIDER_MISMATCH",
+            Self::ProviderMismatch { .. } => "ACTR_FACILITY_PROVIDER_MISMATCH",
             Self::Retired(_) => "REALM_RETIRED",
             Self::KeysInvalid(_) => "REALM_KEYS_INVALID",
             Self::Unavailable(_) => "REALM_PROFILE_UNAVAILABLE",
@@ -837,7 +837,7 @@ mod tests {
         let mut moved = unsigned(32);
         moved["provider"]["id"] = json!("other.example");
         let error = accepted.check_successor(&verify(moved)).unwrap_err();
-        assert_eq!(error.code(), "REALM_INFRA_PROVIDER_MISMATCH");
+        assert_eq!(error.code(), "ACTR_FACILITY_PROVIDER_MISMATCH");
 
         let mut retired = unsigned(33);
         retired["realm"]["status"] = json!("retired");

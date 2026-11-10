@@ -168,7 +168,7 @@ export function Realms() {
             <li>
               <strong className="text-gray-600">Owner invite</strong> — creating a Realm returns
               its owner invite once. The owner redeems it and invites the members. If the owner
-              loses all clients, issue a new owner invite here (Realms under this Realm Infra Provider&apos;s
+              loses all clients, issue a new owner invite here (Realms under this Actr Facility Provider&apos;s
               domain, or without a Realm Profile); redeeming it revokes the old owner clients.
             </li>
             <li>

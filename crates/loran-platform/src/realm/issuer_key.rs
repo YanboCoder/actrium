@@ -1,4 +1,4 @@
-//! Realm issuer keys this Realm Infra Provider holds in the Signer
+//! Realm issuer keys this Actr Facility Provider holds in the Signer
 //! (`actr/protocols/realm-profile.md` section 6.1).
 //!
 //! A Realm has one `current` key that signs Actor credentials. Rotation adds

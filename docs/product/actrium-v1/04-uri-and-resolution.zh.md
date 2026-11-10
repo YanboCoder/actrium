@@ -31,9 +31,9 @@ Actrium 按 Actr URI 第 4 节打开链接：取得并验证 Realm Profile → �
 
 - **先确认，后联网**：来自网页、二维码、邮件或其他 App 的链接，先显示 Realm 域名、
   `display_name`，下载验证后再显示程序（Publisher、程序名、版本）；首次信任某个 Realm 域名
-  必须确认。Realm 域名等于或属于 Realm Infra Provider ID 时，信任根显示为该 Realm Infra Provider。
+  必须确认。Realm 域名等于或属于 Actr Facility Provider ID 时，信任根显示为该 Actr Facility Provider。
 - **失败即停**：Realm Profile 取不到、验不过或已退役，包的 SHA-256 或签名不符，都停止打开，
-  不改用其他 Realm Infra Provider，不换包，不新建实例。
+  不改用其他 Actr Facility Provider，不换包，不新建实例。
 - **没有成员身份时**：进入加入流程（例如 Realm 邀请），不静默失败。
 - 用户可以选择「在浏览器中打开」外部 https 链接；在同一域名的网页内跳转时，Actrium 不强制接管。
 - 链接不能预授任何权限；未知的 query 只交给应用，不影响安装或权限页面。
@@ -82,7 +82,7 @@ Actrium 按 Actr URI 第 4 节打开链接：取得并验证 Realm Profile → �
 | `REALM_PROFILE_UNAVAILABLE` | 取不到有效 Realm Profile |
 | `REALM_PROFILE_INVALID` | Realm Profile 签名无效或 Realm 名不符 |
 | `REALM_PROFILE_ROLLBACK` | Realm Profile 的 `sequence` 回退 |
-| `REALM_INFRA_PROVIDER_MISMATCH` | `provider.id` 与已接受的不同 |
+| `ACTR_FACILITY_PROVIDER_MISMATCH` | `provider.id` 与已接受的不同 |
 | `REALM_RETIRED` | Realm 已退役 |
 | `PACKAGE_DIGEST_MISMATCH` | 下载的包与 `package.sha256` 不符 |
 | `PACKAGE_SIGNATURE_INVALID` | 包签名验证失败 |

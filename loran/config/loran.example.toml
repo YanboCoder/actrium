@@ -46,7 +46,7 @@ location_tag = "single-node"
 loran_shared_key = "<generate-with-openssl-rand-hex-32>"
 
 # Public Actr authority. The URI is actr://<domain> without a port; its domain
-# is the Realm Infra Provider ID, required when Issuer, Signaling or TURN is enabled.
+# is the Actr Facility Provider ID, required when Issuer, Signaling or TURN is enabled.
 # `enabled` serves /.well-known/actr (production requires TLS; the domain must
 # match bind.http). `links` lists Realm link path prefixes, e.g. ["/i/"].
 [authority]

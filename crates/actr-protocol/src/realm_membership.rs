@@ -210,7 +210,7 @@ pub enum MembershipOp {
 pub struct MembershipRequest {
     pub op: MembershipOp,
     pub realm: String,
-    /// Realm Infra Provider ID of the receiver.
+    /// Actr Facility Provider ID of the receiver.
     pub provider_id: String,
     /// `join`: the invite secret.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -292,7 +292,7 @@ fn check_common(
 ) -> Result<(), MembershipError> {
     if provider_id != expected_provider {
         return Err(invalid(format!(
-            "provider_id '{provider_id}' is not this Realm Infra Provider"
+            "provider_id '{provider_id}' is not this Actr Facility Provider"
         )));
     }
     if nonce.is_empty() || nonce.len() > MAX_NONCE_LEN {
@@ -509,7 +509,7 @@ impl ClientProof {
     }
 
     /// Check that the proof is for `op` on `realm` with request `body`, for
-    /// this Realm Infra Provider and within its validity window.
+    /// this Actr Facility Provider and within its validity window.
     pub fn check(
         &self,
         op: ProofOp,
@@ -549,7 +549,7 @@ impl ClientProof {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RealmClientKeyFile {
     pub realm: String,
-    /// Realm Infra Provider ID the requests name (`provider_id`).
+    /// Actr Facility Provider ID the requests name (`provider_id`).
     pub provider_id: String,
     /// Issuer URL (`issuer.url`); membership requests go to
     /// `<issuer>/membership`.

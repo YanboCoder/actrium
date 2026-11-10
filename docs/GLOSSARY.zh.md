@@ -25,7 +25,7 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | Service Inventory | Actrium 中回答「我已经创建了什么」的清单：以 Realm 名为键（升级时不变），记录当前 Service 的 ActorId、程序版本、Workspace、运行位置以及生命周期、可达性、健康度、会话占用四组状态。 |
 | Keel | 沙箱化动态原生 UI 的 Host/Guest 运行时。 |
 | Actrium Component Registry | Actrium 内可供 Keel Guest 使用的组件注册表；与 Actor Registry、Publisher Registry 无关。 |
-| Loran | 默认/参考服务端套件，即 Realm Infra Provider 运行的软件：Signaling、STUN/TURN、Issuer、Issuer Signer、Publisher Registry、包分发与管理。代码在 `crates/loran-*`。 |
+| Loran | 默认/参考服务端套件，即 Actr Facility Provider 运行的软件：Signaling、STUN/TURN、Issuer、Issuer Signer、Publisher Registry、包分发与管理。代码在 `crates/loran-*`。 |
 | Issuer | 为 Realm 签发 Actor 身份的服务（一个 Issuer 服务承载多个 Realm；代码 `crates/loran-issuer`，路由 `/issuer`，配置 `[services.issuer]`）：验证注册证明，分配 Actor serial，经 Issuer Signer 签发短期 Actor credential。不是用户目录，也不拥有 Workspace。 |
 | └ Issuer Signer | Issuer 的签名后端（代码 `crates/loran-signer`，配置 `[services.signer]`，其他服务经 `dependencies.signer` 访问，gRPC 包 `signer.v1`）：持有各 Realm 的 Realm issuer key 私钥（每个 Realm 一把），为 Issuer 签名，并向 Signaling 提供公钥用于验证 Actor credential。没有下载私钥的 API。可与 Issuer 同进程；生产环境建议独立部署在安全边界或 HSM 内，使主进程失陷不泄露私钥。存储加密 KEK 经 `LORAN_SIGNER_KEK` 提供。 |
 | Publisher Registry | Loran 中管理 publisher 身份、Publisher 签名权限与发布审计的服务（代码 `crates/loran-publisher-registry`，公开路由 `/registry/*`，管理 API `/admin/api/publishers`，配置 `[services.publisher_registry]`），也是 `register_publisher` 的接收方。Publisher key id 形如 `actr-pub-<16 hex>`。 |
@@ -61,21 +61,21 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | Attach | Front 连接本实例 Service 的握手：核对对方 Actor 类型与包一致，取得 Attachment lease。 |
 | Attachment lease | Front 使用 Service 的短期会话租约（v1 默认 `exclusive`）。 |
 | capability | Actr Host 在本机明确授予 Guest/Service 的最小受控能力或句柄（如 `host:*` capability、Workspace capability、session capability），由 Actr Host 执行，不跨边界签名；与安全模型的 Actor Grant 不同。 |
-| Workspace | Service 的持久数据边界：由 Actr Host 托管、经 Workspace Provider 存储的 capability，不是简单文件路径。一个 Service 至多绑定一个 Workspace；同一 Workspace 可按写入并发策略（默认 `exclusive-writer`，另有 `shared-readers` 等）被多个 Service 使用。Workspace 不自动是 Actor，同一 Principal 也不自动获得授权。删除 Service 默认不删除 Workspace。Workspace 不属于 Loran 的 Realm 基础设施；其存储方 Workspace Provider 与 Realm Infra Provider 不是同一概念。 |
+| Workspace | Service 的持久数据边界：由 Actr Host 托管、经 Workspace Provider 存储的 capability，不是简单文件路径。一个 Service 至多绑定一个 Workspace；同一 Workspace 可按写入并发策略（默认 `exclusive-writer`，另有 `shared-readers` 等）被多个 Service 使用。Workspace 不自动是 Actor，同一 Principal 也不自动获得授权。删除 Service 默认不删除 Workspace。Workspace 不属于 Loran 的 Realm 基础设施；其存储方 Workspace Provider 与 Actr Facility Provider 不是同一概念。 |
 | Native Capsule | 在独立 OS sandbox 中运行、只开放 Actr Host brokered IPC 的 Native workload。 |
 
 ## 4. Realm 与身份
 
 | 术语 | 定义 |
 | --- | --- |
-| Realm | 一个应用实例的信任与治理域：Actor 身份、Realm membership、Realm 客户端准入、连接 ACL 与 Realm Infra Provider 委派都以它为边界。创建一个应用实例即创建一个新 Realm（跟实例走，不跟应用走）。Realm 不是应用（程序），不是 Loran 实例，不是一台信令服务器，也不是消息明文端点或应用保障权威；一个 Loran 实例承载多个 Realm。 |
+| Realm | 一个应用实例的信任与治理域：Actor 身份、Realm membership、Realm 客户端准入、连接 ACL 与 Actr Facility Provider 委派都以它为边界。创建一个应用实例即创建一个新 Realm（跟实例走，不跟应用走）。Realm 不是应用（程序），不是 Loran 实例，不是一台信令服务器，也不是消息明文端点或应用保障权威；一个 Loran 实例承载多个 Realm。 |
 | Realm 域名 | Realm 名中的域名部分：普通 DNS 域名，不含端口。域名只是天然唯一的命名空间根，不分类；没有域名就不分配 Realm。一个 Realm 域名下可以有多个 Realm。唯一例外是本机 Realm。 |
 | Realm 名 | Realm 的完整名字 `<realm_id>@<domain>`，如 `k7m2q9xh@acme.com`。形似邮件地址但不是，不得渲染为 mailto。 |
 | RealmId（`realm_id`） | Realm 名中 `@` 之前的部分，在所属域名内唯一，是分配得出的标识（字符规则同 DNS label：1–63 个小写字母、数字或 `-`）。默认随机生成，创建时可显式选择可读的 RealmId；创建后不可修改，退役后永不复用。完整身份始终是 Realm 名。 |
 | display_name | 给人看的实例名称，写在 Realm Profile 中，不进入 ActorId。 |
-| 本机 Realm | 域名为本机伪域名 `<installation-id>.actr.alt`（RFC 9476，永不经 DNS 解析）的 Realm：只有本地记录，没有 Realm Profile，不经过 Realm Infra Provider，其他设备无法解析。 |
+| 本机 Realm | 域名为本机伪域名 `<installation-id>.actr.alt`（RFC 9476，永不经 DNS 解析）的 Realm：只有本地记录，没有 Realm Profile，不经过 Actr Facility Provider，其他设备无法解析。 |
 | installation-id | Actrium 安装时随机生成的 128 位标识（base32 小写 26 字符），只用于本机伪域名。 |
-| Realm Infra Provider 域名下的 Realm | 在规范化 A-label 上比较，Realm 域名等于其 Realm Profile 的 Realm Infra Provider ID，或以 `"."` 加该 ID 结尾（按 label 边界）的 Realm。只有它：显示 Realm Infra Provider 为信任根；v1 只由 Realm Infra Provider 运营者创建，Realm Infra Provider 自签 Realm Profile，不经 Realm 管理请求（用户以 Realm Infra Provider 账号自助创建属后续能力）。其他 Realm 一律显示 Realm 域名为信任根，走 Actr 管理信封。 |
+| Actr Facility Provider 域名下的 Realm | 在规范化 A-label 上比较，Realm 域名等于其 Realm Profile 的 Actr Facility Provider ID，或以 `"."` 加该 ID 结尾（按 label 边界）的 Realm。只有它：显示 Actr Facility Provider 为信任根；v1 只由 Actr Facility Provider 运营者创建，Actr Facility Provider 自签 Realm Profile，不经 Realm 管理请求（用户以 Actr Facility Provider 账号自助创建属后续能力）。其他 Realm 一律显示 Realm 域名为信任根，走 Actr 管理信封。 |
 | ActorId | Actor 实例的持久身份，与 Actor 长期 key 绑定，类似进程 ID：`<serial>.<realm_id>@<domain>`，如 `2af01.k7m2q9xh@acme.com`。单个 `@`，左边按 DNS 顺序从具体到一般，去掉 `<serial>.` 即 Realm 名；URI 中 `@` 写作 `%40`。不含程序类型，不是 Workspace、用户或可变服务别名。代码类型名为 `ActrId`（字段 `realm` 为 Realm 名、`serial_number` 为 Actor serial）。 |
 | Actor serial | ActorId 中由该 Realm 的 Issuer 分配的序列号，文本形式为小写十六进制（当前实现为 54-bit Snowflake）。 |
 
@@ -87,28 +87,28 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | `links` | authority descriptor 中的路径前缀数组（如 `["/i/"]`），声明本域名下哪些 https 路径是 Realm 链接；前缀由域名自选，没有默认值，Actr Host 只按声明转换。 |
 | `realm_signing_keys` | authority descriptor 中的签名成员（Actr Authority Discovery §4.4）：公布 Realm 签名 key、Realm 签名 key 轮换链与 sequence。一个 Realm 域名只需发布一次。 |
 | Realm 签名 key | Realm 域名所有者在 `realm_signing_keys` 中公布的 Ed25519 key，是该域名下所有 Realm 的长期信任根，签署 Realm Profile 与 Actr 管理信封；可有多把，只有 active key 签名，至少一把为 active。从 `keys` 中移除某 key 即吊销它签过的一切。 |
-| Realm 签名 key 持有方 | 持有某 Realm 域名 Realm 签名 key 的一方，即域名所有者；可委托某个 Realm Infra Provider 代持（受托代持对客户端不可见，属已接受的限制）。没有自己域名的个人由 Realm Infra Provider 在其域名下分配 Realm，此时该 Realm Infra Provider 即持有方与信任根。Loran 默认不持有第三方域名的 Realm 签名 key。信任根显示与授权路径见「Realm Infra Provider 域名下的 Realm」。 |
+| Realm 签名 key 持有方 | 持有某 Realm 域名 Realm 签名 key 的一方，即域名所有者；可委托某个 Actr Facility Provider 代持（受托代持对客户端不可见，属已接受的限制）。没有自己域名的个人由 Actr Facility Provider 在其域名下分配 Realm，此时该 Actr Facility Provider 即持有方与信任根。Loran 默认不持有第三方域名的 Realm 签名 key。信任根显示与授权路径见「Actr Facility Provider 域名下的 Realm」。 |
 | Realm 签名 key 轮换链（`rotations`） | 旧 key 签名 `{from, to, public_key, sequence}` 认可新 key 的记录；没有轮换链的 key 变化视为身份变化，需重新确认信任。 |
 | `realms` relation | authority descriptor 中指向 Realm Profile 存放位置的链接：`GET <href>/<realm_id>`。 |
-| `realm-management` relation | Realm Infra Provider 自身 authority descriptor 中的 Realm 管理请求端点（`POST`，protocol `actr-realm-management/1`）。 |
-| Realm Profile（`actr.realm/v1`） | 每个 Realm 一份的公开文档，由 Realm 签名 key 签名：`realm.name`、状态、该实例运行的包（`package`：下载地址、SHA-256 与 Actor 类型）、Realm issuer key、Realm Infra Provider 与端点。放在哪都行（`realms` 位置、Realm Infra Provider、Realm 邀请内嵌），存放方不成为信任根，有效性只看签名；不过期，回滚保护只靠 Realm Profile sequence；`provider.id` 在 Realm 生命周期内不可变。签名 key 被移除后，回退到仍在 `keys` 中的 key 签署的最近一份。 |
+| `realm-management` relation | Actr Facility Provider 自身 authority descriptor 中的 Realm 管理请求端点（`POST`，protocol `actr-realm-management/1`）。 |
+| Realm Profile（`actr.realm/v1`） | 每个 Realm 一份的公开文档，由 Realm 签名 key 签名：`realm.name`、状态、该实例运行的包（`package`：下载地址、SHA-256 与 Actor 类型）、Realm issuer key、Actr Facility Provider 与端点。放在哪都行（`realms` 位置、Actr Facility Provider、Realm 邀请内嵌），存放方不成为信任根，有效性只看签名；不过期，回滚保护只靠 Realm Profile sequence；`provider.id` 在 Realm 生命周期内不可变。签名 key 被移除后，回退到仍在 `keys` 中的 key 签署的最近一份。 |
 | 退役 Realm Profile | `status: retired` 的 Realm Profile，由 Realm 签名 key 签署，永久有效，Realm 名不再复用。退役只有这一条路径。 |
-| Realm issuer key | Issuer 为每个 Realm 持有的签名 key：私钥在 Realm Infra Provider 的 Issuer Signer 中，公钥列在 Realm Profile。 |
+| Realm issuer key | Issuer 为每个 Realm 持有的签名 key：私钥在 Actr Facility Provider 的 Issuer Signer 中，公钥列在 Realm Profile。 |
 | Actor credential | Issuer 签发给 Actor 的短期凭证：issuer 字段即 Realm 名，绑定 ActorId、Actor key、Actor 类型、Realm、有效期、principal/client binding（成员 id、Realm 客户端 key id）与签发时的角色。它证明 Actor key、身份与 claims，不单独证明对端实际运行的代码。 |
 | Web PKI / pin | 首次信任 Realm 签名 key 靠 HTTPS 证书体系，或企业预置的 key（pin）。 |
 
-## 6. Realm Infra Provider 与 Realm 管理
+## 6. Actr Facility Provider 与 Realm 管理
 
 | 术语 | 定义 |
 | --- | --- |
-| Realm Infra Provider | 一套正在运营的共享基础设施部署（例如某家运营的 Loran），为多个 Realm 提供 Signaling、STUN/TURN 与 Issuer。不是软件供应方。与 Workspace Provider 不是同一概念。 |
-| Realm Infra Provider ID | Realm Infra Provider 自己的 DNS authority（如 `provider.example`）。Realm 与创建时的 Realm Infra Provider 永久绑定，Realm Profile 中 `provider.id` 不可更改；访问 Realm 只使用其 Realm Profile 指定的 Realm Infra Provider，不回退到其他 Realm Infra Provider。 |
-| Realm 管理请求 | 发往 `realm-management` 端点的请求：`create_realm`、`publish_profile`、`reissue_owner_invite`、`draft_profile`（字段 `realm` 为完整 Realm 名），只用于 Realm Infra Provider 域名以外的 Realm，是 Realm 签名 key 持有方签名服务签发的 Actr 管理信封（含受托代持的 Realm Infra Provider）。 |
+| Actr Facility Provider（AFP） | 一套正在运营的共享基础设施部署（例如某家运营的 Loran），为多个 Realm 提供 Signaling、STUN/TURN 与 Issuer。不是软件供应方。与 Workspace Provider 不是同一概念。 |
+| Actr Facility Provider ID | Actr Facility Provider 自己的 DNS authority（如 `provider.example`）。Realm 与创建时的 Actr Facility Provider 永久绑定，Realm Profile 中 `provider.id` 不可更改；访问 Realm 只使用其 Realm Profile 指定的 Actr Facility Provider，不回退到其他 Actr Facility Provider。 |
+| Realm 管理请求 | 发往 `realm-management` 端点的请求：`create_realm`、`publish_profile`、`reissue_owner_invite`、`draft_profile`（字段 `realm` 为完整 Realm 名），只用于 Actr Facility Provider 域名以外的 Realm，是 Realm 签名 key 持有方签名服务签发的 Actr 管理信封（含受托代持的 Actr Facility Provider）。 |
 | Actr 管理信封 | Realm 管理请求、`register_publisher` 与 membership 请求共用的签名请求格式（Actr management envelope）：JCS + detached Ed25519，绑定 `provider_id`、≤5 分钟有效、nonce 防重放；签名 key 分别是 active Realm 签名 key、active Publisher Profile 签名 key 与成员的 Realm 客户端 key。 |
-| pending / active Realm | 创建过程的状态：`create_realm` 后为 pending Realm；持有方以 `publish_profile` 提交签名 Realm Profile 后为 active Realm（Realm Infra Provider 域名下的 Realm 由 Realm Infra Provider 自签，无需此步）。只有 active Realm 签发 Actor credential、接受 Signaling 连接和分配 TURN；过期的 pending Realm 由 Realm Infra Provider 自动清理。 |
-| owner 邀请 | 角色为 owner 的 Realm 邀请，把一个 Realm 的管理权交给其 owner：持有方首次 `publish_profile` 激活时、Realm Infra Provider 运营者创建时一次性返回；owner 丢失全部客户端时由持有方（`reissue_owner_invite`）或运营者重新签发，兑换后成为 owner 的新客户端、owner 原有客户端 key 全部撤销。新签发的使此前未用的失效，有效期 7 天。 |
-| 实例运营者 | Loran 实例唯一的系统管理根，管理 Realm Infra Provider 配置与全部 Realm 生命周期。 |
-| Realm Infra Provider tombstone | Realm Infra Provider 本地以 Realm 名为键的已退役/已用记录，防止 RealmId 复用；与退役 Realm Profile（公开、签名）不同。 |
+| pending / active Realm | 创建过程的状态：`create_realm` 后为 pending Realm；持有方以 `publish_profile` 提交签名 Realm Profile 后为 active Realm（Actr Facility Provider 域名下的 Realm 由 Actr Facility Provider 自签，无需此步）。只有 active Realm 签发 Actor credential、接受 Signaling 连接和分配 TURN；过期的 pending Realm 由 Actr Facility Provider 自动清理。 |
+| owner 邀请 | 角色为 owner 的 Realm 邀请，把一个 Realm 的管理权交给其 owner：持有方首次 `publish_profile` 激活时、Actr Facility Provider 运营者创建时一次性返回；owner 丢失全部客户端时由持有方（`reissue_owner_invite`）或运营者重新签发，兑换后成为 owner 的新客户端、owner 原有客户端 key 全部撤销。新签发的使此前未用的失效，有效期 7 天。 |
+| 实例运营者 | Loran 实例唯一的系统管理根，管理 Actr Facility Provider 配置与全部 Realm 生命周期。 |
+| Actr Facility Provider tombstone | Actr Facility Provider 本地以 Realm 名为键的已退役/已用记录，防止 RealmId 复用；与退役 Realm Profile（公开、签名）不同。 |
 | 本机实例 tombstone | Actrium 清除实例后的本地记录。 |
 
 ## 7. 成员、客户端与权限
@@ -117,11 +117,11 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | --- | --- |
 | Realm membership | 成员为 active，且其客户端已在该 Realm 登记 Realm 客户端 key、未被撤销；由此可申请 Actor credential、连接 Signaling、进行 Attach。没有单独的 membership credential：Issuer 只对这样的 key 签名的请求签发 Actor credential，撤销客户端即撤销其 key 登记。协议见 Actr Realm Membership。 |
 | Realm 客户端 key | 某成员的某个客户端安装在某个 Realm 中使用的 key，按 Realm 独立生成，可单独吊销；不跨 Realm 复用，防止跨实例关联同一客户端。对应 Realm 客户端注册。 |
-| 成员（`member_id`） | Realm Infra Provider 为某个联网 Realm 记录的一方：`member_id`（16 位十六进制）、角色与状态（active/removed）。凭 Realm 邀请加入，可有多个客户端；移除成员或离开 Realm 即撤销其全部 Realm 客户端 key。本机 Realm 没有成员。 |
-| 角色（owner / editor / viewer） | 成员在实例内的应用权限角色，由 Realm Infra Provider 随成员记录保存、写入 Actor credential，由 Service 执行；改角色不撤销 key，在下一份 credential 生效。每个 Realm 恰好一个 owner：它同时持有成员管理权（邀请、撤销客户端、移除成员、改角色）与应用 owner 角色，可原子转让，v1 不支持多 owner。 |
-| membership 请求 | 成员用 Realm 客户端 key 签名、发往 `<issuer.url>/membership` 的 Actr 管理信封：`join`、`create_invite`、`revoke_invite`、`list_members`、`revoke_client`、`remove_member`、`set_role`、`transfer_owner`、`leave`，以及只用于 Realm Infra Provider 域名下 Realm 的 `update_realm`（owner 更新程序、名称或退役）。 |
+| 成员（`member_id`） | Actr Facility Provider 为某个联网 Realm 记录的一方：`member_id`（16 位十六进制）、角色与状态（active/removed）。凭 Realm 邀请加入，可有多个客户端；移除成员或离开 Realm 即撤销其全部 Realm 客户端 key。本机 Realm 没有成员。 |
+| 角色（owner / editor / viewer） | 成员在实例内的应用权限角色，由 Actr Facility Provider 随成员记录保存、写入 Actor credential，由 Service 执行；改角色不撤销 key，在下一份 credential 生效。每个 Realm 恰好一个 owner：它同时持有成员管理权（邀请、撤销客户端、移除成员、改角色）与应用 owner 角色，可原子转让，v1 不支持多 owner。 |
+| membership 请求 | 成员用 Realm 客户端 key 签名、发往 `<issuer.url>/membership` 的 Actr 管理信封：`join`、`create_invite`、`revoke_invite`、`list_members`、`revoke_client`、`remove_member`、`set_role`、`transfer_owner`、`leave`，以及只用于 Actr Facility Provider 域名下 Realm 的 `update_realm`（owner 更新程序、名称或退役）。 |
 | renewal token | Actor credential 续期用的凭证，绑定 Realm 客户端 key。 |
-| Principal / PrincipalId | 使用某 Actor 实例的一方及其外部不透明标识；不是 Publisher、Realm Infra Provider 或运营方。一个 Actor 实例完整生命周期只绑定一个 PrincipalId。Actor credential 中的 principal/client binding 即成员 id 与 Realm 客户端 key id。 |
+| Principal / PrincipalId | 使用某 Actor 实例的一方及其外部不透明标识；不是 Publisher、Actr Facility Provider 或运营方。一个 Actor 实例完整生命周期只绑定一个 PrincipalId。Actor credential 中的 principal/client binding 即成员 id 与 Realm 客户端 key id。 |
 | 应用权限 | 实例内的权限（读写、管理、分享），由应用与会话授权决定；与 Realm membership 分开，取得 membership 不等于获得任何应用权限。成员角色是其最小部分，由 Service 从 Front 的 Actor credential 读取。 |
 | 连接 ACL | Actr 运行时与 Signaling 按 Actor 类型与 Realm 决定谁可发现、连接谁的规则（`AclRule`）。 |
 
@@ -130,8 +130,8 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | 术语 | 定义 |
 | --- | --- |
 | Realm 链接（`actr://` URI） | 应用实例或其中某个 Actor 的地址：`actr://<Realm 域名>/<realm_id>[/<页面路径>]` 指向实例，`actr://<Realm 域名>/<serial>.<realm_id>[…]` 指向该 ActorId 的 Actor（第一段即 Realm 名或 ActorId 在 `@` 左边的部分）。页面路径、query、fragment 原样交给应用。https 形式是 `https://<Realm 域名><links 前缀>…`，设备上没有 Actr Host 时打开普通网页；本机 Realm 没有 https 形式。URI 不携带任何秘密。 |
-| 新建实例（Create） | Actrium 内的本地操作：从 Program Catalog、Marketplace、本地文件或包地址选包，选 Realm 域名 → 持有方授权 → pending Realm → 签名 Realm Profile（含 `package`）并以 `publish_profile` 提交（Realm Infra Provider 域名下的 Realm 无需此步）→ active Realm → 创建 Service。成功后地址栏显示该实例的 Realm 链接。 |
-| Create 幂等键（`idempotency_key`） | 新建实例的本地持久化标识：重试时继续同一个 pending Realm 与同一 RealmId。Realm Infra Provider 侧幂等键为 `(realm, 请求方)`，请求方是 Actr 管理信封中的 `requester`。 |
+| 新建实例（Create） | Actrium 内的本地操作：从 Program Catalog、Marketplace、本地文件或包地址选包，选 Realm 域名 → 持有方授权 → pending Realm → 签名 Realm Profile（含 `package`）并以 `publish_profile` 提交（Actr Facility Provider 域名下的 Realm 无需此步）→ active Realm → 创建 Service。成功后地址栏显示该实例的 Realm 链接。 |
+| Create 幂等键（`idempotency_key`） | 新建实例的本地持久化标识：重试时继续同一个 pending Realm 与同一 RealmId。Actr Facility Provider 侧幂等键为 `(realm, 请求方)`，请求方是 Actr 管理信封中的 `requester`。 |
 | Realm 邀请 | 加入某个实例 Realm 的一次性 secret：带角色（邀请新成员）或指向已有成员（为其添加客户端），可过期、签发者可在兑换前撤销；兑换时由新 Realm 客户端 key 签名并原子消耗。文本形式 `ri_…`（携带 Realm 名，可内嵌 Realm Profile），只经带外渠道交付，不进入 URI。过期、已使用、已撤销与 Realm 不匹配是不同错误。 |
 
 ## 9. 网络
@@ -141,7 +141,7 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | Signaling（信令） | 帮助已认证 Actor 做 presence、发现和交换 WebRTC 建连信息的控制面（Loran 文档中也称 Rendezvous）。不签发身份，只转发结论摘要，不是明文端点，也不是通信内容的最终信任根。 |
 | signaling ticket | Issuer 签发的一次性、极短期 Signaling 入场凭证，只在内存中；`actr://` URI 永不携带。 |
 | STUN | Session Traversal Utilities for NAT：公开 Binding 服务，让客户端得知服务端观测到的网络地址（NAT 映射发现）。 |
-| TURN | Traversal Using Relays around NAT：P2P 不可达时的受控密文中继（Loran 文档中称 Relay 平面）；allocation 需要绑定 Realm/Realm Infra Provider/audience/Actor/expiry 的短期 TURN credential。配置中的 `[turn].realm` 是 TURN 认证域字符串（TURN REALM），与 Actr Realm 无关。 |
+| TURN | Traversal Using Relays around NAT：P2P 不可达时的受控密文中继（Loran 文档中称 Relay 平面）；allocation 需要绑定 Realm/Actr Facility Provider/audience/Actor/expiry 的短期 TURN credential。配置中的 `[turn].realm` 是 TURN 认证域字符串（TURN REALM），与 Actr Realm 无关。 |
 
 ## 10. 安全与隐私模型
 
@@ -202,7 +202,7 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | publisher | manufacturer | 包清单 `actr-package/1` 与 proto `ActrType` 曾用此字段名；`actr-package/2` 起统一为 `publisher`（proto 字段编号不变），旧键被拒绝并提示改名；Actor 类型字符串旧形式 `publisher:name:version`（曾写作 `manufacturer:name:version`）→ `publisher/program@version`，旧形式被拒绝，已存数据由 schema v2 离线工具改写；CLI 用户配置 `[mfr] manufacturer` → `[publisher] name` |
 | Publisher Registry | MFR（源自 manufacturer） | 目录 `crates/loran-mfr` → `crates/loran-publisher-registry`；当前包 `loran-publisher-registry`；路由保持 `/registry/*` 与 `/admin/api/publishers`；配置 `[services.mfr]` → `[services.publisher_registry]`；表 `mfr*` → `publisher*`、列 `mfr_id`/`manufacturer` → `publisher_id`/`publisher`（schema v2 离线迁移）；key id 格式 `actr-pub-<16 hex>` 不变 |
 | Actor Registry | service registry | 类型 `ServiceRegistry` → `ActorRegistry`；SQLite 表 `service_registry` → `actor_registry`、列 `actor_manufacturer` → `actor_publisher`（启动时原地改名） |
-| Realm Infra Provider ID（Realm Infra Provider 的 DNS authority） | 固定 Provider ID 常量 | 2026-09 C2.1 前的实现；现取 Loran `[authority] uri` 的域名 |
+| Actr Facility Provider ID（Actr Facility Provider 的 DNS authority） | 固定 Provider ID 常量 | 2026-09 C2.1 前的实现；现取 Loran `[authority] uri` 的域名 |
 | Realm Profile | Realm descriptor（`/.well-known/actr/realm.json`） | 2026-09 C2.2 前 Loran 在该路径发布的单 Realm 非秘密元数据；与 authority discovery「`/.well-known/actr` 下不定义子路径」冲突，已移除，改由 Realm 签名 key 签名的 Realm Profile（`GET /actr/realms/{domain}/{realm_id}`）取代 |
 | Realm 名 | 数值 `realm_id`、`actr:realm:<realm_id>:authority` | 2026-09 C3 前的 Realm 标识与 credential issuer；与 RealmId（`@` 左边那段）无关 |
 | Realm 签名 key、`realm_signing_keys` | 命名空间 key、`realm_namespace` | 本契约早期草稿用语 |
@@ -213,11 +213,11 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | Realm 客户端 key | 设备 key、device private key | 本契约早期草稿用语 |
 | owner、owner 邀请 | Realm 管理员、Realm 管理 token（`rat_…`）、`reissue_admin_token` | 2026-09 membership 设计取代：管理权由 owner 用自己的 Realm 客户端 key 签名行使，丢失时以 owner 邀请恢复 |
 | Realm 客户端 key 持有证明（`x-actr-client-proof`） | Realm registration secret（Realm secret，共享注册 secret 请求头） | 2026-09 membership 设计删除的 Realm 共享注册 secret |
-| （后续能力） | Realm Infra Provider 账号（OAuth 2.0 + PKCE，client ID `actr-host`） | v1 不做，Realm Infra Provider 域名下的 Realm 只由运营者创建 |
+| （后续能力） | Actr Facility Provider 账号（OAuth 2.0 + PKCE，client ID `actr-host`） | v1 不做，Actr Facility Provider 域名下的 Realm 只由运营者创建 |
 | renewal token | Realm refresh material | 产品文档早期用语 |
 | Actor credential | Realm credential | 产品文档早期用语；当前代码类型名为 proto `AIdCredential` 与 `crates/loran-issuer` 的 `AIdIssuer`、`AIdSerialNumberIssuer`，Actor 类型在 claims 中的字段为 `IdentityClaims.actor_type` |
 | Actor credential（含 Realm membership 证明） | Realm membership credential | 本契约早期草稿用语：并入 Actor credential，membership 即已注册未撤销的 Realm 客户端 key |
-| Realm Infra Provider | provider | 本契约早期草稿用语（泛词） |
+| Actr Facility Provider | provider | 本契约早期草稿用语（泛词） |
 | `publish_profile` | `activate_realm` | 早期草稿只管首次激活；合并为发布 Realm Profile（首次即激活，之后即更新或退役） |
 | ActorStateDigest、ApplicationStateDigest、structureDigest | ActorStateId、ApplicationStateId、structureId | 安全模型早期用语；按「摘要类标识叫 Digest」统一，代码与字段同步改为 `*_digest` |
 | Service | Primary Service、Service Actor | 产品文档早期用语；Realm 即实例后不再区分主次 |

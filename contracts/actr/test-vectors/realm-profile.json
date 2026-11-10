@@ -1944,7 +1944,7 @@
       "name": "provider cannot change",
       "accepted": "active",
       "candidate": "provider_changed",
-      "result": "REALM_INFRA_PROVIDER_MISMATCH"
+      "result": "ACTR_FACILITY_PROVIDER_MISMATCH"
     },
     {
       "name": "retirement",

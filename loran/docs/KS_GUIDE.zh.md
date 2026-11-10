@@ -8,7 +8,7 @@
 Issuer Signer 是 Issuer 的最小私钥边界：
 
 1. 生成 Ed25519 signing key：每个 Realm 的 Realm issuer key（首把 `issuer:<realm>`，轮换产生 `issuer:<realm>/<毫秒时间戳>`）、每个
-   Realm Infra Provider 域名一把 Realm 签名 key（`realm-signing:<domain>`），全部 Realm 共用同一
+   Actr Facility Provider 域名一把 Realm 签名 key（`realm-signing:<domain>`），全部 Realm 共用同一
    Issuer Signer；
 2. 在服务端保存私钥，只返回 verifying key；
 3. 对 Issuer 提交的精确消息签名；

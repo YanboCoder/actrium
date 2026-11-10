@@ -1,0 +1,352 @@
+{
+  "description": "Shared actr:// parsing and normalization vectors (actr/protocols/uri.md). Valid cases give the normalized URI and every public parsed field; normalized must parse to the same value. Actor cases also convert to ActrId. Optional local_checks use result 'accept' or an ActrUriError code. Invalid cases give the expected ActrUriError code.",
+  "valid": [
+    {
+      "name": "domain_only",
+      "input": "ACTR://ACME.COM/",
+      "normalized": "actr://acme.com",
+      "domain": "acme.com",
+      "realm_id": null,
+      "serial": null,
+      "path": "",
+      "query": null,
+      "fragment": null,
+      "realm_name": null,
+      "actor_id": null,
+      "is_local": false
+    },
+    {
+      "name": "realm",
+      "input": "actr://acme.com/k7m2q9xh",
+      "normalized": "actr://acme.com/k7m2q9xh",
+      "domain": "acme.com",
+      "realm_id": "k7m2q9xh",
+      "serial": null,
+      "path": "",
+      "query": null,
+      "fragment": null,
+      "realm_name": "k7m2q9xh@acme.com",
+      "actor_id": null,
+      "is_local": false
+    },
+    {
+      "name": "realm_path_query_fragment",
+      "input": "actr://acme.com/k7m2q9xh/today/week?view=week&filter=a%2fb#item%2d3",
+      "normalized": "actr://acme.com/k7m2q9xh/today/week?view=week&filter=a%2Fb#item-3",
+      "domain": "acme.com",
+      "realm_id": "k7m2q9xh",
+      "serial": null,
+      "path": "/today/week",
+      "query": "view=week&filter=a%2Fb",
+      "fragment": "item-3",
+      "realm_name": "k7m2q9xh@acme.com",
+      "actor_id": null,
+      "is_local": false
+    },
+    {
+      "name": "actor_path_query_fragment_percent_normalization",
+      "input": "ACTR://ACME.Com/2af01.k7m2q9xh/%7euser/%e4%b8%ad?next=%2f&x=%41#%7eitem%2d3",
+      "normalized": "actr://acme.com/2af01.k7m2q9xh/~user/%E4%B8%AD?next=%2F&x=A#~item-3",
+      "domain": "acme.com",
+      "realm_id": "k7m2q9xh",
+      "serial": "2af01",
+      "path": "/~user/%E4%B8%AD",
+      "query": "next=%2F&x=A",
+      "fragment": "~item-3",
+      "realm_name": "k7m2q9xh@acme.com",
+      "actor_id": "2af01.k7m2q9xh@acme.com",
+      "is_local": false
+    },
+    {
+      "name": "idna_unicode_domain",
+      "input": "actr://\u4f8b\u5b50.\u4e2d\u56fd/k7m2q9xh",
+      "normalized": "actr://xn--fsqu00a.xn--fiqs8s/k7m2q9xh",
+      "domain": "xn--fsqu00a.xn--fiqs8s",
+      "realm_id": "k7m2q9xh",
+      "serial": null,
+      "path": "",
+      "query": null,
+      "fragment": null,
+      "realm_name": "k7m2q9xh@xn--fsqu00a.xn--fiqs8s",
+      "actor_id": null,
+      "is_local": false
+    },
+    {
+      "name": "local_installation_accept_and_foreign",
+      "input": "actr://abcdefghijklmnopqrstuvwxyz.actr.alt/h3x8p2wq",
+      "normalized": "actr://abcdefghijklmnopqrstuvwxyz.actr.alt/h3x8p2wq",
+      "domain": "abcdefghijklmnopqrstuvwxyz.actr.alt",
+      "realm_id": "h3x8p2wq",
+      "serial": null,
+      "path": "",
+      "query": null,
+      "fragment": null,
+      "realm_name": "h3x8p2wq@abcdefghijklmnopqrstuvwxyz.actr.alt",
+      "actor_id": null,
+      "is_local": true,
+      "local_checks": [
+        {
+          "installation_id": "abcdefghijklmnopqrstuvwxyz",
+          "result": "accept"
+        },
+        {
+          "installation_id": "bcdefghijklmnopqrstuvwxyza",
+          "result": "URI_LOCAL_REALM_FOREIGN"
+        }
+      ]
+    },
+    {
+      "name": "actor_serial_zero",
+      "input": "actr://acme.com/0.k7m2q9xh",
+      "normalized": "actr://acme.com/0.k7m2q9xh",
+      "domain": "acme.com",
+      "realm_id": "k7m2q9xh",
+      "serial": "0",
+      "path": "",
+      "query": null,
+      "fragment": null,
+      "realm_name": "k7m2q9xh@acme.com",
+      "actor_id": "0.k7m2q9xh@acme.com",
+      "is_local": false
+    },
+    {
+      "name": "actor_serial_normal",
+      "input": "actr://acme.com/2af01.k7m2q9xh",
+      "normalized": "actr://acme.com/2af01.k7m2q9xh",
+      "domain": "acme.com",
+      "realm_id": "k7m2q9xh",
+      "serial": "2af01",
+      "path": "",
+      "query": null,
+      "fragment": null,
+      "realm_name": "k7m2q9xh@acme.com",
+      "actor_id": "2af01.k7m2q9xh@acme.com",
+      "is_local": false
+    },
+    {
+      "name": "actor_serial_13_digits",
+      "input": "actr://acme.com/fffffffffffff.k7m2q9xh",
+      "normalized": "actr://acme.com/fffffffffffff.k7m2q9xh",
+      "domain": "acme.com",
+      "realm_id": "k7m2q9xh",
+      "serial": "fffffffffffff",
+      "path": "",
+      "query": null,
+      "fragment": null,
+      "realm_name": "k7m2q9xh@acme.com",
+      "actor_id": "fffffffffffff.k7m2q9xh@acme.com",
+      "is_local": false
+    },
+    {
+      "name": "actor_serial_max",
+      "input": "actr://acme.com/3fffffffffffff.k7m2q9xh",
+      "normalized": "actr://acme.com/3fffffffffffff.k7m2q9xh",
+      "domain": "acme.com",
+      "realm_id": "k7m2q9xh",
+      "serial": "3fffffffffffff",
+      "path": "",
+      "query": null,
+      "fragment": null,
+      "realm_name": "k7m2q9xh@acme.com",
+      "actor_id": "3fffffffffffff.k7m2q9xh@acme.com",
+      "is_local": false
+    }
+  ],
+  "invalid": [
+    {
+      "name": "wrong_scheme",
+      "input": "https://acme.com/k7m2q9xh",
+      "code": "URI_SCHEME_INVALID"
+    },
+    {
+      "name": "missing_authority_slashes",
+      "input": "actr:acme.com",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "missing_domain",
+      "input": "actr://",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "domain_userinfo",
+      "input": "actr://user@acme.com/k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "domain_port",
+      "input": "actr://acme.com:443/k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "ipv4_domain",
+      "input": "actr://192.168.1.1/k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "ipv6_domain",
+      "input": "actr://[2001:db8::1]/k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "empty_dns_label",
+      "input": "actr://acme..com/k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "dns_label_leading_hyphen",
+      "input": "actr://-acme.com/k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "domain_trailing_dot",
+      "input": "actr://acme.com./k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "bare_local_suffix",
+      "input": "actr://actr.alt/k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "short_local_installation_id",
+      "input": "actr://short.actr.alt/k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "invalid_local_installation_alphabet",
+      "input": "actr://abcdefghijklmnopqrstuvwxy1.actr.alt/k7m2q9xh",
+      "code": "URI_DOMAIN_INVALID"
+    },
+    {
+      "name": "uppercase_realm_id",
+      "input": "actr://acme.com/K7m2q9xh",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "realm_id_leading_hyphen",
+      "input": "actr://acme.com/-k7m",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "realm_id_trailing_hyphen",
+      "input": "actr://acme.com/k7m-",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "realm_id_underscore",
+      "input": "actr://acme.com/k7_m",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "realm_id_overlong",
+      "input": "actr://acme.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "actor_serial_leading_zero",
+      "input": "actr://acme.com/02af01.k7m2q9xh",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "actor_serial_uppercase",
+      "input": "actr://acme.com/2AF01.k7m2q9xh",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "actor_serial_non_hex",
+      "input": "actr://acme.com/2ag01.k7m2q9xh",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "actor_serial_empty",
+      "input": "actr://acme.com/.k7m2q9xh",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "actor_realm_id_empty",
+      "input": "actr://acme.com/2af01.",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "actor_multiple_dots",
+      "input": "actr://acme.com/1.2.k7m",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "actor_serial_above_max",
+      "input": "actr://acme.com/40000000000000.k7m2q9xh",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "actor_serial_overlong",
+      "input": "actr://acme.com/100000000000000.k7m2q9xh",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "empty_path_segment",
+      "input": "actr://acme.com/k7m2q9xh/a//b",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "trailing_path_separator",
+      "input": "actr://acme.com/k7m2q9xh/",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "dot_path_segment",
+      "input": "actr://acme.com/k7m2q9xh/./b",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "encoded_dot_dot_path_segment",
+      "input": "actr://acme.com/k7m2q9xh/%2e%2e/b",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "invalid_percent_encoding",
+      "input": "actr://acme.com/k7m2q9xh/%ZZ",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "truncated_percent_encoding",
+      "input": "actr://acme.com/k7m2q9xh/path%A",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "raw_unicode_path",
+      "input": "actr://acme.com/k7m2q9xh/\u4e2d",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "raw_space_query",
+      "input": "actr://acme.com/k7m2q9xh?a b",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "raw_unicode_fragment",
+      "input": "actr://acme.com/k7m2q9xh#\u4e2d",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "actor_id_as_uri_target",
+      "input": "actr://acme.com/2af01.k7m2q9xh@acme.com",
+      "code": "URI_LABEL_INVALID"
+    },
+    {
+      "name": "legacy_prototype",
+      "input": "actr://101:acme+echo@1.0.0",
+      "code": "URI_LEGACY_FORM"
+    },
+    {
+      "name": "legacy_product_draft",
+      "input": "actr://acme.com/notes@1.2.0",
+      "code": "URI_LEGACY_FORM"
+    },
+    {
+      "name": "legacy_product_draft_with_service",
+      "input": "actr://acme.com/notes@1.2.0?service=2af01.k7m2q9xh@acme.com",
+      "code": "URI_LEGACY_FORM"
+    }
+  ]
+}

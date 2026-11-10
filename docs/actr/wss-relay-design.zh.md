@@ -82,7 +82,7 @@ Loran 的 `auth = "aid"` 配置名称保留，外部适配器验证专用签名�
 
 ## 独立发布与配置重载
 
-标准 TURN 与原生 WebRTC 使用上游 crate，由根 Cargo 清单固定包含修复的 Git commit，并统一 RTC 和 TURN 相关 crate 的来源。仓库内独立 NAPI 等 workspace 在各自根清单配置相同 patch；仓库外的 SDK 消费者也必须配置相同 patch。具体 commit、来源覆盖及限制见 [上游依赖说明](upstream-patches.md)。新增 relay/security 包继续进入实际版本更新与发布顺序。
+标准 TURN 与原生 WebRTC 使用上游 crate：TURN 相关 crate 固定为同一已发布版本，RTC 相关 crate 固定为包含修复的 Git commit。基于源码路径的 workspace 可继承这些依赖；使用已发布 SDK 的消费者仍需配置 RTC patch。具体 commit、来源覆盖及限制见 [上游依赖说明](upstream-patches.md)。新增 relay/security 包继续进入实际版本更新与发布顺序。
 
 配置重载先校验容量并构造候选 router，候选任务使用独立取消令牌。失败只取消候选任务并恢复配置状态；成功后才切换并取消旧任务。静态、无数据库的 relay 首次开启 admin 等数据库功能需要进程重启，重载明确拒绝并保留原连接，避免在未初始化的存储上启动业务服务。
 

@@ -28,10 +28,12 @@ def main():
         dependency = dependencies[name]
         if (dependency.get("git"), dependency.get("rev")) != (client_source["git"], client_source["rev"]):
             raise SystemExit(f"{name} must use the same Git snapshot as webrtc")
-    for name in ("webrtc-stun", "stun-protocol", "webrtc-util"):
+    for name in ("turn_crate", "webrtc-stun", "stun-protocol", "webrtc-util"):
         dependency = dependencies[name]
-        if (dependency.get("git"), dependency.get("rev")) != (server_source["git"], server_source["rev"]):
-            raise SystemExit(f"{name} must use the same Git snapshot as turn")
+        if dependency.get("version") != server_source["version"] or "git" in dependency or "path" in dependency:
+            raise SystemExit(f"{name} must use the same registry version as turn")
+    if not server_source["version"].startswith("="):
+        raise SystemExit("turn must use an exact registry version")
     output = subprocess.check_output(
         ["cargo", "metadata", "--locked", "--format-version", "1", "--manifest-path", str(manifest)],
         cwd=manifest.parent,
@@ -47,8 +49,12 @@ def main():
         if len(matching) != 1:
             raise SystemExit(f"expected one resolved {name}, found {len(matching)}")
         package = matching[0]
-        override = client_source if name in CLIENT_CRATES else server_source
-        expected = f'git+{override["git"]}?rev={override["rev"]}#{override["rev"]}'
+        if name in CLIENT_CRATES:
+            expected = f'git+{client_source["git"]}?rev={client_source["rev"]}#{client_source["rev"]}'
+        else:
+            expected = "registry+https://github.com/rust-lang/crates.io-index"
+            if package["version"] != server_source["version"].removeprefix("="):
+                raise SystemExit(f'{name} resolved to version {package["version"]}, expected {server_source["version"]}')
         if package["source"] != expected:
             raise SystemExit(f'{name} resolved to {package["source"]}, expected {expected}')
         resolved[name] = package["id"]

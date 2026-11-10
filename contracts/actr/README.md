@@ -78,3 +78,18 @@ cargo test -p actr-protocol --test realm_profile --locked
 These tests are also included in the workspace Rust CI suite. The JSON Schema
 validator is a development-only dependency, with external reference fetching
 disabled. Realm management request schemas/vectors remain separate work.
+
+## URI
+
+[`test-vectors/uri.json`](test-vectors/uri.json) covers `actr://` parsing and
+normalization from [`uri.md`](../../actr/protocols/uri.md). Valid cases specify
+the normalized URI and public parsed fields, normalization idempotence, Actor
+URI to `ActrId` conversion, and local-installation checks. Invalid cases specify
+stable `ActrUriError::code()` values. Coverage includes IDNA, percent encoding,
+application components, legacy forms, and canonical Actor serial boundaries.
+
+Run the interoperability tests with:
+
+```sh
+cargo test -p actr-protocol --test uri --locked
+```

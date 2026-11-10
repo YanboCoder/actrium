@@ -105,12 +105,12 @@
 | FR-NET-016 | Actrium 必须提供域名信任、经 Realm 邀请加入实例 Realm、添加客户端、重新认证、客户端撤销、成员管理（仅 owner）、离开、owner 恢复和 Realm 签名 key 变化处置流程。 |
 | FR-NET-017 | 新建实例必须在所选域名下新建一个 Realm；RealmId 在域名内唯一、创建后不可修改、退役后不复用。 |
 | FR-NET-018 | Service 升级为新 Program Release 时，Realm 必须发布 `package` 指向新包的 Realm Profile，新 Service 必须创建在同一 Realm；迁移到另一个 Realm 必须产生新 ActorId。 |
-| FR-NET-019 | 取不到、验不过或已退役的 Realm Profile 时，Actrium 不得使用 Realm Profile 以外的任何 Realm Infra Provider（包括 authority descriptor `services` 中的服务）与该 Realm 通信。 |
-| FR-NET-020 | 新建实例所选的 Realm 域名必须已受信，或在新建确认页完成首次信任；没有域名不分配 Realm（本机 Realm 除外）；创建须经该 Realm 域名的 Realm 签名 key 持有方授权：其他 Realm 域名由持有方的签名服务签署 Actr 管理信封，确认页显示信任根为该 Realm 域名；Realm 域名等于或属于 Realm Infra Provider ID 时，v1 只由该 Realm Infra Provider 的运营者创建，用户以其交付的 owner 邀请加入，确认页显示其为信任根。 |
+| FR-NET-019 | 取不到、验不过或已退役的 Realm Profile 时，Actrium 不得使用 Realm Profile 以外的任何 Actr Facility Provider（包括 authority descriptor `services` 中的服务）与该 Realm 通信。 |
+| FR-NET-020 | 新建实例所选的 Realm 域名必须已受信，或在新建确认页完成首次信任；没有域名不分配 Realm（本机 Realm 除外）；创建须经该 Realm 域名的 Realm 签名 key 持有方授权：其他 Realm 域名由持有方的签名服务签署 Actr 管理信封，确认页显示信任根为该 Realm 域名；Realm 域名等于或属于 Actr Facility Provider ID 时，v1 只由该 Actr Facility Provider 的运营者创建，用户以其交付的 owner 邀请加入，确认页显示其为信任根。 |
 | FR-NET-021 | 每个联网 Realm 必须恰好一个 owner（创建者或经转让得到者）；owner 转让必须原子完成，原 owner 默认改为 editor；owner 离开前必须先转让，且不能撤销自己最后一个客户端；多 owner 不属于 v1。 |
 | FR-NET-022 | 每个客户端必须在每个 Realm 登记独立的 Realm 客户端 key；注册、重签与续期 Actor credential 都必须以该 key 签名证明持有，Issuer 只对已登记、未撤销、属于 active 成员的 key 签发；不得使用 Realm 共享注册 secret。 |
 | FR-NET-023 | 撤销 Realm 客户端 key 必须立即拒绝其新 Actor credential、撤销它签发的未用邀请、停用绑定到它的 Actor 并关闭它们的 signaling 连接与 TURN allocation；移除成员与离开 Realm 必须撤销该成员全部客户端 key；改角色只改应用权限，在该成员下一份 Actor credential 生效。 |
-| FR-NET-024 | 创建 Realm 与 owner 恢复必须以一次性 owner 邀请交付管理权，不设 Realm 管理 token；owner 邀请由 Realm 签名 key 持有方（激活响应、`reissue_owner_invite`）或 Realm Infra Provider 运营者签发，新签发的使此前未用的失效。Realm Infra Provider 账号自助创建属于后续能力。 |
+| FR-NET-024 | 创建 Realm 与 owner 恢复必须以一次性 owner 邀请交付管理权，不设 Realm 管理 token；owner 邀请由 Realm 签名 key 持有方（激活响应、`reissue_owner_invite`）或 Actr Facility Provider 运营者签发，新签发的使此前未用的失效。Actr Facility Provider 账号自助创建属于后续能力。 |
 
 ### 1.7 Permission、安全与隐私
 
@@ -128,7 +128,7 @@
 | FR-SEC-010 | 遥测必须默认关闭；用户或管理员启用后仍必须最小化敏感标识。 |
 | FR-SEC-011 | 撤销 grant 必须立即失效对应 capability handle，并终止或降权活跃会话。 |
 | FR-SEC-012 | Realm 邀请必须一次性、可过期、可撤销，兑换时由新 Realm 客户端 key 签名并原子消耗，且不得作为 bearer secret 进入实例 URI；过期、已使用、已撤销与 Realm 不匹配必须是不同错误。 |
-| FR-SEC-013 | 应用权限至少支持 owner/editor/viewer 角色，并把 Realm membership 与实例授权分开：membership 只决定能否进入该实例的网络（取得 Actor credential、连接 signaling、Attach 握手的前提），实例内角色与权限仍由应用权限与会话授权决定；成员角色由 Realm Infra Provider 保存并写入 Actor credential，由 Service 执行，会话不超过 Front credential 的有效期。 |
+| FR-SEC-013 | 应用权限至少支持 owner/editor/viewer 角色，并把 Realm membership 与实例授权分开：membership 只决定能否进入该实例的网络（取得 Actor credential、连接 signaling、Attach 握手的前提），实例内角色与权限仍由应用权限与会话授权决定；成员角色由 Actr Facility Provider 保存并写入 Actor credential，由 Service 执行，会话不超过 Front credential 的有效期。 |
 | FR-SEC-014 | 应用颜色必须与 lifecycle、reachability、health 和 enforcement 分字段表达。 |
 | FR-SEC-015 | 应用图必须是无根有效依赖连通分量，并包含全部有效 `Transfer(ActorId)` 成员。 |
 | FR-SEC-016 | 通道有效且 `Ready` 时，展示颜色必须取全部节点结论的最弱项。 |
@@ -222,7 +222,7 @@
 | NFR-REL-003 | Attach 失败路径中替代实例创建次数为 0。 |
 | NFR-REL-004 | package cache 写入必须原子，断电后旧版本仍可验证。 |
 | NFR-REL-005 | Front crash 不得损坏 Service store 或 Workspace。 |
-| NFR-REL-006 | 同一 Realm Infra Provider 内 signaling endpoint 故障切换不得改变 ActorId。 |
+| NFR-REL-006 | 同一 Actr Facility Provider 内 signaling endpoint 故障切换不得改变 ActorId。 |
 | NFR-REL-007 | lease 网络抖动测试不得产生两个同时有效的 exclusive attachment。 |
 | NFR-REL-008 | beta 的 crash-free app session 必须达到 99.5%，stable 必须达到 99.9%。 |
 
@@ -566,11 +566,11 @@
 **When** 选择 `notes.example/team-notes@1.4.2`，以 `team.example` 为 Realm 域名新建实例并确认<br>
 **Then** 在 `team.example` 下新建一个 Realm（如 `k7m2q9xh@team.example`），其 Realm Profile 的 `package` 指向所选包，地址栏显示 `actr://team.example/k7m2q9xh`；再次新建得到另一个 Realm，而不是复用前者。
 
-### AC-052：Realm 与 Realm Infra Provider 绑定
+### AC-052：Realm 与 Actr Facility Provider 绑定
 
 **Given** 已接受某 Realm 的 Realm Profile，随后收到一份 Realm 签名 key 签名有效、`sequence` 更高但 `provider.id` 不同的 Realm Profile<br>
 **When** Service 与 Front 重连<br>
-**Then** 拒绝该 Realm Profile 并报 `REALM_INFRA_PROVIDER_MISMATCH`，不连接新 Realm Infra Provider；同一 Realm Infra Provider 内轮换 Realm issuer key 的更高 `sequence` Realm Profile 正常生效，Realm 名与 ActorId 不变。
+**Then** 拒绝该 Realm Profile 并报 `ACTR_FACILITY_PROVIDER_MISMATCH`，不连接新 Actr Facility Provider；同一 Actr Facility Provider 内轮换 Realm issuer key 的更高 `sequence` Realm Profile 正常生效，Realm 名与 ActorId 不变。
 
 ### AC-053：已退役 Realm
 
@@ -582,13 +582,13 @@
 
 **Given** 实例 Realm 的 Realm Profile 无法获取或签名验证失败，而该域名的 authority descriptor 在 `services` 中声明了 signaling 等服务<br>
 **When** 用户打开该实例的 Realm 链接<br>
-**Then** 显示 Realm 不可达或安全错误，不连接这些服务或任何其他 Realm Infra Provider，也不创建替代实例。
+**Then** 显示 Realm 不可达或安全错误，不连接这些服务或任何其他 Actr Facility Provider，也不创建替代实例。
 
 ### AC-055：新建事务失败与重试
 
 **Given** 用户在某个 Realm 域名下确认新建实例<br>
-**When** Realm 签名 key 持有方不可达，或 Realm Infra Provider 激活 Realm 失败，随后用户以同一 `idempotency_key` 重试<br>
-**Then** 失败时不产生 Service；重试继续同一个 pending Realm（同一 RealmId，Realm Infra Provider 以 `(realm, 请求方)` 识别），不重复创建 Realm；过期的 pending Realm 被自动清理。
+**When** Realm 签名 key 持有方不可达，或 Actr Facility Provider 激活 Realm 失败，随后用户以同一 `idempotency_key` 重试<br>
+**Then** 失败时不产生 Service；重试继续同一个 pending Realm（同一 RealmId，Actr Facility Provider 以 `(realm, 请求方)` 识别），不重复创建 Realm；过期的 pending Realm 被自动清理。
 
 ### AC-056：邀请错误分明
 
@@ -616,7 +616,7 @@
 |---|---|
 | 平台 | macOS、Windows、iOS、Android |
 | Service | local、remote |
-| 网络 | loopback、direct WebRTC、TURN、offline、Realm Infra Provider failover |
+| 网络 | loopback、direct WebRTC、TURN、offline、Actr Facility Provider failover |
 | Package | cached、first download、revoked、digest conflict、dev |
 | Workspace | requirement: none/optional/required；provisioning: managed/user-selected；access: read-only/read-write；local/remote/locked Workspace Provider |
 | Lifecycle | create、refresh、close、crash、restart、suspend、trash、restore、purge、migrate |

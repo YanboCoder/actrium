@@ -189,7 +189,7 @@ async fn join(
     .await
 }
 
-/// `update_realm`: the owner updates or retires a Realm under this Realm Infra
+/// `update_realm`: the owner updates or retires a Realm under this Actr Facility
 /// Provider's domain, whose Realm Profile Loran signs. The ownership is
 /// checked again where the signed Profile is stored.
 async fn update_realm(

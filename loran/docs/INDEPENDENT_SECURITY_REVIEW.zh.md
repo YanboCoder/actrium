@@ -4,16 +4,16 @@
 
 ## 评审目标
 
-判断单节点、SQLite、单一 Realm Infra Provider profile 是否存在可导致以下结果的缺陷。评审对象
+判断单节点、SQLite、单一 Actr Facility Provider profile 是否存在可导致以下结果的缺陷。评审对象
 须写明所评审的 commit 属于哪种 Realm 模型：当前实现是一个实例一个 Realm；目标
 契约是一个实例承载多个 Realm（Realm 名 `<realm_id>@<domain>`，以 Realm 签名 key 签名的
 Realm Profile 激活），见 `REALM_V1_ARCHITECTURE.zh.md` 第 9 节。缺陷类别：
 
 - 未授权签发或冒充 Actor；
-- 跨 Realm/Realm Infra Provider/audience 重放，或同一实例内 Realm 之间的状态、缓存、发现与管理
+- 跨 Realm/Actr Facility Provider/audience 重放，或同一实例内 Realm 之间的状态、缓存、发现与管理
   权限串通；
 - 在他人域名下创建或激活 Realm、接受未经 Realm 签名 key 签名、已回滚或改换 `provider.id` 的
-  Realm Profile，或在 Realm Profile 不可用时回退到未委派的 Realm Infra Provider；
+  Realm Profile，或在 Realm Profile 不可用时回退到未委派的 Actr Facility Provider；
 - 绕过连接 ACL 发现/连接 Actor；
 - 获取 Issuer Signer 私钥、Realm/TURN/renewal/Admin secret；
 - 发布或运行未获 Publisher 授权的 package；
@@ -39,7 +39,7 @@ Realm Profile 激活），见 `REALM_V1_ARCHITECTURE.zh.md` 第 9 节。缺陷�
 | 边界 | 位置 | 重点 |
 |---|---|---|
 | 配置/启动 | `crates/loran-platform/src/config`、`crates/loran-server/src/main.rs` | fail closed、secret 来源、TLS、降权 |
-| SQLite | `crates/loran-platform/src/storage/db.rs`、迁移脚本 | schema gate、Realm 约束（当前：singleton；目标：Realm 名唯一与 Realm Infra Provider tombstone）、事务/备份 |
+| SQLite | `crates/loran-platform/src/storage/db.rs`、迁移脚本 | schema gate、Realm 约束（当前：singleton；目标：Realm 名唯一与 Actr Facility Provider tombstone）、事务/备份 |
 | Issuer | `crates/loran-issuer/src/issuer.rs`、`renewal.rs` | 注册模式、proof、nonce、scope、ID collision |
 | Issuer Signer | `crates/loran-signer/src/grpc_handlers.rs`、`storage` | auth payload、expiry、KEK、私钥不外泄 |
 | Signaling | `crates/loran-signaling/src/axum_router.rs`、`server.rs` | WS transport、source binding、连接 ACL、限流 |
@@ -57,7 +57,7 @@ Realm Profile 激活），见 `REALM_V1_ARCHITECTURE.zh.md` 第 9 节。缺陷�
 - 并发创建 Realm、并发消费 nonce、并发 renewal 和时钟回拨；
 - 目标契约：两个 Realm 使用相同 Actor 类型与相同 serial 候选时，credential、presence、
   TURN、连接 ACL 与管理接口互不相通；伪造或回滚 `realm_signing_keys`/Realm Profile；authority
-  descriptor 获取在逐跳重定向下的 SSRF/DNS rebinding；Realm 管理请求重放到其他 Realm Infra Provider
+  descriptor 获取在逐跳重定向下的 SSRF/DNS rebinding；Realm 管理请求重放到其他 Actr Facility Provider
   或在有效期内重复提交；
 - Publisher DNS 在预检查与连接间切换到 loopback/private/link-local；
 - redirect、超限 descriptor、慢响应、Unicode/大小写/尾点/端口域名；

@@ -1,4 +1,4 @@
-//! Realm Profiles of the Realms this Loran serves as Realm Infra Provider
+//! Realm Profiles of the Realms this Loran serves as Actr Facility Provider
 //! (`actr/protocols/realm-profile.md`).
 //!
 //! For its own Provider domain Loran holds the Realm signing key in the
@@ -12,7 +12,7 @@
 //! last credential it signed has expired.
 
 use actr_protocol::realm_profile::{
-    IceEndpoint, IssuerKey, RealmInfraProvider, RealmIssuer, RealmPackage, RealmPolicy,
+    ActrFacilityProvider, IceEndpoint, IssuerKey, RealmIssuer, RealmPackage, RealmPolicy,
     RealmProfile, RealmProfileError, RealmStatus as ProfileStatus, SignalingEndpoint, jcs,
     realm_profile_urls,
 };
@@ -122,10 +122,10 @@ pub async fn list_issuer_key(
     Err(error.into())
 }
 
-/// The Realm Infra Provider endpoints a Loran-signed Realm Profile names.
+/// The Actr Facility Provider endpoints a Loran-signed Realm Profile names.
 #[derive(Debug, Clone)]
 pub struct ProviderEndpoints {
-    /// Realm Infra Provider ID, also the domain whose Realm signing key Loran holds.
+    /// Actr Facility Provider ID, also the domain whose Realm signing key Loran holds.
     pub provider_id: String,
     pub issuer_url: String,
     pub signaling: Vec<SignalingEndpoint>,
@@ -302,7 +302,7 @@ impl RealmProfiles {
         });
         let document = document.to_string();
 
-        // Accept it exactly as a Realm Infra Provider or Actr Host would.
+        // Accept it exactly as an Actr Facility Provider or Actr Host would.
         let profile = RealmProfile::verify(document.as_bytes(), realm, keys)?;
         if let Some(previous) = &previous {
             previous.check_successor(&profile)?;
@@ -314,7 +314,7 @@ impl RealmProfiles {
         Ok(realm)
     }
 
-    /// An unsigned Realm Profile of `realm` that names this Realm Infra Provider:
+    /// An unsigned Realm Profile of `realm` that names this Actr Facility Provider:
     /// its Issuer with the Realm's issuer key (generated in the Signer the
     /// first time) and its endpoints. `package` is required unless `retire`.
     pub async fn draft(
@@ -349,7 +349,7 @@ impl RealmProfiles {
                 url: self.endpoints.issuer_url.clone(),
                 keys: issuer_keys,
             },
-            "provider": RealmInfraProvider {
+            "provider": ActrFacilityProvider {
                 id: self.endpoints.provider_id.clone(),
                 signaling: self.endpoints.signaling.clone(),
                 ice: self.endpoints.ice.clone(),

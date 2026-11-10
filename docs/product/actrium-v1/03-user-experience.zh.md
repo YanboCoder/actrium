@@ -54,7 +54,7 @@ Program 与 Service 必须在 UI 和数据模型中分开。安装一个程序�
 - 当前应用保障：绿 / 黄 / 红，或正在重新验证；
 - Publisher 域名及 verified/development/revoked 状态；
 - 当前 package digest 的短指纹；
-- Realm 名及其 Realm 域名；Realm 域名等于或属于 Realm Infra Provider ID 时标明信任根是该 Realm Infra Provider，否则信任根是该 Realm 域名；
+- Realm 名及其 Realm 域名；Realm 域名等于或属于 Actr Facility Provider ID 时标明信任根是该 Actr Facility Provider，否则信任根是该 Realm 域名；
 - Service 连接状态：local、P2P、TURN relayed、offline；
 - 当前权限是否有高风险授权。
 
@@ -129,7 +129,7 @@ sequenceDiagram
     U-->>A: 确认创建
     A->>M: Create(idempotency_key, package, workspace, domain, realm_id, display_name)
     M->>M: 取得 Realm 签名 key 持有方授权
-    M->>M: Realm Infra Provider 创建 pending Realm
+    M->>M: Actr Facility Provider 创建 pending Realm
     M->>M: 签名 Realm Profile（含 package）并提交激活，Realm 变为 active
     M->>M: 兑换 owner 邀请，成为该 Realm 的 owner（取得 Realm membership）
     M->>S: 在新 Realm 内持久化身份并启动 Service
@@ -147,10 +147,10 @@ sequenceDiagram
 
 每个新实例都会新建一个 Realm，确认页显示：
 
-- Realm 域名：默认创建本机 Realm；可选任一已信任的 Realm 域名。没有域名就不分配 Realm（本机 Realm 除外）；没有自己域名的用户使用 Realm Infra Provider 在其域名下分配的 Realm；
+- Realm 域名：默认创建本机 Realm；可选任一已信任的 Realm 域名。没有域名就不分配 Realm（本机 Realm 除外）；没有自己域名的用户使用 Actr Facility Provider 在其域名下分配的 Realm；
 - `realm_id`：Actrium 默认生成完全随机的短串（如 `k7m2q9xh`，base32 小写），不含程序名或用户输入；可读名称写入 `display_name` 显示给用户，只在本地和 Realm Profile 中出现，不进入 ActorId；用户也可以显式改用可读的 `realm_id`（如 `notes`），确认页提示可读名会随分享链接暴露；
 - 创建须经该 Realm 域名的 Realm 签名 key 持有方授权：持有方的签名服务按其自身策略认证当前用户后签署 Actr 管理信封与 Realm Profile，激活后把一次性 owner 邀请交回 Actrium，Actrium 当场兑换，创建者即该 Realm 唯一的 owner；确认页显示信任根为该 Realm 域名（受托代持对用户不可见）；
-- Realm 域名等于或属于 Realm Infra Provider ID 时，v1 不能自助新建：用户向该 Realm Infra Provider 的运营者申请，运营者建好 Realm 后把 owner 邀请经带外渠道交给用户，用户在身份页「使用邀请加入」，兑换后 Actrium 在该 Realm 中创建 Service 与 Front，确认页提示信任根即该 Realm Infra Provider。以 Realm Infra Provider 账号自助新建属于后续能力；
+- Realm 域名等于或属于 Actr Facility Provider ID 时，v1 不能自助新建：用户向该 Actr Facility Provider 的运营者申请，运营者建好 Realm 后把 owner 邀请经带外渠道交给用户，用户在身份页「使用邀请加入」，兑换后 Actrium 在该 Realm 中创建 Service 与 Front，确认页提示信任根即该 Actr Facility Provider。以 Actr Facility Provider 账号自助新建属于后续能力；
 - 授权被拒或持有方不可达时给出明确错误，不回落到其他 Realm 域名。
 
 Realm 域名尚未受信时，必须在确认页完成首次信任。
@@ -187,10 +187,10 @@ Manifest 必须分别声明三个维度，不能把它们压进一个枚举：
 
 新建按「持有方授权 → pending Realm → 签名 Realm Profile 并提交激活 → Realm active → 创建 Service」顺序执行：
 
-- 在 Realm 变为 active 之前的任一步失败，都不创建 Service，Inventory 中不出现半成品实例；页面说明失败在哪一步（授权被拒、Realm Infra Provider 不可达、Realm Profile 发布失败），并提供重试；
+- 在 Realm 变为 active 之前的任一步失败，都不创建 Service，Inventory 中不出现半成品实例；页面说明失败在哪一步（授权被拒、Actr Facility Provider 不可达、Realm Profile 发布失败），并提供重试；
 - 默认随机的 RealmId 在开始新建时生成一次并随之持久化，重试不会重新生成；
 - 重试沿用同一 `idempotency_key`，继续同一个 pending Realm 与同一 RealmId，不重复创建；若 Realm 已激活但响应丢失，重试只返回其状态，owner 邀请用 `reissue_owner_invite` 重新签发；
-- 用户放弃后，pending Realm 由 Realm Infra Provider 过期自动清理。
+- 用户放弃后，pending Realm 由 Actr Facility Provider 过期自动清理。
 
 ## 6. 连接已有实例
 
@@ -199,7 +199,7 @@ Manifest 必须分别声明三个维度，不能把它们压进一个枚举：
 1. 解析 Realm 链接，得到 Realm 名；
 2. 获取该域名的 Realm 签名 key 与 Realm Profile 并验证签名；
 3. 按 Realm Profile 的 `package` 确保包已安装且 digest 一致；
-4. 经 Realm Profile 指定的 Realm Infra Provider，在该 Realm 内找到 Actor 类型与包相同的 Service；
+4. 经 Realm Profile 指定的 Actr Facility Provider，在该 Realm 内找到 Actor 类型与包相同的 Service；
 5. 完成双方身份和 challenge 验证；
 6. 协商 Front–Service contract；
 7. 获取独占 lease；
@@ -423,7 +423,7 @@ Realm 对应单个实例，因此身份页按两层组织：信任的 Realm 域�
 - 成员管理（仅 owner）：列出成员与角色，签发与撤销邀请，改角色，移除成员（同时撤销其全部客户端），把 owner 转让给另一成员；
 - 离开 Realm：即失去对该实例的访问，本成员的全部客户端随之撤销；先说明受影响的 Service、Workspace 与分享关系，不静默迁到本机 Realm；owner 须先转让；
 - Realm 签名 key 变更：展示经过签名的轮换链；没有有效轮换链时按身份变化处理，重新确认信任；
-- 恢复：设备丢失后只恢复已加密备份或远端宿主中的数据，不承诺恢复从未备份的 Actor 私钥；成员用其他客户端撤销丢失的客户端，或请 owner 签发「添加客户端」邀请；owner 丢失全部客户端时，向 Realm 签名 key 持有方或 Realm Infra Provider 运营者申请新的 owner 邀请，兑换后原有客户端全部撤销。
+- 恢复：设备丢失后只恢复已加密备份或远端宿主中的数据，不承诺恢复从未备份的 Actor 私钥；成员用其他客户端撤销丢失的客户端，或请 owner 签发「添加客户端」邀请；owner 丢失全部客户端时，向 Realm 签名 key 持有方或 Actr Facility Provider 运营者申请新的 owner 邀请，兑换后原有客户端全部撤销。
 
 信任 Realm 域名不等于加入其中任何 Realm；加入 Realm 也只建立 Realm 客户端身份，实际 Attach 仍由应用权限决定。Realm 域名级 SSO/目录属于后续能力，v1 不做。
 
@@ -437,7 +437,7 @@ Service 的最小应用权限角色为：
 | editor | Attach 并按 contract 修改业务状态 |
 | viewer | 只读 Attach；是否可用取决于程序 contract |
 
-每个实例恰好一个 owner，即创建者；owner 可以把 owner 转让给另一成员（原 owner 默认改为 editor），v1 不支持多个 owner。成员角色由 Realm Infra Provider 随成员记录保存并写入 Actor credential，Service 从 Front 的 credential 读取并执行。
+每个实例恰好一个 owner，即创建者；owner 可以把 owner 转让给另一成员（原 owner 默认改为 editor），v1 不支持多个 owner。成员角色由 Actr Facility Provider 随成员记录保存并写入 Actor credential，Service 从 Front 的 credential 读取并执行。
 
 分享流程：
 

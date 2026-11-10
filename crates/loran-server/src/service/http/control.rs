@@ -22,7 +22,7 @@ use tokio::sync::broadcast;
 ///
 /// `aid_issuer` is the issuer backing the public `/issuer` router when Issuer is
 /// enabled, so a Realm created here gets its issuer key from the live issuer. `realm_profiles` signs Realm Profiles when this Loran is
-/// the Realm Infra Provider for its own domain.
+/// the Actr Facility Provider for its own domain.
 ///
 /// Returns `(Router, jwt_secret)` — the caller should persist the secret
 /// for subsequent reloads.

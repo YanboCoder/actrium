@@ -423,7 +423,7 @@ Old Service ActorId + v1 Workspace
 
 ## 12. Service 迁移设备
 
-同 Realm、同 Program Release 的主机迁移可以保留 ActorId。Realm 与 Realm Infra Provider 永久绑定；换运营方即在新 Realm Infra Provider 上新建实例，按本节规则迁移。迁移到另一个 Realm（包括从本机 Realm 迁到域名下的 Realm）必须产生新 ActorId。
+同 Realm、同 Program Release 的主机迁移可以保留 ActorId。Realm 与 Actr Facility Provider 永久绑定；换运营方即在新 Actr Facility Provider 上新建实例，按本节规则迁移。迁移到另一个 Realm（包括从本机 Realm 迁到域名下的 Realm）必须产生新 ActorId。
 
 1. 获取 migration lease；
 2. 停止旧宿主新请求；

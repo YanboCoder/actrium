@@ -18,7 +18,7 @@
 
 1. Service ActorId 的持久身份；
 2. Publisher domain 与 package key 的正式信任链；
-3. Realm 域名与签名 key、按实例创建的 Realm Profile 与 Realm Infra Provider 委派；
+3. Realm 域名与签名 key、按实例创建的 Realm Profile 与 Actr Facility Provider 委派；
 4. Program/Service/Workspace 分离；
 5. 固定 Front Native Host 和受控 Keel Guest；
 6. 新建实例事务与 Realm 链接打开流程；
@@ -96,7 +96,7 @@ flowchart LR
 8. Realm 签名 key、由其签名的 Realm Profile 和 Realm issuer key discovery；
 9. Actor credential 绑定 public key，并以 transcript/SDP challenge 证明私钥持有；
 10. signaling 一次性 ticket/header；
-11. Realm Infra Provider 委派与 failover；一个 Realm Infra Provider 承载多个 Realm，Realm 创建经 Realm 签名 key 签名授权；
+11. Actr Facility Provider 委派与 failover；一个 Actr Facility Provider 承载多个 Realm，Realm 创建经 Realm 签名 key 签名授权；
 12. per-Realm/TURN-pool key id 与轮换；
 13. Publisher DNS 长度和规范化；
 14. Actor store namespace 接受 instance identity；
@@ -116,7 +116,7 @@ flowchart LR
 ### 退出条件
 
 - 同一 Service 在进程重启、credential 续期、hard re-auth、signaling failover 后 ID 不变；
-- Realm 可以在同一 Realm Infra Provider 内替换 signaling endpoint，Realm 名与 ActorId 不变；
+- Realm 可以在同一 Actr Facility Provider 内替换 signaling endpoint，Realm 名与 ActorId 不变；
 - ActorId reclaim 有 key proof 和冲突保护；
 - legacy ephemeral identity 路径不会被 Actrium Service 使用；
 - Actr Host 能为实际 workload 和 Actor edge 生成可验证 evidence，恶意 Actor 不能隐藏受控调用边。
@@ -255,7 +255,7 @@ flowchart LR
 
 - 域名信任与按实例创建联网 Realm；
 - 经 Realm 邀请加入实例 Realm 并取得 Realm membership；
-- signaling Realm Infra Provider failover；
+- signaling Actr Facility Provider failover；
 - P2P/TURN；
 - 从 Realm 链接解析 Realm 名并取得 Realm Profile；
 - Actor/peer handshake；
@@ -270,7 +270,7 @@ flowchart LR
 - 无权限不能因知道 ActorId 而连接；
 - signaling 不能冒充 Actor；
 - TURN 使用短期 credential；
-- Realm Infra Provider failover 不换 ActorId。
+- Actr Facility Provider failover 不换 ActorId。
 
 ## 10. P4：Hardening 与 Public Beta
 
@@ -341,7 +341,7 @@ flowchart LR
 | Service WASM 能力不足 | 高 | capability broker 与 ABI先做最小闭环 |
 | Workspace 多写损坏 | 高 | v1 exclusive writer |
 | 新建实例被滥用 | 中 | 确认、幂等、限流、配额 |
-| Realm Infra Provider 过度中心化 | 中 | Realm Profile 委派、多 Realm Infra Provider、自托管 |
+| Actr Facility Provider 过度中心化 | 中 | Realm Profile 委派、多 Actr Facility Provider、自托管 |
 | 包格式扩展分叉 | 中 | 直接扩展 `.actr`，不套第二层包 |
 | 多平台 Host 行为漂移 | 中 |共享 schema/golden tests，fixed sandbox |
 | Version/Actor 类型升级复杂 | 中 | v1 显式新 Actor 迁移 |
@@ -381,7 +381,7 @@ flowchart LR
 - 信令是否「无实权」：否；
 - Realm 与物理信令是否一一绑定：否；
 - Realm 是否对应应用实例：是，新建实例即新建 Realm；
-- 一个 Realm Infra Provider 是否承载多个 Realm：是。
+- 一个 Actr Facility Provider 是否承载多个 Realm：是。
 
 ## 14. 最小纵切
 

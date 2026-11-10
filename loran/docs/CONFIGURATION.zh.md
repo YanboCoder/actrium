@@ -61,7 +61,7 @@ advertised_ip = "203.0.113.10"
 advertised_port = 3478
 ```
 
-HTTP 与 ICE 端口均可配置，并会精确出现在待签 Realm Profile 的 Realm Infra Provider 端点中。
+HTTP 与 ICE 端口均可配置，并会精确出现在待签 Realm Profile 的 Actr Facility Provider 端点中。
 防火墙必须放行
 HTTP/TCP、ICE/UDP 以及 TURN relay port range。`advertised_ip` 必须是客户端可达
 地址，不能用监听通配地址代替。
@@ -78,8 +78,8 @@ turn_secret = "<generate-with-openssl-rand-base64-48>"
 `[turn].realm` 是 TURN 长期凭据算法中的认证域字符串（TURN REALM），与 Actr Realm
 不是一回事，不随 Actr Realm 数量变化。
 
-`turn_secret` 是 Realm Infra Provider 主密钥，供 Issuer 签发和 TURN 验证时效凭证，必须按 Realm Infra
-Provider 独立、稳定保存。每个 Actr Realm 的 TURN secret 由它按 Realm 名与 Realm Infra Provider ID
+`turn_secret` 是 Actr Facility Provider 主密钥，供 Issuer 签发和 TURN 验证时效凭证，必须按 Actr Facility
+Provider 独立、稳定保存。每个 Actr Realm 的 TURN secret 由它按 Realm 名与 Actr Facility Provider ID
 经 HKDF-SHA256 派生（salt `actr.turn`，info `<realm>|<provider>`），不在配置中逐个声明；外部
 coturn 无法直接使用主密钥验证。直接替换会使尚未过期的 TURN credential 失效，因此轮换必须作为显式
 维护操作。relay range 不得包含特权端口，起始值不得大于结束值。
@@ -159,7 +159,7 @@ enabled = false
 ```
 
 Admin UI 密码只接受 Argon2id PHC hash，明文密码字段不存在。v1 推荐只启用 Admin UI：
-系统管理员经它创建、停用/恢复、退役 Realm 并代办 Realm Infra Provider 域名下的 Realm；其他域名
+系统管理员经它创建、停用/恢复、退役 Realm 并代办 Actr Facility Provider 域名下的 Realm；其他域名
 的 Realm 由经 Realm 签名 key 持有方授权的 Realm 管理请求创建。`grpc_api` 是 supervisor
 集成接口；启用后
 需要独立的 hex shared secret，并会改变 Realm 写入归属，不属于首版默认部署。
@@ -177,9 +177,9 @@ operations 分成独立 channel。secret、Actor credential、Authorization、We
 
 Realm 不在 TOML 中声明。一个实例承载多个 Realm，默认不限制数量；需要独占部署时可配置
 `[realm] max_realms = 1`。空 schema 启动后没有任何 Realm；Realm 经 Realm 签名 key 持有方
-授权的创建请求（`create_realm` + `publish_profile`）与 Realm Profile 验证后激活，Realm Infra
+授权的创建请求（`create_realm` + `publish_profile`）与 Realm Profile 验证后激活，Actr Facility
 Provider 域名下的 Realm 由系统管理员经 Admin API 代办创建；收到退役 Realm Profile 或经
-`…/retire` 时退役，写入 Realm Infra Provider tombstone，运行时不提供硬删除。按 Realm 的连接、
+`…/retire` 时退役，写入 Actr Facility Provider tombstone，运行时不提供硬删除。按 Realm 的连接、
 消息与 TURN 配额尚未实现，见架构契约第 9 节。
 
 `[realm] profile_refresh_secs`（默认 3600，限定在 60–86400）是 Loran 刷新其他域名
@@ -203,7 +203,7 @@ Realm membership（API.zh.md「Realm membership」）的限额，超出返回 `4
 
 邀请有效期不超过 30 天，owner 邀请固定 7 天。
 
-Realm Infra Provider ID 取 `[authority] uri`（`actr://<domain>`，不带端口）的规范化 DNS 域名。
+Actr Facility Provider ID 取 `[authority] uri`（`actr://<domain>`，不带端口）的规范化 DNS 域名。
 启用 Issuer、Signaling 或 TURN 时 `uri` 必填，缺失或非法即配置校验失败；它写入 Actor
 credential 与 TURN username 的 `provider`，并由 Signaling、TURN 校验。`[authority] enabled`
 控制是否提供 `/.well-known/actr`（此时域名须与 `bind.http` 一致），`[authority] links`

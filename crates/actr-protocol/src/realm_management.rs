@@ -47,7 +47,7 @@ pub struct ManagementRequest {
     /// `publish_profile`: the signed Realm Profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<Value>,
-    /// Realm Infra Provider ID of the receiver.
+    /// Actr Facility Provider ID of the receiver.
     pub provider_id: String,
     /// Opaque id of whom the key holder's signing service signs for.
     #[serde(default, skip_serializing_if = "Option::is_none")]

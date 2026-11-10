@@ -24,7 +24,7 @@ use url::Url;
 struct AuthorityState {
     descriptor: AuthorityDescriptor,
     ice: IceConfiguration,
-    /// Present when this Loran is the Realm Infra Provider for its own domain.
+    /// Present when this Loran is the Actr Facility Provider for its own domain.
     profiles: Option<Arc<RealmProfiles>>,
 }
 
@@ -75,7 +75,7 @@ fn ice_servers(config: &LoranConfig) -> Vec<IceServer> {
     ice_servers
 }
 
-/// Realm Profiles of this Loran as Realm Infra Provider for its own domain: the
+/// Realm Profiles of this Loran as Actr Facility Provider for its own domain: the
 /// authority is enabled and the Issuer has a Signer.
 pub async fn build_realm_profiles(
     config: &LoranConfig,
@@ -367,7 +367,7 @@ mod tests {
         config
     }
 
-    /// `test_config` acting as Realm Infra Provider: the Issuer has a Signer.
+    /// `test_config` acting as Actr Facility Provider: the Issuer has a Signer.
     fn provider_config(artifact: &std::path::Path) -> LoranConfig {
         let mut config = test_config(artifact);
         config.services.issuer = Some(platform::config::IssuerServiceConfig {
@@ -547,7 +547,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn realm_infra_provider_publishes_realm_relations_and_links() {
+    async fn actr_facility_provider_publishes_realm_relations_and_links() {
         let directory = tempfile::tempdir().unwrap();
         let artifact = directory.path().join("echo.actr");
         std::fs::write(&artifact, b"actor package").unwrap();
@@ -578,7 +578,7 @@ mod tests {
         assert_eq!(state.descriptor.links, Some(vec!["/i/".to_string()]));
         assert_eq!(state.profiles.unwrap().provider_id(), "localhost");
 
-        // Without a Signer this Loran is not a Realm Infra Provider.
+        // Without a Signer this Loran is not an Actr Facility Provider.
         let (state, _) = authority_composition(&test_config(&artifact), None)
             .await
             .unwrap();

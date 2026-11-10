@@ -347,7 +347,7 @@ https://acme.com/.well-known/actr
 }
 ```
 
-`realm_signing_keys.keys` 是该域名下所有 Realm 的长期信任根；`rotations` 中每一项由 `from` key 对 `{from, to, public_key, sequence}` 的 JCS 形式签名，`sequence` 为引入该轮换时的成员 `sequence`；从 `keys` 移除某个 key 即吊销它签过的全部 Realm Profile；`realm_signing_keys.signature` 由某个 `active` key 对去掉 `signature` 后的该成员 JCS 规范化结果签名，覆盖 `sequence`。descriptor 其余部分不签名，也不列出 Realm 清单。`links` 作为 descriptor 元数据保留（Actr Authority Discovery §4.6），但 Actrium 不通过它解析或分享 Realm 链接；Realm 链接的输入与分享只使用 `actr://`。`services` 中的 signaling、ice-config 等服务于该 authority 自身，与该域名下的 Realm 无关；访问 Realm 只使用其 Realm Profile 指定的 Realm Infra Provider，Realm Profile 不可用、无效或退役时不得使用任何其他 Realm Infra Provider。Realm Infra Provider 自身的 descriptor（`https://provider.example/.well-known/actr`）另以 `realm-management` link（protocol `actr-realm-management/1`）公布管理请求端点。
+`realm_signing_keys.keys` 是该域名下所有 Realm 的长期信任根；`rotations` 中每一项由 `from` key 对 `{from, to, public_key, sequence}` 的 JCS 形式签名，`sequence` 为引入该轮换时的成员 `sequence`；从 `keys` 移除某个 key 即吊销它签过的全部 Realm Profile；`realm_signing_keys.signature` 由某个 `active` key 对去掉 `signature` 后的该成员 JCS 规范化结果签名，覆盖 `sequence`。descriptor 其余部分不签名，也不列出 Realm 清单。`links` 作为 descriptor 元数据保留（Actr Authority Discovery §4.6），但 Actrium 不通过它解析或分享 Realm 链接；Realm 链接的输入与分享只使用 `actr://`。`services` 中的 signaling、ice-config 等服务于该 authority 自身，与该域名下的 Realm 无关；访问 Realm 只使用其 Realm Profile 指定的 Actr Facility Provider，Realm Profile 不可用、无效或退役时不得使用任何其他 Actr Facility Provider。Actr Facility Provider 自身的 descriptor（`https://provider.example/.well-known/actr`）另以 `realm-management` link（protocol `actr-realm-management/1`）公布管理请求端点。
 
 ### 6.2 Realm Profile
 
@@ -422,7 +422,7 @@ https://realms.provider.example/acme.com/k7m2q9xh
 }
 ```
 
-`signature` 由 `realm_signing_keys` 中的 `active` key 签署；Actor credential 的 issuer 即 `realm.name`，存放位置不影响有效性；由后来退役的 key 签发的既有 Realm Profile 在被更高 `sequence` 取代前仍有效。Realm Profile 不设过期时间，回滚保护只靠 `sequence`；`provider.id` 是 Realm Infra Provider 的规范化 DNS authority，在 Realm 生命周期内不可变。多个 signaling endpoint 共享 `control_plane_id`，表示它们是同一 Realm Infra Provider presence/control plane 的副本或故障切换入口，而不是 v1 federation。`package` 给出该实例运行的包（§3），升级程序即发布 `package` 不同、`sequence` 更高的 Realm Profile。同一 Realm Infra Provider 下轮换 Realm issuer key 或变更端点时同样发布更高 `sequence` 的 Realm Profile；退役时发布 `status` 为 `retired` 的新 Realm Profile，永久有效。
+`signature` 由 `realm_signing_keys` 中的 `active` key 签署；Actor credential 的 issuer 即 `realm.name`，存放位置不影响有效性；由后来退役的 key 签发的既有 Realm Profile 在被更高 `sequence` 取代前仍有效。Realm Profile 不设过期时间，回滚保护只靠 `sequence`；`provider.id` 是 Actr Facility Provider 的规范化 DNS authority，在 Realm 生命周期内不可变。多个 signaling endpoint 共享 `control_plane_id`，表示它们是同一 Actr Facility Provider presence/control plane 的副本或故障切换入口，而不是 v1 federation。`package` 给出该实例运行的包（§3），升级程序即发布 `package` 不同、`sequence` 更高的 Realm Profile。同一 Actr Facility Provider 下轮换 Realm issuer key 或变更端点时同样发布更高 `sequence` 的 Realm Profile；退役时发布 `status` 为 `retired` 的新 Realm Profile，永久有效。
 
 ## 7. Service Inventory Record
 
@@ -573,7 +573,7 @@ REALM_DOMAIN_UNTRUSTED
 REALM_SIGNING_KEY_CHANGED
 REALM_PROFILE_UNAVAILABLE
 REALM_PROFILE_INVALID
-REALM_INFRA_PROVIDER_MISMATCH
+ACTR_FACILITY_PROVIDER_MISMATCH
 REALM_PROFILE_ROLLBACK
 REALM_RETIRED
 REALM_LOGIN_REQUIRED

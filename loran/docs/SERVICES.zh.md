@@ -82,18 +82,18 @@ database 文件。恢复演练应验证：
 - Realm issuer key：每个 Realm 同一时刻用一把签发（首把为 Signer 中的 `issuer:<realm>`），
   Signer 命名 key 不过期；按 Realm Profile §6.1 轮换：新 key 先列入 Realm Profile，被接受满
   24 小时后才签发，旧 key 以 `retired` 列到其最后一个 credential 过期 +5 分钟后移除并在 Signer
-  中退役。Realm Infra Provider 域名下的 Realm 每 90 天自动轮换，运营者可用
+  中退役。Actr Facility Provider 域名下的 Realm 每 90 天自动轮换，运营者可用
   `POST /admin/api/realms/{realm}/issuer-key/rotate` 发起；其他域名的 Realm 需持有方经
   `draft_profile` 签署含新 key 的 Realm Profile。Realm 退役时其全部 issuer key 在 Signer 中
   退役（私钥清除），此后不再签名。Issuer 没有其他签名 key。
-- Realm 签名 key：由 Realm 签名 key 持有方轮换，不在 Loran 内完成（持有方就是本 Realm Infra
+- Realm 签名 key：由 Realm 签名 key 持有方轮换，不在 Loran 内完成（持有方就是本 Actr Facility
   Provider 时除外）；Loran 周期性重新获取 `realm_signing_keys`，Realm Profile 的签名 key 被
   移除时丢弃该 Realm Profile，找不到有效 Realm Profile 的 Realm 会被挂起；新 Realm Profile
   不再以 `active` 列出该 Realm 的 issuer key 时，Realm 同样被挂起，不再签发 Actor credential。
 - Publisher key：Publisher 发布新的签名 Publisher Profile（`sequence` 更高），再以
   `register_publisher` 登记后启用；Publisher Registry 周期刷新后自动启用尚未实现（见架构
   契约第 9 节）。正常退休 key 仍可验历史包，泄露 key 必须显式 revoke。
-- TURN secret：是 Realm Infra Provider 主密钥，轮换会同时影响全部 Realm 由它经 HKDF 派生的
+- TURN secret：是 Actr Facility Provider 主密钥，轮换会同时影响全部 Realm 由它经 HKDF 派生的
   secret，并影响未过期凭证，需协调 Issuer 与 TURN 并观察 allocation。
 - renewal secret：直接替换会破坏稳定 ActorId 恢复，必须按迁移方案处理。
 - Issuer Signer KEK：应通过受测 rewrap 流程，不允许把明文私钥作为中间状态落盘。
@@ -119,7 +119,7 @@ v1 不承诺 HA。单节点容量取决于：
 
 1. 先检查配置校验和 schema version，不要让进程自动「修复」生产数据。
 2. 对照 Realm Profile 中的实际 endpoint 与证书/SAN/防火墙。
-3. Actor credential 错误按 issuer、Realm Infra Provider、audience、Realm、Actor、expiry 与 Realm
+3. Actor credential 错误按 issuer、Actr Facility Provider、audience、Realm、Actor、expiry 与 Realm
    状态是否为 `active` 逐项核对。
 4. Signaling 连接成功但无法发现时检查连接 ACL；v1 默认拒绝是预期。
 5. STUN 成功而 WebRTC 失败时检查 TURN credential、relay range 和对称 NAT。

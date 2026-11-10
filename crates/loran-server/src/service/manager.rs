@@ -419,7 +419,7 @@ impl ServiceManager {
             .map(super::publisher_fixture::configure)
             .transpose()?;
 
-        // As Realm Infra Provider for its own domain, Loran signs Realm Profiles and
+        // As Actr Facility Provider for its own domain, Loran signs Realm Profiles and
         // refreshes those of other domains in the background.
         let realm_profiles = crate::service::http::build_realm_profiles(&self.config).await?;
         if let Some(profiles) = &realm_profiles {

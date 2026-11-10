@@ -40,7 +40,7 @@ const SECOND_REALM: &str = "second@acme.com";
 const TEST_CLIENT_KEY: &str = "loran-fullstack-client-key";
 /// Member id of that owner.
 const TEST_OWNER_MEMBER: &str = "00000000000000f1";
-/// Realm Infra Provider ID of every fullstack config (`actr://localhost`).
+/// Actr Facility Provider ID of every fullstack config (`actr://localhost`).
 const PROVIDER_ID: &str = "localhost";
 const DEFAULT_TOKEN_TTL: u64 = 3600;
 const RENEWAL_TOKEN_SECRET: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -2026,7 +2026,7 @@ async fn provider_domain_realm_profiles_are_signed_served_and_retired() {
     assert_eq!(admin["profile"]["sequence"], 1);
 
     // Unknown Realms and Realms without a Profile are not found. Loran as
-    // Realm Infra Provider creates no Realm outside its domain.
+    // Actr Facility Provider creates no Realm outside its domain.
     let created = create(json!({ "realm": SECOND_REALM }))
         .await
         .expect("create");

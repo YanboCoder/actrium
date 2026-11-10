@@ -128,20 +128,17 @@ tracing-opentelemetry = "0.33.0"
 
 # === WebRTC ===
 # Keep the RTC crates on the same upstream source and submodule revision.
+# TODO(#359): Switch to registry releases once they contain the required fixes.
 webrtc = { version = "=0.21.1", git = "https://github.com/webrtc-rs/webrtc", rev = "8ea6e2a69b0c4c97f38b0e81e5a77e1c066f3757", default-features = false, features = ["runtime-tokio", "crypto-ring"] }
 rtc = { version = "=0.21.1", git = "https://github.com/webrtc-rs/webrtc", rev = "8ea6e2a69b0c4c97f38b0e81e5a77e1c066f3757", default-features = false, features = ["crypto-ring"] }
 rtc-rtp = { version = "=0.21.1", git = "https://github.com/webrtc-rs/webrtc", rev = "8ea6e2a69b0c4c97f38b0e81e5a77e1c066f3757" }
 
 # === Loran server dependencies ===
-# Released TURN 0.17.2 predates the fixes in upstream #896 and #936.
-# STUN, TURN, and Net must use the same Git source.
-# TODO(#359): Once upstream publishes TURN with the required fixes, switch
-# turn_crate, webrtc-stun, and webrtc-util back to matching crates.io versions,
-# remove git/rev, and regenerate the root and examples workspace lockfiles.
-turn_crate = { package = "turn", version = "=0.17.2", git = "https://github.com/webrtc-rs/webrtc", rev = "c229349e67cc235e6737bbf92bd7dd48fdc135fa" }
-webrtc-stun = { package = "stun", version = "=0.17.2", git = "https://github.com/webrtc-rs/webrtc", rev = "c229349e67cc235e6737bbf92bd7dd48fdc135fa" }
-stun-protocol = { package = "stun", version = "=0.17.2", git = "https://github.com/webrtc-rs/webrtc", rev = "c229349e67cc235e6737bbf92bd7dd48fdc135fa" }
-webrtc-util = { version = "=0.17.2", git = "https://github.com/webrtc-rs/webrtc", rev = "c229349e67cc235e6737bbf92bd7dd48fdc135fa" }
+# Keep STUN, TURN, and webrtc-util on the same released upstream version.
+turn_crate = { package = "turn", version = "=0.17.3" }
+webrtc-stun = { package = "stun", version = "=0.17.3" }
+stun-protocol = { package = "stun", version = "=0.17.3" }
+webrtc-util = { version = "=0.17.3" }
 tonic = { version = "0.14", features = ["tls-ring", "tls-native-roots"] }
 tonic-prost = "0.14"
 tonic-prost-build = "0.14"

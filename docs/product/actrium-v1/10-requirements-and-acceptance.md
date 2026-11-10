@@ -105,12 +105,12 @@
 | FR-NET-016 | Actrium MUST provide flows for trusting a domain, joining an instance's Realm via a Realm invitation, adding a client, re-authentication, client revocation, member management (owner only), leaving, owner recovery, and handling Realm signing key changes. |
 | FR-NET-017 | Creating an instance MUST create a new Realm under the chosen domain; the RealmId is unique within the domain, immutable after creation, and never reused after retirement. |
 | FR-NET-018 | When a Service is upgraded to a new Program Release, the Realm MUST publish a Realm Profile whose `package` points to the new package, and the new Service MUST be created in the same Realm; migrating to a different Realm MUST produce a new ActorId. |
-| FR-NET-019 | When the Realm Profile cannot be fetched, fails verification, or is retired, Actrium MUST NOT use any Realm Infra Provider other than the one specified in the Realm Profile to communicate with that Realm (including services listed in the authority descriptor's `services`). |
-| FR-NET-020 | The Realm domain chosen for creating an instance MUST already be trusted, or first trust MUST be established on the creation confirmation page; no domain means no Realm is assigned (except the local Realm); creation MUST be authorized by the holder of that Realm domain's Realm signing key: for any other Realm domain, the holder's signing service signs an Actr management envelope and the confirmation page shows that Realm domain as the trust root; when the Realm domain equals or belongs to the Realm Infra Provider ID, in v1 only that Realm Infra Provider's operator creates the Realm, the user joins with the owner invite the operator hands over, and the confirmation page shows the Realm Infra Provider as the trust root. |
+| FR-NET-019 | When the Realm Profile cannot be fetched, fails verification, or is retired, Actrium MUST NOT use any Actr Facility Provider other than the one specified in the Realm Profile to communicate with that Realm (including services listed in the authority descriptor's `services`). |
+| FR-NET-020 | The Realm domain chosen for creating an instance MUST already be trusted, or first trust MUST be established on the creation confirmation page; no domain means no Realm is assigned (except the local Realm); creation MUST be authorized by the holder of that Realm domain's Realm signing key: for any other Realm domain, the holder's signing service signs an Actr management envelope and the confirmation page shows that Realm domain as the trust root; when the Realm domain equals or belongs to the Actr Facility Provider ID, in v1 only that Actr Facility Provider's operator creates the Realm, the user joins with the owner invite the operator hands over, and the confirmation page shows the Actr Facility Provider as the trust root. |
 | FR-NET-021 | Each networked Realm MUST have exactly one owner (its creator or whoever received ownership by transfer); an ownership transfer MUST be atomic, with the previous owner becoming an editor by default; the owner MUST transfer before leaving and MUST NOT revoke its own last client; multiple owners are not part of v1. |
 | FR-NET-022 | Each client MUST register a separate Realm client key in each Realm; registering, reissuing and renewing an Actor credential MUST all prove possession with a signature by that key, and the Issuer issues only for registered, unrevoked keys of active members; a shared Realm registration secret MUST NOT be used. |
 | FR-NET-023 | Revoking a Realm client key MUST immediately refuse its new Actor credentials, revoke the unused invites it issued, disable the Actors bound to it, and close their signaling connections and TURN allocations; removing a member and leaving a Realm MUST revoke all of that member's client keys; changing a role changes only application permissions and takes effect in the member's next Actor credential. |
-| FR-NET-024 | Creating a Realm and recovering ownership MUST deliver the management right as a one-time owner invite, with no Realm admin token; owner invites are issued by the Realm signing key holder (activation response, `reissue_owner_invite`) or the Realm Infra Provider's operator, and a new one invalidates earlier unused ones. Self-service creation with Realm Infra Provider accounts is a later capability. |
+| FR-NET-024 | Creating a Realm and recovering ownership MUST deliver the management right as a one-time owner invite, with no Realm admin token; owner invites are issued by the Realm signing key holder (activation response, `reissue_owner_invite`) or the Actr Facility Provider's operator, and a new one invalidates earlier unused ones. Self-service creation with Actr Facility Provider accounts is a later capability. |
 
 ### 1.7 Permissions, security and privacy
 
@@ -128,7 +128,7 @@
 | FR-SEC-010 | Telemetry MUST default to off; once a user or administrator enables it, sensitive identifiers MUST still be minimized. |
 | FR-SEC-011 | Revoking a grant MUST immediately invalidate the corresponding capability handle, and terminate or downgrade active sessions. |
 | FR-SEC-012 | A Realm invitation MUST be one-time, expirable and revocable, redeemed with a signature by a new Realm client key and consumed atomically, and MUST NOT enter an instance's URI as a bearer secret; expired, used, revoked and Realm-mismatched invitations MUST be distinct errors. |
-| FR-SEC-013 | Application permissions MUST support at least owner/editor/viewer roles, and MUST keep Realm membership separate from instance authorization: membership only decides whether one can enter that instance's network (a prerequisite for obtaining an Actor credential, connecting to signaling and doing the Attach handshake); roles and permissions inside the instance are still decided by application permissions and session authorization; the member role is kept by the Realm Infra Provider, written into the Actor credential and enforced by the Service, and a session never outlives the Front credential. |
+| FR-SEC-013 | Application permissions MUST support at least owner/editor/viewer roles, and MUST keep Realm membership separate from instance authorization: membership only decides whether one can enter that instance's network (a prerequisite for obtaining an Actor credential, connecting to signaling and doing the Attach handshake); roles and permissions inside the instance are still decided by application permissions and session authorization; the member role is kept by the Actr Facility Provider, written into the Actor credential and enforced by the Service, and a session never outlives the Front credential. |
 | FR-SEC-014 | The application color MUST be expressed as separate fields for lifecycle, reachability, health and enforcement. |
 | FR-SEC-015 | The application graph MUST be a rootless connected component of effective dependencies and MUST include every effective `Transfer(ActorId)` member. |
 | FR-SEC-016 | When the channel is valid and `Ready`, the displayed color MUST take the weakest of all node conclusions. |
@@ -222,7 +222,7 @@ Any increase MUST still be bounded by the platform's cap and permission policy.
 | NFR-REL-003 | The count of substitute instances created on an Attach failure path is 0. |
 | NFR-REL-004 | A package cache write MUST be atomic; the old version must still verify after a power loss. |
 | NFR-REL-005 | A Front crash MUST NOT corrupt the Service store or the Workspace. |
-| NFR-REL-006 | A signaling endpoint failover within the same Realm Infra Provider MUST NOT change the ActorId. |
+| NFR-REL-006 | A signaling endpoint failover within the same Actr Facility Provider MUST NOT change the ActorId. |
 | NFR-REL-007 | Lease network-jitter tests MUST NOT produce two simultaneously valid exclusive attachments. |
 | NFR-REL-008 | Beta's crash-free app session rate MUST reach 99.5%, and stable's MUST reach 99.9%. |
 
@@ -566,11 +566,11 @@ Any increase MUST still be bounded by the platform's cap and permission policy.
 **When** they select `notes.example/team-notes@1.4.2`, create an instance with `team.example` as the Realm domain, and confirm<br>
 **Then** a new Realm is created under `team.example` (e.g. `k7m2q9xh@team.example`) whose Realm Profile `package` points to the selected package, and the address bar shows `actr://team.example/k7m2q9xh`; creating again yields another Realm rather than reusing the first.
 
-### AC-052: A Realm is bound to its Realm Infra Provider
+### AC-052: A Realm is bound to its Actr Facility Provider
 
 **Given** a Realm's Realm Profile has already been accepted, and a later Realm Profile arrives with a valid Realm signing key signature and a higher `sequence` but a different `provider.id`<br>
 **When** the Service and Front reconnect<br>
-**Then** that Realm Profile is rejected with `REALM_INFRA_PROVIDER_MISMATCH`, and the new Realm Infra Provider is not contacted; a higher-`sequence` Realm Profile that rotates the Realm issuer key within the same Realm Infra Provider takes effect normally, with the Realm name and ActorId unchanged.
+**Then** that Realm Profile is rejected with `ACTR_FACILITY_PROVIDER_MISMATCH`, and the new Actr Facility Provider is not contacted; a higher-`sequence` Realm Profile that rotates the Realm issuer key within the same Actr Facility Provider takes effect normally, with the Realm name and ActorId unchanged.
 
 ### AC-053: A retired Realm
 
@@ -582,13 +582,13 @@ Any increase MUST still be bounded by the platform's cap and permission policy.
 
 **Given** the instance Realm's Realm Profile cannot be fetched or fails signature verification, while that domain's authority descriptor declares services such as signaling in `services`<br>
 **When** the user opens that instance's Realm link<br>
-**Then** a Realm-unreachable or security error is shown; neither those services nor any other Realm Infra Provider is contacted, and no substitute instance is created.
+**Then** a Realm-unreachable or security error is shown; neither those services nor any other Actr Facility Provider is contacted, and no substitute instance is created.
 
 ### AC-055: Create transaction failure and retry
 
 **Given** the user confirms creating an instance under a Realm domain<br>
-**When** the Realm signing key holder is unreachable, or the Realm Infra Provider fails to activate the Realm, and the user then retries with the same `idempotency_key`<br>
-**Then** no Service is produced on failure; the retry continues the same pending Realm (same RealmId; the Realm Infra Provider identifies it by `(realm, requester)`) instead of creating a new Realm; an expired pending Realm is cleaned up automatically.
+**When** the Realm signing key holder is unreachable, or the Actr Facility Provider fails to activate the Realm, and the user then retries with the same `idempotency_key`<br>
+**Then** no Service is produced on failure; the retry continues the same pending Realm (same RealmId; the Actr Facility Provider identifies it by `(realm, requester)`) instead of creating a new Realm; an expired pending Realm is cleaned up automatically.
 
 ### AC-056: Distinct invitation errors
 
@@ -616,7 +616,7 @@ Every release candidate covers at least:
 |---|---|
 | Platform | macOS, Windows, iOS, Android |
 | Service | local, remote |
-| Network | loopback, direct WebRTC, TURN, offline, Realm Infra Provider failover |
+| Network | loopback, direct WebRTC, TURN, offline, Actr Facility Provider failover |
 | Package | cached, first download, revoked, digest conflict, dev |
 | Workspace | requirement: none/optional/required; provisioning: managed/user-selected; access: read-only/read-write; local/remote/locked Workspace Provider |
 | Lifecycle | create, refresh, close, crash, restart, suspend, trash, restore, purge, migrate |

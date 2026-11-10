@@ -74,7 +74,7 @@ A trusted Actr Host can still have vulnerabilities; "trusted" means it sits insi
 - A malicious Keel Guest;
 - A malicious Service workload;
 - A malicious or compromised Marketplace;
-- A malicious Realm, signaling or TURN Realm Infra Provider;
+- A malicious Realm, signaling or TURN Actr Facility Provider;
 - Another process on the same device;
 - An attacker with local privileges;
 - A stolen device;
@@ -104,9 +104,9 @@ A trusted Actr Host can still have vulnerabilities; "trusted" means it sits insi
 | A link leaking permissions | Neither the Realm link nor the ActorId is a credential; the URI contains no token |
 | Actor impersonation | Actor credential, Actor key proof, challenge |
 | Realm invitation leak | One-time, expiring, redeemed only with a signature by a new Realm client key and consumed atomically; the issuer can revoke an unused invitation and the owner can remove anyone who got in by mistake; invitations never enter URIs |
-| Lost or stolen client | A separate Realm client key per client, revocable on its own by the member or the owner; revocation immediately refuses new Actor credentials and disconnects its signaling/TURN; an owner who lost all clients recovers through an owner invite issued by the Realm signing key holder or the Realm Infra Provider's operator |
+| Lost or stolen client | A separate Realm client key per client, revocable on its own by the member or the owner; revocation immediately refuses new Actor credentials and disconnects its signaling/TURN; an owner who lost all clients recovers through an owner invite issued by the Realm signing key holder or the Actr Facility Provider's operator |
 | Low-privilege member impersonating the Service or rewriting its connection ACL | Actors of the instance's program (the publisher and program name of the Realm Profile's `package.type`, in any version) are registered only from the owner's clients; the connection ACL carried by a registration applies only to the registering Actor's own type |
-| Forging or rolling back the Realm Profile | The Realm Profile must be signed by the pinned Realm signing key; first trust goes through Web PKI or an enterprise pin; a Realm signing key change requires a valid rotation chain; `sequence` is monotonic, `provider.id` is immutable, a retired Realm is rejected; the Realm Profile never expires and the client refreshes it periodically; when the Realm Profile cannot be fetched, fails verification, or is retired, no Realm Infra Provider other than the one it specifies may be used |
+| Forging or rolling back the Realm Profile | The Realm Profile must be signed by the pinned Realm signing key; first trust goes through Web PKI or an enterprise pin; a Realm signing key change requires a valid rotation chain; `sequence` is monotonic, `provider.id` is immutable, a retired Realm is rejected; the Realm Profile never expires and the client refreshes it periodically; when the Realm Profile cannot be fetched, fails verification, or is retired, no Actr Facility Provider other than the one it specifies may be used |
 | A client impersonating the official Actrium Front | The Actor credential does not prove the peer's code; the platform offers optional platform/runtime attestation |
 | A malicious Actor self-reporting "no leak" | The subject being assessed must not self-sign the final `ActorAssurance`; the effective declaration is closed by the Actr Host |
 | A Service concealing other Actors in the Realm | The rootless graph must discover inbound edges; a missed assessment must not be green |
@@ -331,7 +331,7 @@ Secret classification:
 | TURN credential | Memory | ICE stack, short-lived |
 | Workspace credential | OS secure storage | Workspace broker |
 | session secret | Front/Service Host memory | Invisible to the Guest |
-| Unused Realm invitation | Out-of-band channel; invalid after one redemption | The recipient; the Realm Infra Provider stores only its hash |
+| Unused Realm invitation | Out-of-band channel; invalid after one redemption | The recipient; the Actr Facility Provider stores only its hash |
 
 Forbidden:
 
@@ -401,7 +401,7 @@ Actrium should not establish a centralized account or sync service by default. W
 
 The install page and the Security Center must provide a layered explanation of "where the data goes", rather than a single overall privacy switch.
 
-The Realm name appearing in a shared Realm link exposes the Realm domain and RealmId (`realm_id`). Actrium generates a fully random RealmId for an instance by default (containing no program name or user input), with the readable name placed in `display_name`, never entering the ActorId; when a user explicitly chooses a readable RealmId, the confirmation page and the pre-share UI should warn that it will be exposed in the link. A Realm name and an ActorId resemble an email address (`k7m2q9xh@acme.com`); Actrium must not render them as a `mailto:` link, and should clearly label them as an instance address. Each Realm uses a separate Realm client key, never reused across Realms, so different instances cannot correlate the same client through it. A Realm Infra Provider and a holder's signing service know which instances they created for whom (they are the signers anyway), but the instance's members cannot see this; client names are chosen by the client and contain no personal information by default.
+The Realm name appearing in a shared Realm link exposes the Realm domain and RealmId (`realm_id`). Actrium generates a fully random RealmId for an instance by default (containing no program name or user input), with the readable name placed in `display_name`, never entering the ActorId; when a user explicitly chooses a readable RealmId, the confirmation page and the pre-share UI should warn that it will be exposed in the link. A Realm name and an ActorId resemble an email address (`k7m2q9xh@acme.com`); Actrium must not render them as a `mailto:` link, and should clearly label them as an instance address. Each Realm uses a separate Realm client key, never reused across Realms, so different instances cannot correlate the same client through it. An Actr Facility Provider and a holder's signing service know which instances they created for whom (they are the signers anyway), but the instance's members cannot see this; client names are chosen by the client and contain no personal information by default.
 
 ## 17. Security development requirements
 

@@ -59,12 +59,12 @@ Tab
 | D-010 | Publisher 身份是规范化域名，不含端口；Publisher Profile 只用来验证包签名，下载地址不属于 Publisher 身份，可以在任何位置。 |
 | D-011 | Marketplace 是发现、审核与撤销信息源，不是 Publisher 命名权威；域名与包签名才是来源链。 |
 | D-012 | v1 ActorId 必须包含可验证的 Realm 名（`<realm_id>@<domain>`，如 `notes@acme.com`），程序类型不在 ActorId 中；它是公开地址和密码学身份，不是 bearer token，知道地址不等于有权连接。 |
-| D-013 | Realm 是逻辑信任域，对应一个应用实例，可委派多个信令/TURN 服务；Realm 与某个物理信令进程不是一回事，一个 Realm Infra Provider 承载多个 Realm；Realm 在创建时绑定一个 Realm Infra Provider，此后不可更换。 |
+| D-013 | Realm 是逻辑信任域，对应一个应用实例，可委派多个信令/TURN 服务；Realm 与某个物理信令进程不是一回事，一个 Actr Facility Provider 承载多个 Realm；Realm 在创建时绑定一个 Actr Facility Provider，此后不可更换。 |
 | D-014 | Service 实例固定到精确版本与包 digest；v1 升级通过显式迁移创建新 Actor，而不是原地替换 workload。 |
 | D-015 | Actor credential 证明 Actor key、身份和 claims，不证明对端实际运行的代码。应用如何据此授权属于应用写法，见[应用开发建议](app-development-guidance.zh.md)。 |
 | D-016 | Workspace 的 requirement、provisioning、access 和允许的 Workspace Provider（`providers`）是独立维度，不能混成一个枚举。 |
 | D-017 | 删除分为可恢复的 Trashed 与不可恢复的 Purged/Deleted；删除 Workspace 始终是独立动作。 |
-| D-018 | Publisher 与 Realm 域名的 bootstrap 固定使用 HTTPS 443（即 `https://<domain>/.well-known/actr`）；Realm Profile 来自 `realms` 声明的 HTTPS 位置（可带端口），其中给出实例运行的包与 Realm Infra Provider 端点（可带端口）。取不到或验不过 Realm Profile 时不得使用 Realm Profile 以外的任何 Realm Infra Provider。 |
+| D-018 | Publisher 与 Realm 域名的 bootstrap 固定使用 HTTPS 443（即 `https://<domain>/.well-known/actr`）；Realm Profile 来自 `realms` 声明的 HTTPS 位置（可带端口），其中给出实例运行的包与 Actr Facility Provider 端点（可带端口）。取不到或验不过 Realm Profile 时不得使用 Realm Profile 以外的任何 Actr Facility Provider。 |
 | D-019 | 应用保障按无根有效依赖图汇聚；通道有效且 `Ready` 时，展示颜色取全部节点结论的最弱项。Front 只定位，不是图根。 |
 | D-020 | `ActorAssurance` 由验证者签发，`issuer ≠ subject`。Actr Host 可评 Guest、可提供证据，不得自签自己的最终结论。 |
 | D-021 | 顶层只分绿 / 黄 / 红；切面未就绪时显示无法建立，不是第四色。未知不是已确认泄漏，但绝不能显示为绿。 |

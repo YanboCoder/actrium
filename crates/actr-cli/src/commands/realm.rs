@@ -14,7 +14,7 @@
 //!     `remove-member`, `set-role`, `transfer-owner`, `leave` — membership
 //!     requests signed with a Realm client key
 //!
-//! Requests are printed as JSON, to be sent with `POST` to the Realm Infra
+//! Requests are printed as JSON, to be sent with `POST` to the Actr Facility
 //! Provider's `realm-management` endpoint; `register-publisher` sends its
 //! own (`actr/protocols/authority-discovery.md` section 4.5).
 
@@ -59,11 +59,11 @@ pub enum RealmCommand {
     /// Sign a `reissue_owner_invite` request.
     ReissueRequest(ReissueRequestArgs),
     /// Sign a `draft_profile` request for the next Realm Profile, with the
-    /// Realm Infra Provider's current issuer keys; sign its reply with
+    /// Actr Facility Provider's current issuer keys; sign its reply with
     /// `sign-profile`.
     DraftRequest(ReissueRequestArgs),
     /// Sign a `register_publisher` request with a Publisher Profile signing
-    /// key and send it to the Realm Infra Provider's `realm-management` endpoint.
+    /// key and send it to the Actr Facility Provider's `realm-management` endpoint.
     RegisterPublisher(RegisterPublisherArgs),
     /// Redeem a Realm invite with a new Realm client key and write its key
     /// file.
@@ -108,7 +108,7 @@ pub struct CreateRequestArgs {
     /// Realm name `<realm_id>@<domain>`
     #[arg(long, value_name = "REALM")]
     pub realm: String,
-    /// Realm Infra Provider ID of the receiving Realm Infra Provider
+    /// Actr Facility Provider ID of the receiving Actr Facility Provider
     #[arg(long, value_name = "ID")]
     pub provider: String,
     /// HTTPS URL of the package the Realm runs
@@ -166,7 +166,7 @@ pub struct ReissueRequestArgs {
     /// Realm name `<realm_id>@<domain>`
     #[arg(long, value_name = "REALM")]
     pub realm: String,
-    /// Realm Infra Provider ID of the receiving Realm Infra Provider
+    /// Actr Facility Provider ID of the receiving Actr Facility Provider
     #[arg(long, value_name = "ID")]
     pub provider: String,
 }
@@ -181,7 +181,7 @@ pub struct RegisterPublisherArgs {
     /// the Publisher Profile
     #[arg(long, value_name = "DOMAIN")]
     pub publisher: String,
-    /// Realm Infra Provider ID of the receiving Realm Infra Provider
+    /// Actr Facility Provider ID of the receiving Actr Facility Provider
     #[arg(long, value_name = "ID")]
     pub provider: String,
     /// `realm-management` endpoint to send to, instead of the one listed in
@@ -370,7 +370,7 @@ fn register_publisher_request(args: &RegisterPublisherArgs) -> Result<Value> {
     Ok(request.sign(&key_id, &key))
 }
 
-/// Sign `register_publisher` and send it; returns the Realm Infra Provider's reply.
+/// Sign `register_publisher` and send it; returns the Actr Facility Provider's reply.
 async fn register_publisher(args: &RegisterPublisherArgs) -> Result<Value> {
     let request = register_publisher_request(args)?;
     if args.print {
@@ -394,7 +394,7 @@ async fn register_publisher(args: &RegisterPublisherArgs) -> Result<Value> {
     serde_json::from_str(&body).context("register_publisher reply is not JSON")
 }
 
-/// The `realm-management` link of the Realm Infra Provider's authority descriptor.
+/// The `realm-management` link of the Actr Facility Provider's authority descriptor.
 async fn realm_management_endpoint(provider: &str) -> Result<String> {
     let url = format!("https://{provider}/.well-known/actr");
     let descriptor: actr_protocol::AuthorityDescriptor = realm_members::discovery_client()?
@@ -509,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn signs_requests_and_profiles_the_realm_infra_provider_verifies() {
+    fn signs_requests_and_profiles_the_actr_facility_provider_verifies() {
         let dir = tempfile::tempdir().unwrap();
         let key_path = dir.path().join("realm-key.json");
         let member = keygen(&KeygenArgs {
@@ -571,7 +571,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn register_publisher_sends_a_request_the_realm_infra_provider_verifies() {
+    async fn register_publisher_sends_a_request_the_actr_facility_provider_verifies() {
         use axum::{Json, Router, routing::post};
 
         let dir = tempfile::tempdir().unwrap();

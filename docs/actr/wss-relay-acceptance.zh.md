@@ -1,4 +1,4 @@
-> 当前 TURN 与 WebRTC 使用固定的上游 Git commit，详见[依赖说明](upstream-patches.md)和 [TURN 上游清单](turn-upstream-inventory.zh.md)。下文 vendor、0.21.0 和旧验证数字是当时阶段记录，不代表迁移后的交付方式或验证结果。
+> 当前 TURN 使用固定的上游发布版本，WebRTC 使用固定的上游 Git commit，详见[依赖说明](upstream-patches.md)和 [TURN 上游清单](turn-upstream-inventory.zh.md)。下文 vendor、0.21.0 和旧验证数字是当时阶段记录，不代表迁移后的交付方式或验证结果。
 
 > Realm integration update (English): Validation records below describe the original
 > pre-merge baseline. The current implementation also requires a signed Realm

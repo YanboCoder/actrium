@@ -122,7 +122,7 @@ where
     let provider_id = profiles.provider_id();
     if request.provider_id != provider_id {
         return Err(ManagementError::Invalid(format!(
-            "provider_id '{}' is not this Realm Infra Provider",
+            "provider_id '{}' is not this Actr Facility Provider",
             request.provider_id
         )));
     }
@@ -138,7 +138,7 @@ where
     let domain = realm_domain(&request.realm)?;
     if domain == provider_id || domain.ends_with(&format!(".{provider_id}")) {
         return Err(ManagementError::Forbidden(format!(
-            "Realms under {provider_id} are created by this Realm Infra Provider's operator"
+            "Realms under {provider_id} are created by this Actr Facility Provider's operator"
         )));
     }
 
@@ -181,7 +181,7 @@ where
     }
 }
 
-/// `draft_profile`: the next unsigned Realm Profile, with this Realm Infra
+/// `draft_profile`: the next unsigned Realm Profile, with this Actr Facility
 /// Provider's current Issuer keys and endpoints and the rest taken from the
 /// accepted Realm Profile.
 async fn draft_profile(
@@ -300,7 +300,7 @@ fn realm_domain(name: &str) -> Result<String, ManagementError> {
         .map_err(|error| ManagementError::Invalid(format!("realm: {error}")))?;
     if uri.is_local() || uri.realm_name().as_deref() != Some(name) {
         return Err(ManagementError::Invalid(format!(
-            "realm '{name}' is not a normalized Realm name with a Realm Infra Provider"
+            "realm '{name}' is not a normalized Realm name with an Actr Facility Provider"
         )));
     }
     Ok(uri.domain().to_string())
@@ -394,20 +394,20 @@ async fn publish_profile(
         .map_err(|error| ManagementError::Invalid(error.to_string()))?;
     if profile.provider.id != profiles.provider_id() {
         return Err(ManagementError::Invalid(format!(
-            "provider.id '{}' is not this Realm Infra Provider",
+            "provider.id '{}' is not this Actr Facility Provider",
             profile.provider.id
         )));
     }
     if profile.realm.status == ProfileStatus::Active {
-        // An active Realm Profile names exactly this Realm Infra Provider's Issuer,
-        // the Realm's issuer key and this Realm Infra Provider's endpoints.
+        // An active Realm Profile names exactly this Actr Facility Provider's Issuer,
+        // the Realm's issuer key and this Actr Facility Provider's endpoints.
         let expected = profiles
             .draft(name, profile.sequence, "", None, false)
             .await?;
         let named = |member: &str, value: Value| expected[member] == value;
         if !named("issuer", json!(profile.issuer)) || !named("provider", json!(profile.provider)) {
             return Err(ManagementError::Invalid(
-                "the Realm Profile must name this Realm Infra Provider's issuer and endpoints"
+                "the Realm Profile must name this Actr Facility Provider's issuer and endpoints"
                     .to_string(),
             ));
         }

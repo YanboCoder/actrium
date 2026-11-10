@@ -1,5 +1,5 @@
 //! Issue #248 regressions on the webrtc 0.21.1 client and the pinned TURN server.
-//! Allocate replay is covered by the server pin to upstream webrtc-rs/webrtc#896.
+//! Allocate replay is covered by upstream webrtc-rs/webrtc#896 in turn 0.17.3.
 //! The client includes the retirement fix from webrtc-rs/webrtc#912. These tests
 //! exercise Actr's production RTC recovery/close path against a real UDP TURN
 //! server, including consecutive ICE restarts and bidirectional business RPCs.

@@ -206,7 +206,7 @@ pub struct IssuerConfig {
     pub signaling_heartbeat_interval_secs: u32,
     /// TURN shared secret (shared with the TURN server, used to generate time-limited credentials).
     pub turn_secret: String,
-    /// Realm Infra Provider ID bound into credentials and TURN usernames.
+    /// Actr Facility Provider ID bound into credentials and TURN usernames.
     pub provider_id: String,
     /// SQLite data directory (shared with signaling, used to write the verifying key
     /// so signaling can verify credentials).

@@ -31,6 +31,7 @@ on:
       - "scripts/actr/tests/release-train-*.sh"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "crates/loran-stun/**"
       - "tools/actr/protoc-gen/**"
       - "packages/actr-web/Cargo.toml"
       - "packages/actr-web/Cargo.lock"
@@ -75,6 +76,7 @@ on:
       - "scripts/actr/tests/release-train-*.sh"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "crates/loran-stun/**"
       - "tools/actr/protoc-gen/**"
       - "packages/actr-web/Cargo.toml"
       - "packages/actr-web/Cargo.lock"
@@ -170,6 +172,9 @@ jobs:
           bash scripts/actr/tests/release-train-package-sync.sh
           bash scripts/actr/tests/release-train-modes.sh
           bash scripts/actr/tests/release-train-relay-dependencies.sh
+
+      - name: Verify registry-resolved STUN package
+        run: cargo package -p loran-stun --locked
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

@@ -39,11 +39,11 @@ pub struct JoinArgs {
     #[arg(long, short = 'o', value_name = "FILE")]
     pub output: PathBuf,
     /// Issuer URL, for a Realm without a Realm Profile. Otherwise the
-    /// Issuer and Realm Infra Provider come from the Realm Profile, verified with
+    /// Issuer and Actr Facility Provider come from the Realm Profile, verified with
     /// the `realm_signing_keys` of `https://<domain>/.well-known/actr`.
     #[arg(long, value_name = "URL")]
     pub issuer: Option<String>,
-    /// Realm Infra Provider ID with `--issuer`; defaults to its `host[:port]`
+    /// Actr Facility Provider ID with `--issuer`; defaults to its `host[:port]`
     #[arg(long, value_name = "ID", requires = "issuer")]
     pub provider: Option<String>,
     /// Name of this client, shown to the Realm owner
@@ -147,7 +147,7 @@ fn new_nonce() -> String {
     hex::encode(rand::random::<[u8; 16]>())
 }
 
-/// `host[:port]` of `url`, lowercase: the Realm Infra Provider ID a Realm without
+/// `host[:port]` of `url`, lowercase: the Actr Facility Provider ID a Realm without
 /// a Realm Profile is addressed by.
 fn url_authority(url: &str) -> Result<String> {
     let parsed = url::Url::parse(url).with_context(|| format!("Invalid Issuer URL: {url}"))?;
@@ -163,7 +163,7 @@ fn url_authority(url: &str) -> Result<String> {
 
 /// Why a membership request got no reply.
 enum SendError {
-    /// The Realm Infra Provider answered with an error: nothing changed.
+    /// The Actr Facility Provider answered with an error: nothing changed.
     Refused(anyhow::Error),
     /// No usable answer: the request may or may not have taken effect.
     Unknown(anyhow::Error),
@@ -424,7 +424,7 @@ fn interrupted_join_key(
 
 /// Redeem the invite. The key file is written before the request is sent,
 /// so a lost reply does not lose the key of a redeemed invite: rerunning the
-/// same command reuses the key file, and the Realm Infra Provider answers the
+/// same command reuses the key file, and the Actr Facility Provider answers the
 /// retry of that redemption with its result (or `conflict` if the key is
 /// already registered otherwise).
 pub async fn join(args: &JoinArgs) -> Result<Value> {
@@ -838,7 +838,7 @@ mod tests {
         let error = join(&args).await.unwrap_err();
         assert!(format!("{error:#}").contains("Rerun the same command"));
         let first = sent.recv().await.unwrap();
-        // The key the Realm Infra Provider may have registered is on disk.
+        // The key the Actr Facility Provider may have registered is on disk.
         let file = Member::load(&KeyArgs {
             key: output.clone(),
         })
@@ -852,8 +852,8 @@ mod tests {
         assert_eq!(retry["public_key"], file.public_key);
         assert_eq!(retry["invite"], first["invite"]);
 
-        // A rerun naming another Realm Infra Provider does not reuse it: the key
-        // file would name one Realm Infra Provider and the join another.
+        // A rerun naming another Actr Facility Provider does not reuse it: the key
+        // file would name one Actr Facility Provider and the join another.
         let other = JoinArgs {
             provider: Some("q.example".into()),
             ..args.clone()
@@ -1189,7 +1189,7 @@ mod tests {
         let file = Member::load(&KeyArgs { key: output }).unwrap().file;
         assert_eq!(file.issuer, format!("{base}/issuer"));
 
-        // A newer one naming another Realm Infra Provider is not a valid successor.
+        // A newer one naming another Actr Facility Provider is not a valid successor.
         let mut invite = RealmInvite::new(REALM, &secret);
         invite.profile = Some(profile(&key, 5, &format!("{base}/issuer"), "q.example"));
         let error = join_with(

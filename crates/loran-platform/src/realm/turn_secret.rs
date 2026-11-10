@@ -1,6 +1,6 @@
 //! Per-Realm TURN secrets.
 //!
-//! `turn.turn_secret` is the Realm Infra Provider's master secret. Each Realm's
+//! `turn.turn_secret` is the Actr Facility Provider's master secret. Each Realm's
 //! TURN credentials are keyed by
 //! `HKDF-SHA256(master, salt = "actr.turn", info = "<realm>|<provider>")`, so
 //! a credential minted for one Realm never authenticates in another.
@@ -10,7 +10,7 @@ use sha2::Sha256;
 
 const SALT: &[u8] = b"actr.turn";
 
-/// The TURN HMAC key of `realm` under Realm Infra Provider `provider`.
+/// The TURN HMAC key of `realm` under Actr Facility Provider `provider`.
 pub fn realm_turn_secret(master: &[u8], realm: &str, provider: &str) -> [u8; 32] {
     let mut key = [0u8; 32];
     Hkdf::<Sha256>::new(Some(SALT), master)

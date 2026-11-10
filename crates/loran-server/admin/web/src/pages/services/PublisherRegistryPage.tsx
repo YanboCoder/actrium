@@ -215,7 +215,7 @@ function HowItWorks() {
         A publisher signs a Publisher Profile and serves it as the <code className="bg-gray-100 px-1 rounded">publisher</code> member
         of <code className="bg-gray-100 px-1 rounded">{'https://<publisher>/.well-known/actr'}</code>. It then sends a
         <code className="bg-gray-100 px-1 mx-1 rounded">register_publisher</code> request, signed by an active Publisher Profile
-        signing key, to this Realm Infra Provider&apos;s <code className="bg-gray-100 px-1 rounded">realm-management</code> endpoint.
+        signing key, to this Actr Facility Provider&apos;s <code className="bg-gray-100 px-1 rounded">realm-management</code> endpoint.
       </p>
       <p>
         The first accepted profile pins its signing keys; its one active package signing key becomes the publisher&apos;s key.

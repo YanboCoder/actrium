@@ -34,15 +34,13 @@ fn rust_app_template_uses_the_workspace_upstream_overrides() {
     let workspace: toml::Value = toml::from_str(&std::fs::read_to_string(root).unwrap()).unwrap();
     assert!(generated.get("workspace").is_some());
     let overrides = &generated["patch"]["crates-io"];
+    assert!(overrides.get("sqlx").is_none());
     let dependencies = &workspace["workspace"]["dependencies"];
     for (package, dependency) in [
         ("webrtc", "webrtc"),
         ("rtc", "rtc"),
         ("rtc-turn", "rtc"),
         ("rtc-rtp", "rtc-rtp"),
-        ("turn", "turn_crate"),
-        ("stun", "webrtc-stun"),
-        ("webrtc-util", "webrtc-util"),
     ] {
         assert_eq!(overrides[package]["git"], dependencies[dependency]["git"]);
         assert_eq!(overrides[package]["rev"], dependencies[dependency]["rev"]);

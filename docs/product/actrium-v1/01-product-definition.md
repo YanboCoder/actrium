@@ -67,7 +67,7 @@ Publishes programs through a domain name and maintains the Publisher signing key
 
 ### 3.4 Realm signing key holder and Realm owner
 
-The owner of a Realm domain is the Realm signing key holder: it publishes the Realm signing key in the authority descriptor, authorizes Realm creation under that domain after authenticating requesters under its own policy, decides which Realm Infra Provider to use, and is responsible for rotating the Realm signing key; it may also delegate custody of the key to a Realm Infra Provider. No domain, no Realm (except the local Realm).
+The owner of a Realm domain is the Realm signing key holder: it publishes the Realm signing key in the authority descriptor, authorizes Realm creation under that domain after authenticating requesters under its own policy, decides which Actr Facility Provider to use, and is responsible for rotating the Realm signing key; it may also delegate custody of the key to an Actr Facility Provider. No domain, no Realm (except the local Realm).
 
 The Realm owner is the creator of the application instance and manages that Realm's membership, Actor admission, connection ACL, Realm invitations, client revocation and audit.
 

@@ -5,9 +5,9 @@
 
 ## 边界
 
-一个 Loran 实例是共享 Realm Infra Provider，承载来自多个 Realm 域名的多个 Realm；Realm 对应
+一个 Loran 实例是共享 Actr Facility Provider（AFP），承载来自多个 Realm 域名的多个 Realm；Realm 对应
 一次应用实例部署，以 Realm 名 `<realm_id>@<domain>`（如 `k7m2q9xh@acme.com`）标识，以
-该 Realm 域名的 Realm 签名 key 为长期信任根。v1 是单节点、SQLite、单一 Realm Infra Provider，
+该 Realm 域名的 Realm 签名 key 为长期信任根。v1 是单节点、SQLite、单一 Actr Facility Provider，
 不提供 HA 或跨 Realm federation。管理权限分实例运营者、Realm 签名 key 持有方发起的 Realm
 管理请求、成员用 Realm 客户端 key 签名的 membership 请求（按角色，owner 管理成员）三类；尚未
 落地的部分见
@@ -32,7 +32,7 @@
 
 这些是逻辑平面，不要求永远同进程。v1 默认 all-in-one 是为了减少部署依赖；Issuer
 Signer 可在需要时通过 TLS/mTLS gRPC（`signer.v1`）独立隔离。平面拆分不能绕过 issuer、
-Realm Infra Provider、audience 与 endpoint scope。
+Actr Facility Provider、audience 与 endpoint scope。
 
 ## 身份与信任
 
@@ -47,8 +47,8 @@ Realm Infra Provider、audience 与 endpoint scope。
 - HTTPS 证明域名控制与安全传输；长期包真实性由 publisher key、signature、
   digest 和 revocation 状态决定。
 - Signaling 只做已认证 Actor 的 rendezvous，不签发身份，也不是信任根。
-- TURN credential 绑定 Realm、Realm Infra Provider、`actr.turn` audience、Actor 与过期时间；
-  TURN secret 由主密钥按 Realm 名与 Realm Infra Provider ID 经 HKDF 派生。
+- TURN credential 绑定 Realm、Actr Facility Provider、`actr.turn` audience、Actor 与过期时间；
+  TURN secret 由主密钥按 Realm 名与 Actr Facility Provider ID 经 HKDF 派生。
 
 注册 Actor 的能力是成员在每个客户端登记的 Realm 客户端 key，只属于可信 Actr Host（见架构契约
 4.1）。用户编写的 Rill Guest 不得接触 Realm 客户端 key、Issuer Signer 私钥或管理 credential。
@@ -77,10 +77,10 @@ Workspace 不属于 Loran。一个 Service 至多绑定一个 Workspace，同一
    issuer key，返回待签 Realm Profile payload。
 3. 调用方签名 Realm Profile，以 `publish_profile` 提交；Loran 验证 Realm Profile 指向自己
    后转为 `active`，在响应中一次性返回 owner 邀请，此后才签发 Actor credential。
-   Realm Infra Provider 域名下的 Realm 由 Loran 自签、首份 Realm Profile 在 `create_realm` 响应中
-   直接返回，无需 `publish_profile` 这一步；v1 只由实例运营者经 Admin API 创建（Realm Infra Provider
+   Actr Facility Provider 域名下的 Realm 由 Loran 自签、首份 Realm Profile 在 `create_realm` 响应中
+   直接返回，无需 `publish_profile` 这一步；v1 只由实例运营者经 Admin API 创建（Actr Facility Provider
    账号自助创建属后续能力），owner 邀请同样在创建响应中一次性返回。
-   非 Realm Infra Provider 部署（未启用 authority 或 Issuer 无 Signer）仍允许运营者直接创建任意
+   非 Actr Facility Provider 部署（未启用 authority 或 Issuer 无 Signer）仍允许运营者直接创建任意
    域名下没有 Realm Profile 的 `active` Realm。
 4. 数据库以 Realm 名（含域名）为主键，`realm_name_immutable`/`realm_retired_is_final`
    触发器保证名字不可变、退役行不复活；`[realm]` 配置按域名与 pending 数量设配额。
@@ -98,7 +98,7 @@ Workspace 不属于 Loran。一个 Service 至多绑定一个 Workspace，同一
 ### Signaling
 
 1. 客户端在 WebSocket upgrade headers 或受约束 subprotocol transport 中传身份。
-2. 服务验证 Actor credential 的签名、期限、issuer/Realm Infra Provider/audience 与连接 Actor。
+2. 服务验证 Actor credential 的签名、期限、issuer/Actr Facility Provider/audience 与连接 Actor。
 3. envelope source 必须与连接身份一致，relay 的 target 须属于连接绑定的 Realm。
 4. 连接 ACL 默认拒绝；通过后才能发现或转发信令；发现只返回同 Realm 的 Actor。
 
@@ -106,7 +106,7 @@ Workspace 不属于 Loran。一个 Service 至多绑定一个 Workspace，同一
 
 1. Publisher 在 authority descriptor `/.well-known/actr` 的 `publisher` 成员发布签名 Publisher
    Profile，并以 Publisher Profile 签名 key 签名的 `register_publisher` 请求（Actr 管理信封）
-   在 Realm Infra Provider 登记；公开文档中不放 challenge。首次接受的 Publisher Profile 固定其签名
+   在 Actr Facility Provider 登记；公开文档中不放 challenge。首次接受的 Publisher Profile 固定其签名
    key，之后只接受由已固定 key 签名、`sequence` 更高的 Publisher Profile（包签名 key 轮换即由此完成）。
 2. Loran 取 descriptor 的方式与 Realm 相同：按 authority-discovery 跟随重定向（最多 5 次、每跳
    HTTPS、始终用原域名验证 `authority` 绑定），每一跳执行 SSRF 检查与 DNS pinning，限长 64 KiB。

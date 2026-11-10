@@ -129,7 +129,7 @@ request 时使用的 authority 一致。redirect 不改变此绑定关系。
 | `ice-config` | 按 [Actr ICE Configuration](ice-configuration.zh.md) 获取 ICE server 配置，并在授权后取得短期 TURN credential。 |
 | `contracts` | 获取公开的 Actor contract 和 interface description。 |
 | `realms` | 从存放位置获取以该域名命名的各 Realm 的签名 Realm Profile，见 [Actr Realm Profile](realm-profile.zh.md)。protocol 值为 `actr-realm-profile/1`。 |
-| `realm-management` | 接受该 authority 作为 Realm Infra Provider 所服务 Realm 的 Realm 管理请求（`POST`），见 [Actr Realm Profile](realm-profile.zh.md) 第 8 节。protocol 值为 `actr-realm-management/1`。 |
+| `realm-management` | 接受该 authority 作为 Actr Facility Provider 所服务 Realm 的 Realm 管理请求（`POST`），见 [Actr Realm Profile](realm-profile.zh.md) 第 8 节。protocol 值为 `actr-realm-management/1`。 |
 
 extension relation 值 **MUST** 是由扩展作者控制的 absolute URI，以避免与短 core
 relation name 冲突。
@@ -139,9 +139,9 @@ descriptor **MUST NOT** 包含 access token、password、长期 TURN credential�
 私有 TURN credential。
 
 descriptor 的 `signaling`、`ice-config` link 服务于 authority 自身，与以该域名命名的
-Realm 无关。客户端 **MUST** 只通过 Realm 已接受 Realm Profile 指定的 Realm Infra
+Realm 无关。客户端 **MUST** 只通过 Realm 已接受 Realm Profile 指定的 Actr Facility
 Provider 访问该 Realm；Realm Profile 取不到、无效或已退役时，**MUST NOT** 使用包括这些
-link 在内的任何其他 Realm Infra Provider。
+link 在内的任何其他 Actr Facility Provider。
 
 ### 4.4 `realm_signing_keys`
 
@@ -180,7 +180,7 @@ link 在内的任何其他 Realm Infra Provider。
   规范化结果所做的 detached Ed25519 签名，覆盖 `sequence`。
 
 首次接受某域名的 Realm 签名 key 依赖 HTTPS（Web PKI）或企业策略预置的 key pin。此后，
-客户端或 Realm Infra Provider 为该域名保存曾接受过的每个 key（`id`、公钥与最后状态：`active`、
+客户端或 Actr Facility Provider 为该域名保存曾接受过的每个 key（`id`、公钥与最后状态：`active`、
 `retired` 或已移除）以及已接受的 member `sequence`。对新取得的 member，按以下顺序处理：
 
 1. `signature` 必须用该 member `keys` 中同 `id` 的 `active` key 验证通过，否则拒绝。
@@ -237,7 +237,7 @@ Publisher Profile 使用 snake_case member 名与 `"schema": "actr.publisher/v1"
   `sequence`，不受 descriptor 的 HTTP 缓存语义影响；包签名 key 见
   [Actor Package](actor-package.zh.md) 第 6.8 节。
 
-登记 publisher 的 Realm Infra Provider 使用 `register_publisher` 请求：采用
+登记 publisher 的 Actr Facility Provider 使用 `register_publisher` 请求：采用
 [Actr Realm Profile](realm-profile.zh.md) 第 8 节的 Actr 管理信封，以 `publisher` member
 （规范化 Publisher ID）取代 `realm`，由 `active` 的 Publisher Profile 签名 key 签名，而不是
 在公开 descriptor 中放置 challenge。

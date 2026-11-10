@@ -39,9 +39,9 @@ loran-server
 ### `loran-platform`
 
 - SQLite `user_version` 必须等于 schema v9；
-- 一个实例承载多个 Realm，`realm.name`（完整 Realm 名）唯一且不可变，退役行即 Realm Infra
+- 一个实例承载多个 Realm，`realm.name`（完整 Realm 名）唯一且不可变，退役行即 Actr Facility
   Provider tombstone、名字不复用；所有按 Realm 分区的状态以完整 Realm 名 `realm` 为键；
-- Actor credential validation 检查 protocol version、issuer（即 Realm 名）、Realm Infra Provider、
+- Actor credential validation 检查 protocol version、issuer（即 Realm 名）、Actr Facility Provider、
   audience、Realm、Actor 和过期时间，且 Realm 必须为 `active`；
 - 配置未知字段和生产不安全值 fail closed。
 

@@ -127,8 +127,8 @@ Realm name = <realm_id>@<domain>                      # networked, e.g. k7m2q9xh
 - The Realm domain belongs to its owner and serves only as a naturally unique, ownership-verifiable name; it carries no infrastructure. A local Realm uses the pseudo-domain `<installation-id>.actr.alt` (generated at random at install time, never resolved via DNS), belonging to that Actrium installation;
 - the domain's Realm signing key is the long-term trust root for every Realm under that domain, and signs each Realm Profile individually; the Realm Profile's `package` records the package this instance runs (download location, SHA-256 and Actor type);
 - the RealmId is unique within the domain, immutable after creation, and never reused after retirement;
-- one Realm Infra Provider (Signaling, TURN, Issuer) hosts a large number of Realms; a Realm is bound to one Realm Infra Provider at creation and can never switch afterward;
-- the Realm Infra Provider records the members of a networked Realm: exactly one owner (the creator, transferable), the rest editors or viewers; members join with a one-time Realm invitation, and each client registers one Realm client key. A local Realm has no members.
+- one Actr Facility Provider (Signaling, TURN, Issuer) hosts a large number of Realms; a Realm is bound to one Actr Facility Provider at creation and can never switch afterward;
+- the Actr Facility Provider records the members of a networked Realm: exactly one owner (the creator, transferable), the rest editors or viewers; members join with a one-time Realm invitation, and each client registers one Realm client key. A local Realm has no members.
 
 A Publisher domain names a program (who publishes it); a Realm domain names a deployment (who operates it). The same Program Release can run at `notes@acme.com` and also at `notes@foo.org`.
 
@@ -262,8 +262,8 @@ Actrium's local database may have a `record_id` for pure storage purposes, but i
 | Program Release metadata | Program Catalog | Keyed by Program Release + digest |
 | Actor long-term private key | Secure storage | Never enters ordinary SQLite |
 | Realm domain trust (Realm signing key pin) | Actrium Realm Manager | Fixed after first confirmation; updated only via the signed rotation chain |
-| Realm client key | Secure storage | Independent per Realm (i.e. per instance); registering it with the Realm Infra Provider constitutes Realm membership; revocable |
-| Members and roles | Realm Infra Provider | Exactly one owner per Realm; the role is written into the Actor credential and enforced by the Service |
+| Realm client key | Secure storage | Independent per Realm (i.e. per instance); registering it with the Actr Facility Provider constitutes Realm membership; revocable |
+| Members and roles | Actr Facility Provider | Exactly one owner per Realm; the role is written into the Actor credential and enforced by the Service |
 | Permission grants | Actrium Permission Store | Scoped to publisher/program/major/digest/Workspace |
 | ActorAssurance | Verifier (issuer ≠ subject) | A node-level conclusion for an exact `ActorStateDigest` |
 | ApplicationAssurance | Application assessor | The aggregated conclusion for the rootless graph's current cut; display also requires Ready |
@@ -282,7 +282,7 @@ Creating an instance is a local Actrium operation; it is never triggered by a li
 4. create the Service inside that Realm and obtain its durable ActorId;
 5. use it to create the Front session; the address bar shows the instance's Realm link.
 
-Steps 3–4 form one transaction keyed by `idempotency_key`, executed strictly in order: obtain the holder's authorization → the Realm Infra Provider creates a pending Realm → sign the Realm Profile and submit it with `publish_profile` → the Realm becomes active → redeem the owner invite and become the owner → create the Service and obtain its ActorId. In v1 a Realm under a Realm Infra Provider's own domain is created by its operator, and Actrium starts from redeeming the owner invite. If any step fails, no Service is created; the Realm Infra Provider automatically cleans up expired pending Realms; the random RealmId is generated only once and reused on retries with the same `idempotency_key`; the Realm Infra Provider's idempotency key is `(realm, requester)`, which continues the same pending Realm instead of creating another; a different requester using the same name, or a hit on an existing active Realm or a Realm Infra Provider tombstone, returns a conflict. For a local Realm there are only two steps: the local record and the Service.
+Steps 3–4 form one transaction keyed by `idempotency_key`, executed strictly in order: obtain the holder's authorization → the Actr Facility Provider creates a pending Realm → sign the Realm Profile and submit it with `publish_profile` → the Realm becomes active → redeem the owner invite and become the owner → create the Service and obtain its ActorId. In v1 a Realm under an Actr Facility Provider's own domain is created by its operator, and Actrium starts from redeeming the owner invite. If any step fails, no Service is created; the Actr Facility Provider automatically cleans up expired pending Realms; the random RealmId is generated only once and reused on retries with the same `idempotency_key`; the Actr Facility Provider's idempotency key is `(realm, requester)`, which continues the same pending Realm instead of creating another; a different requester using the same name, or a hit on an existing active Realm or an Actr Facility Provider tombstone, returns a conflict. For a local Realm there are only two steps: the local record and the Service.
 
 A new instance always means a new Realm. When a Service is upgraded to a new Program Release, the new Service is created inside the same Realm; membership and application permissions carry over, and the ActorId changes according to the migration rules. Only after the switch is confirmed does the Realm publish a Realm Profile whose `package` points to the new package.
 

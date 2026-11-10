@@ -34,10 +34,12 @@ are not accepted by the runtime.
 
 ### Native Cargo dependencies
 
-Git/path consumers inherit the SDK and TURN/STUN server Git dependencies without
-workspace overrides. The CLI's generated Rust apps include the overrides needed
-when consuming registry packages until upstream publishes the required fixes.
-Other registry consumers must add those overrides to their own workspace root.
+Git/path consumers inherit the SDK's Git dependencies and the TURN/STUN server's
+registry dependencies without workspace overrides. The CLI's generated Rust apps
+include the RTC overrides. Registry consumers combining Loran's SQLx SQLite
+backend with `rusqlite` 0.41 also need the SQLx override in their own workspace.
+Generated apps that use an older published `actr-hyper` get the bundled SQLite
+fix when they upgrade to an Actr release with the patched dependency.
 See the [upstream dependency notes](https://github.com/Actrium/actrium/blob/main/docs/actr/upstream-patches.md).
 
 ---

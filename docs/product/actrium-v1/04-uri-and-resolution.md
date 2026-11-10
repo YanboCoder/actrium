@@ -43,11 +43,11 @@ Product-level requirements:
 - **Confirm first, then go online**: for a link from a web page, a QR code, an email, or another
   app, show the Realm domain and `display_name` first, and only show the program (Publisher,
   program name, version) after download and verification; first-time trust of a Realm domain must
-  be confirmed. When the Realm domain equals or belongs to the Realm Infra Provider ID, the trust root
-  is displayed as that Realm Infra Provider.
+  be confirmed. When the Realm domain equals or belongs to the Actr Facility Provider ID, the trust root
+  is displayed as that Actr Facility Provider.
 - **Fail closed**: if the Realm Profile cannot be fetched, fails verification, or is retired, or
   the package's SHA-256 or signature does not match, opening stops; Actrium does not fall back to
-  another Realm Infra Provider, does not swap packages, and does not create a new instance.
+  another Actr Facility Provider, does not swap packages, and does not create a new instance.
 - **No membership yet**: enter the join flow (e.g., a Realm invitation) instead of failing
   silently.
 - The user may choose "open in browser" for an external https link; when navigating within a page
@@ -105,7 +105,7 @@ See [12 §10](12-reference-spec.md) for the full list. Those related to links:
 | `REALM_PROFILE_UNAVAILABLE` | Could not fetch a valid Realm Profile |
 | `REALM_PROFILE_INVALID` | Realm Profile signature is invalid or the Realm name does not match |
 | `REALM_PROFILE_ROLLBACK` | The Realm Profile's `sequence` rolls back |
-| `REALM_INFRA_PROVIDER_MISMATCH` | `provider.id` differs from the one already accepted |
+| `ACTR_FACILITY_PROVIDER_MISMATCH` | `provider.id` differs from the one already accepted |
 | `REALM_RETIRED` | The Realm is retired |
 | `PACKAGE_DIGEST_MISMATCH` | The downloaded package does not match `package.sha256` |
 | `PACKAGE_SIGNATURE_INVALID` | Package signature verification failed |

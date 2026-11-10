@@ -1082,7 +1082,7 @@ mod management {
         assert!(matches!(rollback, Err(ManagementError::Conflict(_))));
 
         // Rotating the issuer key: draft_profile lists the next key, and the
-        // Realm Infra Provider switches to it only after the key holder published
+        // Actr Facility Provider switches to it only after the key holder published
         // a Profile listing it for the pre-publish period.
         let old_key = platform::realm::RealmIssuerKey::current(name)
             .await
@@ -1218,7 +1218,7 @@ mod management {
         }
         assert!(Realm::get(name).await.unwrap().is_none());
 
-        // The Profile must name this Realm Infra Provider's issuer key.
+        // The Profile must name this Actr Facility Provider's issuer key.
         let created = send(signed(&create(name, "x-7", None), &acme, "rs-1"))
             .await
             .unwrap();

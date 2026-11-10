@@ -4,7 +4,7 @@
 //!
 //! # Authentication Flow
 //!
-//! 1. Issuer generates a Realm/Realm Infra Provider/audience/Actor scoped username, and uses
+//! 1. Issuer generates a Realm/Actr Facility Provider/audience/Actor scoped username, and uses
 //!    `base64(HMAC-SHA1(realm_turn_secret, username))` as the password, where
 //!    the Realm's secret is derived from the master `turn_secret` with HKDF
 //!    (`platform::realm::realm_turn_secret`).
@@ -171,7 +171,7 @@ struct CachedAuthKey {
 /// TURN authenticator (HMAC time-limited credential mode).
 pub struct Authenticator {
     turn_secret: String,
-    /// Realm Infra Provider ID that credential usernames must carry.
+    /// Actr Facility Provider ID that credential usernames must carry.
     provider_id: String,
     auth_key_cache: Mutex<LruCache<AuthCacheKey, CachedAuthKey>>,
     admission: AdmissionControl,
@@ -287,7 +287,8 @@ impl Authenticator {
             .map_err(|_| Error::Other("invalid TURN credential Actor ID".to_string()))?;
         if realm != actor.realm || provider != self.provider_id || audience != "actr.turn" {
             return Err(Error::Other(
-                "TURN credential scope does not match this Realm/Realm Infra Provider".to_string(),
+                "TURN credential scope does not match this Realm/Actr Facility Provider"
+                    .to_string(),
             ));
         }
         // Checked before the cache, so a cached key never outlives the Realm

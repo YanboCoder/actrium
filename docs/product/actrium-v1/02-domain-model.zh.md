@@ -129,8 +129,8 @@ Realm 名 = <realm_id>@<domain>                      # 联网，如 k7m2q9xh@acm
   伪域名 `<installation-id>.actr.alt`（安装时随机生成，永不经 DNS 解析），归该 Actrium 安装；
 - 域名的 Realm 签名 key 是该域名下所有 Realm 的长期信任根，逐个签发 Realm Profile；Realm Profile 的 `package` 写明该实例运行的包（下载地址、SHA-256 与 Actor 类型）；
 - RealmId 在域名内唯一、创建后不可修改、退役后永不复用；
-- 一个 Realm Infra Provider（信令、TURN、Issuer）承载大量 Realm；Realm 在创建时绑定一个 Realm Infra Provider，此后不可更换；
-- 联网 Realm 的成员由 Realm Infra Provider 记录：恰好一个 owner（创建者，可转让），其余为 editor 或 viewer；成员凭一次性 Realm 邀请加入，每个客户端登记一把 Realm 客户端 key。本机 Realm 没有成员。
+- 一个 Actr Facility Provider（信令、TURN、Issuer）承载大量 Realm；Realm 在创建时绑定一个 Actr Facility Provider，此后不可更换；
+- 联网 Realm 的成员由 Actr Facility Provider 记录：恰好一个 owner（创建者，可转让），其余为 editor 或 viewer；成员凭一次性 Realm 邀请加入，每个客户端登记一把 Realm 客户端 key。本机 Realm 没有成员。
 
 Publisher 域名命名程序（谁发布），Realm 域名命名部署（谁运营）；同一 Program
 Release 可以运行在 `notes@acme.com`，也可以运行在 `notes@foo.org`。
@@ -265,8 +265,8 @@ Actrium 本地数据库可以有纯存储用途的 `record_id`，但它不是网
 | Program Release metadata | Program Catalog | 以 Program Release + digest 为主键 |
 | Actor 长期私钥 | 安全存储 | 不进入普通 SQLite |
 | Realm 域名信任（Realm 签名 key pin） | Actrium Realm Manager | 首次确认后固定，按签名轮换链更新 |
-| Realm 客户端 key | 安全存储 | 按 Realm（即按实例）独立；在 Realm Infra Provider 注册后即为 Realm membership，可撤销 |
-| 成员与角色 | Realm Infra Provider | 每个 Realm 恰好一个 owner；角色写入 Actor credential，由 Service 执行 |
+| Realm 客户端 key | 安全存储 | 按 Realm（即按实例）独立；在 Actr Facility Provider 注册后即为 Realm membership，可撤销 |
+| 成员与角色 | Actr Facility Provider | 每个 Realm 恰好一个 owner；角色写入 Actor credential，由 Service 执行 |
 | 权限授予 | Actrium Permission Store | 绑定 publisher/program/major/digest/Workspace 范围 |
 | ActorAssurance | 验证者（issuer ≠ subject） | 针对准确 `ActorStateDigest` 的节点结论 |
 | ApplicationAssurance | 应用评定者 | 无根图当前切面的汇聚结论；展示还须 Ready |
@@ -285,7 +285,7 @@ Actrium 本地数据库可以有纯存储用途的 `record_id`，但它不是网
 4. 在该 Realm 内创建 Service，获得持久 ActorId；
 5. 用它创建 Front 会话，地址栏显示该实例的 Realm 链接。
 
-第 3–4 步是一个以 `idempotency_key` 为幂等键的事务，严格按序执行：取得持有方授权 → Realm Infra Provider 创建 pending Realm → 签名 Realm Profile 并以 `publish_profile` 提交 → Realm 变为 active → 兑换 owner 邀请，成为 owner → 创建 Service 并取得 ActorId。Realm Infra Provider 域名下的 Realm 在 v1 由其运营者代建，Actrium 从兑换 owner 邀请开始。任一步失败都不创建 Service；pending Realm 过期由 Realm Infra Provider 自动清理；随机 RealmId 只生成一次，用同一 `idempotency_key` 重试时沿用它；Realm Infra Provider 幂等键为 `(realm, 请求方)`，继续同一个 pending Realm，不重复创建；不同请求方同名或命中已有 active Realm 或 Realm Infra Provider tombstone 时返回冲突。本机 Realm 只有本地 record 与 Service 两步。
+第 3–4 步是一个以 `idempotency_key` 为幂等键的事务，严格按序执行：取得持有方授权 → Actr Facility Provider 创建 pending Realm → 签名 Realm Profile 并以 `publish_profile` 提交 → Realm 变为 active → 兑换 owner 邀请，成为 owner → 创建 Service 并取得 ActorId。Actr Facility Provider 域名下的 Realm 在 v1 由其运营者代建，Actrium 从兑换 owner 邀请开始。任一步失败都不创建 Service；pending Realm 过期由 Actr Facility Provider 自动清理；随机 RealmId 只生成一次，用同一 `idempotency_key` 重试时沿用它；Actr Facility Provider 幂等键为 `(realm, 请求方)`，继续同一个 pending Realm，不重复创建；不同请求方同名或命中已有 active Realm 或 Actr Facility Provider tombstone 时返回冲突。本机 Realm 只有本地 record 与 Service 两步。
 
 新实例总是新 Realm。Service 升级为新 Program Release 时，新 Service 创建在同一 Realm 内，成员与应用权限延续，ActorId 按迁移规则变化；确认切换后，Realm 才发布 `package` 指向新包的 Realm Profile。
 

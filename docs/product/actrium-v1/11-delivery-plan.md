@@ -18,7 +18,7 @@ What is really missing are product-level invariants and several key semantics:
 
 1. Service ActorId's durable identity;
 2. the formal trust chain between the Publisher domain and the package key;
-3. Realm domains and signing keys, per-instance Realm Profiles, and Realm Infra Provider delegation;
+3. Realm domains and signing keys, per-instance Realm Profiles, and Actr Facility Provider delegation;
 4. separation of Program/Service/Workspace;
 5. a fixed Front Native Host and a controlled Keel Guest;
 6. the create-instance transaction and the Realm-link open flow;
@@ -96,7 +96,7 @@ Turn this document's product semantics into a cross-repository, testable contrac
 8. the Realm signing key, the Realm Profile it signs, and Realm issuer key discovery;
 9. the Actor credential binds a public key, and holding the private key is proven with a transcript/SDP challenge;
 10. a one-time signaling ticket/header;
-11. Realm Infra Provider delegation and failover; one Realm Infra Provider hosts multiple Realms, and Realm creation is authorized by a Realm signing key signature;
+11. Actr Facility Provider delegation and failover; one Actr Facility Provider hosts multiple Realms, and Realm creation is authorized by a Realm signing key signature;
 12. per-Realm/TURN-pool key id and rotation;
 13. Publisher DNS length and normalization;
 14. the Actor store namespace accepts instance identity;
@@ -116,7 +116,7 @@ Turn this document's product semantics into a cross-repository, testable contrac
 ### Exit criteria
 
 - the same Service's ID stays unchanged across process restart, credential renewal, hard re-auth, and signaling failover;
-- a Realm can replace its signaling endpoint within the same Realm Infra Provider while the Realm name and ActorId stay unchanged;
+- a Realm can replace its signaling endpoint within the same Actr Facility Provider while the Realm name and ActorId stay unchanged;
 - ActorId reclaim has key proof and conflict protection;
 - the legacy ephemeral identity path is never used by an Actrium Service;
 - the Actr Host can generate verifiable evidence for actual workloads and Actor edges; a malicious Actor cannot hide a controlled call edge.
@@ -255,7 +255,7 @@ Turn this document's product semantics into a cross-repository, testable contrac
 
 - domain trust and creating a networked Realm per instance;
 - joining an instance's Realm via a Realm invitation and obtaining Realm membership;
-- signaling Realm Infra Provider failover;
+- signaling Actr Facility Provider failover;
 - P2P/TURN;
 - resolving the Realm name from the Realm link and obtaining the Realm Profile;
 - Actor/peer handshake;
@@ -270,7 +270,7 @@ Turn this document's product semantics into a cross-repository, testable contrac
 - knowing the ActorId alone, without permission, cannot establish a connection;
 - signaling cannot impersonate an Actor;
 - TURN uses a short-lived credential;
-- Realm Infra Provider failover never changes the ActorId.
+- Actr Facility Provider failover never changes the ActorId.
 
 ## 10. P4: Hardening and public beta
 
@@ -341,7 +341,7 @@ The historical `.actr` URL, remote app API, and multi-Tab legacy runtime:
 | Service WASM capability is insufficient | High | Build the capability broker and ABI as a minimal closed loop first |
 | Workspace corruption from multiple writers | High | v1 exclusive writer |
 | Create instance is abused | Medium | Confirmation, idempotency, rate limiting, quotas |
-| Realm Infra Provider is over-centralized | Medium | Realm Profile delegation, multiple Realm Infra Providers, self-hosting |
+| Actr Facility Provider is over-centralized | Medium | Realm Profile delegation, multiple Actr Facility Providers, self-hosting |
 | Package format extension forks | Medium | Extend `.actr` directly; do not nest a second package layer |
 | Host behavior drifts across platforms | Medium | Shared schema/golden tests, fixed sandbox |
 | Version/Actor type upgrades are complex | Medium | v1 uses explicit new-Actor migration |
@@ -381,7 +381,7 @@ The following are no longer open questions:
 - whether signaling is "powerless": no;
 - whether a Realm is bound one-to-one to a physical signaling server: no;
 - whether a Realm corresponds to an application instance: yes, creating an instance always creates a new Realm;
-- whether one Realm Infra Provider hosts multiple Realms: yes.
+- whether one Actr Facility Provider hosts multiple Realms: yes.
 
 ## 14. Minimum vertical slice
 

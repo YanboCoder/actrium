@@ -79,7 +79,7 @@ Actr Host 打开 `actr://<domain>/<realm_id>[…]`（实例）时：
 3. 按 `package` 取得包，核对 `sha256`，再按
    [Actor Package](actor-package.zh.md) 验证包签名；包中声明的 Actor 类型即该实例的程序。
 4. 启动包中的前台部分，把 path 余下部分、query 和 fragment 交给它。
-5. 经 Realm Profile 指定的 Realm Infra Provider 连接该实例的 Service：本 Realm 内 Actor 类型与包
+5. 经 Realm Profile 指定的 Actr Facility Provider 连接该实例的 Service：本 Realm 内 Actor 类型与包
    相同的 Actor 恰好一个；找到零个或多于一个都是错误，Actr Host 不做选择。连接需要 Realm
    membership；没有时进入加入流程（例如 Realm 邀请）。
 
@@ -144,6 +144,8 @@ serial 精确值（包括十进制预期值）均使用字符串，避免 JSON �
 6. 只有 `domain` 时省略尾部 `/`。
 
 规范化后逐字节相同的两个 URI 等价。RealmId 之后的 path、query 与 fragment 区分大小写。
+解析与规范化的共享测试向量见
+[`contracts/actr/test-vectors/uri.json`](../../contracts/actr/test-vectors/uri.json)。
 
 ## 7. 旧格式
 
@@ -183,5 +185,5 @@ References: this document
 
 ## 11. 待完成工作
 
-- 增加解析、规范化与 https 转换的测试向量；
+- 增加 https 转换的测试向量；
 - 确立 IANA 登记使用的长期公开规范地址和项目联系人。

@@ -35,10 +35,10 @@ Conclusions:
 - A Realm is named by "RealmId + Realm domain"; one domain can hold many Realms;
 - A Realm is usually tightly bound to signaling, but the binding is "trust and configuration delegation," not "one Realm equals one signaling server";
 - One Realm can delegate to multiple signaling clusters;
-- One Realm Infra Provider (shared infrastructure such as signaling, STUN/TURN and Issuer) hosts a large number of Realms;
-- A Realm is bound to one Realm Infra Provider at creation and can never switch; the machines and endpoints inside that Realm Infra Provider can be replaced without changing the Realm identity or ActorIds.
+- One Actr Facility Provider (AFP) provides shared signaling, STUN/TURN and Issuer services for many Realms.
+- A Realm is bound to one Actr Facility Provider at creation and can never switch; the machines and endpoints inside that Actr Facility Provider can be replaced without changing the Realm identity or ActorIds.
 
-In v1, multiple signaling endpoints must belong to the same logical control plane, using shared/replicated presence, or having every Actor use the same active primary under a deterministic rule. They are replicas and failover entry points, not independent Realm Infra Providers freely federating with each other; federation across Realm Infra Providers is a later protocol.
+In v1, multiple signaling endpoints must belong to the same logical control plane, using shared/replicated presence, or having every Actor use the same active primary under a deterministic rule. They are replicas and failover entry points, not independent Actr Facility Providers freely federating with each other; federation across Actr Facility Providers is a later protocol.
 
 ## 2. Definition of a Realm
 
@@ -73,20 +73,20 @@ Local      = k7m2q9xh@<installation-id>.actr.alt
 - For a local Realm, `domain` is `<installation-id>.actr.alt`: the `installation-id` is a 128-bit identifier generated at random at installation (26 lowercase base32 characters); per RFC 9476, `.alt` is never resolved through DNS, so Actrium only consults local records for `.actr.alt` and never sends or resolves it externally; a local Realm uses no Realm Profile (see 5.1);
 - RealmId (`realm_id`) follows DNS label character rules `[a-z0-9-]`, 1..63 characters, not starting or ending with `-`; it is unique within the domain and immutable after creation;
 - When Actrium creates an instance, it generates a fully random RealmId by default (e.g. `k7m2q9xh`, lowercase base32, containing no program name), and the human-readable name goes into the Realm Profile's `display_name`; the user may explicitly choose a readable `realm_id` (e.g. `notes`) on the confirmation screen. The `notes@acme.com` used throughout this document is an example of such an explicitly chosen readable name;
-- The RealmId of a retired Realm is never reused: the domain owner must not reuse it, and Realm Infra Providers enforce this with Realm Infra Provider tombstones;
+- The RealmId of a retired Realm is never reused: the domain owner must not reuse it, and Actr Facility Providers enforce this with Actr Facility Provider tombstones;
 - A domain's Realm signing key is the long-term trust root of every Realm under it.
 
-### 2.3 Realm, Publisher and Realm Infra Provider
+### 2.3 Realm, Publisher and Actr Facility Provider
 
-| | Publisher | Realm | Realm Infra Provider |
+| | Publisher | Realm | Actr Facility Provider |
 |---|---|---|---|
 | What it is | Publisher of a program | Trust domain of one application instance | Shared infrastructure |
-| Identifier | Normalized DNS domain | Realm name `<realm_id>@<domain>` | Realm Infra Provider ID (the Realm Infra Provider's domain) |
+| Identifier | Normalized DNS domain | Realm name `<realm_id>@<domain>` | Actr Facility Provider ID (the Actr Facility Provider's domain) |
 | Long-term trust root | Publisher key | Realm signing key | None; it is the trust root when it holds a Realm signing key (Realms under its own domain, or delegated custody) |
 
-Each Realm is bound to one Realm Infra Provider when it is created and can never switch. To change operators, create a new instance on the new Realm Infra Provider, migrate data at the application level, and retire the old instance.
+Each Realm is bound to one Actr Facility Provider when it is created and can never switch. To change operators, create a new instance on the new Actr Facility Provider, migrate data at the application level, and retire the old instance.
 
-A Publisher domain names the program (who published it); a Realm domain names the deployment (who operates it). The same package can run on `notes@acme.com` and also on `notes@foo.org`. One Realm Infra Provider (such as a Loran deployment) hosts a large number of Realms from many domains.
+A Publisher domain names the program (who published it); a Realm domain names the deployment (who operates it). The same package can run on `notes@acme.com` and also on `notes@foo.org`. One Actr Facility Provider (such as a Loran deployment) hosts a large number of Realms from many domains.
 
 A Realm is not:
 
@@ -121,8 +121,8 @@ Rules:
 - Published once per domain; creating further Realms under the domain afterward requires no change to the domain;
 - First trust comes from Web PKI or an enterprise-provisioned key pin; a signature inside the descriptor cannot vouch for the first root;
 - On Realm signing key rotation, the old key signs `{from, to, public_key, sequence}` to form a rotation chain; a key change without a valid rotation chain is treated as an identity change and requires trust to be reconfirmed;
-- Removing a key from `keys` revokes everything it signed: clients and Realm Infra Providers refresh `realm_signing_keys` on the same cadence as they refresh Realm Profiles, and when the signing key of an accepted Realm Profile has been removed, they discard that Realm Profile and its `sequence` baseline and fall back to the last Realm Profile signed by a key still listed (or fetch again if there is none);
-- The `signaling`, `identity`, `ice-config` and similar services in the descriptor serve that authority itself and have nothing to do with the Realms under the domain; a Realm is reached only through the Realm Infra Provider named in its Realm Profile. When the Realm Profile cannot be fetched, fails verification, or is retired, the client must not use any other Realm Infra Provider to communicate with that Realm;
+- Removing a key from `keys` revokes everything it signed: clients and Actr Facility Providers refresh `realm_signing_keys` on the same cadence as they refresh Realm Profiles, and when the signing key of an accepted Realm Profile has been removed, they discard that Realm Profile and its `sequence` baseline and fall back to the last Realm Profile signed by a key still listed (or fetch again if there is none);
+- The `signaling`, `identity`, `ice-config` and similar services in the descriptor serve that authority itself and have nothing to do with the Realms under the domain; a Realm is reached only through the Actr Facility Provider named in its Realm Profile. When the Realm Profile cannot be fetched, fails verification, or is retired, the client must not use any other Actr Facility Provider to communicate with that Realm;
 - The descriptor does not list Realms, so instances cannot be enumerated.
 
 ### 3.2 Realm Profile
@@ -133,7 +133,7 @@ Location:
 GET <realms href>/<realm_id>
 ```
 
-The `realms` `href` may point to the domain's own static hosting (e.g. `https://acme.com/actr/realms`) or to a Realm Infra Provider (e.g. `https://realms.provider.example/acme.com`, explicit port allowed); a Realm Profile may also be embedded in an invitation. A Realm Profile's validity depends only on the Realm signing key's signature, not on where it was fetched from; a Realm Infra Provider can therefore host Realm Profiles without becoming a trust root.
+The `realms` `href` may point to the domain's own static hosting (e.g. `https://acme.com/actr/realms`) or to an Actr Facility Provider (e.g. `https://realms.provider.example/acme.com`, explicit port allowed); a Realm Profile may also be embedded in an invitation. A Realm Profile's validity depends only on the Realm signing key's signature, not on where it was fetched from; an Actr Facility Provider can therefore host Realm Profiles without becoming a trust root.
 
 A Realm Profile contains at least:
 
@@ -143,7 +143,7 @@ A Realm Profile contains at least:
 - `package`: the package this instance runs (download address, SHA-256 and Actor type), required when `active`;
 - a monotonic `sequence` and issue time `issued_at` (a Realm Profile does not expire);
 - the issuer URL and Realm issuer keys/key ids (the Actor credential's issuer is the Realm name);
-- the Realm Infra Provider ID, signaling endpoints, STUN/TURN endpoints;
+- the Actr Facility Provider ID, signaling endpoints, STUN/TURN endpoints;
 - the credential audience;
 - the join policy (`policy`);
 - the Realm signing key signature.
@@ -152,20 +152,20 @@ A Realm Profile uses an RFC 8785 JCS canonical payload with a detached Ed25519 s
 
 Lifecycle:
 
-- Creation and activation: a Realm management request is `POST`ed to the `realm-management` link of the Realm Infra Provider's own authority descriptor (`https://<provider_id>/.well-known/actr`). `create_realm` requests that the Realm Infra Provider create a pending Realm, and the response returns a Realm Profile payload to sign; the Realm signing key holder signs it and submits it with `publish_profile`, whose response is the activation response and returns an owner invite once (see 7.4; a Realm under the Realm Infra Provider's own domain is created by that Realm Infra Provider's operator, who self-signs and activates it internally and receives the owner invite at creation). The Realm Infra Provider's idempotency key is `(realm, requester)`: a retry by the same requester on its own pending or active Realm returns its state (without an owner invite); a different requester hitting a Realm of the same name, or any request hitting a Realm Infra Provider tombstone, is always a conflict; a repeated `publish_profile` returns a conflict, and a lost or expired owner invite is reissued with `reissue_owner_invite`;
-- Update: under the same Realm Infra Provider, upgrading the program (`package`), rotating the Realm issuer key, changing endpoints, or changing `display_name` or the join policy all publish a new Realm Profile with a higher Realm Profile sequence;
-- Retirement: retirement has only one path — the Realm signing key holder publishes a retired Realm Profile with `status = retired` (same `provider.id`, higher sequence), which stays valid forever; the Realm Infra Provider learns of it through periodic refresh and writes a Realm Infra Provider tombstone; if the Realm Infra Provider has shut down, the domain owner points the `realms` href at a storage location it controls and publishes the retired Realm Profile there; when the domain itself belongs to a Realm Infra Provider that has shut down, the Realms under it cannot be retired and can only be rebuilt elsewhere;
+- Creation and activation: a Realm management request is `POST`ed to the `realm-management` link of the Actr Facility Provider's own authority descriptor (`https://<provider_id>/.well-known/actr`). `create_realm` requests that the Actr Facility Provider create a pending Realm, and the response returns a Realm Profile payload to sign; the Realm signing key holder signs it and submits it with `publish_profile`, whose response is the activation response and returns an owner invite once (see 7.4; a Realm under the Actr Facility Provider's own domain is created by that Actr Facility Provider's operator, who self-signs and activates it internally and receives the owner invite at creation). The Actr Facility Provider's idempotency key is `(realm, requester)`: a retry by the same requester on its own pending or active Realm returns its state (without an owner invite); a different requester hitting a Realm of the same name, or any request hitting an Actr Facility Provider tombstone, is always a conflict; a repeated `publish_profile` returns a conflict, and a lost or expired owner invite is reissued with `reissue_owner_invite`;
+- Update: under the same Actr Facility Provider, upgrading the program (`package`), rotating the Realm issuer key, changing endpoints, or changing `display_name` or the join policy all publish a new Realm Profile with a higher Realm Profile sequence;
+- Retirement: retirement has only one path — the Realm signing key holder publishes a retired Realm Profile with `status = retired` (same `provider.id`, higher sequence), which stays valid forever; the Actr Facility Provider learns of it through periodic refresh and writes an Actr Facility Provider tombstone; if the Actr Facility Provider has shut down, the domain owner points the `realms` href at a storage location it controls and publishes the retired Realm Profile there; when the domain itself belongs to an Actr Facility Provider that has shut down, the Realms under it cannot be retired and can only be rebuilt elsewhere;
 - If every Realm signing key is lost and no usable rotation chain exists, no existing Realm under that Realm domain can get a further Realm Profile. The domain owner can only publish a new Realm signing key (clients treat this as an identity change and must reconfirm trust) and rebuild the instances under new RealmIds.
 
-Creation authorization: no domain, no Realm (except the local Realm). The owner of each Realm domain is the Realm signing key holder and may delegate custody of the key to a Realm Infra Provider; creating, activating and reissuing an owner invite all require the holder's authorization.
+Creation authorization: no domain, no Realm (except the local Realm). The owner of each Realm domain is the Realm signing key holder and may delegate custody of the key to an Actr Facility Provider; creating, activating and reissuing an owner invite all require the holder's authorization.
 
-Actrium tells the two paths apart by a single decidable condition: comparing normalized A-labels, the Realm domain equals the Realm Infra Provider ID, or ends with `"." + Realm Infra Provider ID` (on a label boundary) — that is "a Realm under a Realm Infra Provider's domain."
+Actrium tells the two paths apart by a single decidable condition: comparing normalized A-labels, the Realm domain equals the Actr Facility Provider ID, or ends with `"." + Actr Facility Provider ID` (on a label boundary) — that is "a Realm under an Actr Facility Provider's domain."
 
 - Local Realm: Actrium creates it directly on the local machine, with no Realm management request and no Realm Profile;
-- A Realm under a Realm Infra Provider's domain: in v1 only that Realm Infra Provider's operator creates it (without Realm management requests); the operator hands the owner invite to the user out of band, and after redeeming it in Actrium the user becomes the owner and creates the Service in that Realm. The trust root is shown as that Realm Infra Provider. Self-service creation by users with Realm Infra Provider accounts (OAuth 2.0 + PKCE), with quotas per account, is a later capability;
+- A Realm under an Actr Facility Provider's domain: in v1 only that Actr Facility Provider's operator creates it (without Realm management requests); the operator hands the owner invite to the user out of band, and after redeeming it in Actrium the user becomes the owner and creates the Service in that Realm. The trust root is shown as that Actr Facility Provider. Self-service creation by users with Actr Facility Provider accounts (OAuth 2.0 + PKCE), with quotas per account, is a later capability;
 - Any other Realm domain: the Realm signing key holder's signing service issues an Actr management envelope (bound to `provider_id`, valid for at most 5 minutes, with a nonce against replay); how the holder authenticates its own members is up to the holder. The confirmation page shows the Realm domain as the trust root.
 
-When a domain owner delegates custody of its Realm signing key to a Realm Infra Provider, nothing in the public documents states this, and Actrium still shows the Realm domain as the trust root; the delegated Realm Infra Provider provides the signing service as the holder. Such custody is invisible to users; this is an accepted limitation.
+When a domain owner delegates custody of its Realm signing key to an Actr Facility Provider, nothing in the public documents states this, and Actrium still shows the Realm domain as the trust root; the delegated Actr Facility Provider provides the signing service as the holder. Such custody is invisible to users; this is an accepted limitation.
 
 A restricted "creation delegation key" issued by a Realm signing key (limited by RealmId prefix, quota and validity) is a later capability.
 
@@ -226,7 +226,7 @@ These boundaries depend on:
 - Type discovery and candidate ranking;
 - WebRTC offer/answer/ICE exchange;
 - Initial connection ACL screening;
-- Realm Infra Provider failover;
+- Actr Facility Provider failover;
 - Network status events.
 
 It is not responsible for storing Service business state.
@@ -252,7 +252,7 @@ Actrium does not hard-code:
 
 ### 5.1 Local Realm
 
-A local instance's Realm name uses the local pseudo-domain `<installation-id>.actr.alt`, one local Realm per local instance. A local Realm has no Realm Infra Provider and uses no Realm Profile or Realm management request; Actrium keeps only a local record. For a local Front and a local Service:
+A local instance's Realm name uses the local pseudo-domain `<installation-id>.actr.alt`, one local Realm per local instance. A local Realm has no Actr Facility Provider and uses no Realm Profile or Realm management request; Actrium keeps only a local record. For a local Front and a local Service:
 
 - Prefer in-process/loopback transport;
 - Embedded signaling handles only the local Realm;
@@ -269,7 +269,7 @@ A networked instance's Realm lives under a domain:
 - The user or an administrator first trusts the Realm domain (confirms it once and pins its Realm signing key);
 - When the instance is created, Actrium creates a new Realm under that domain; the instance's creator is the Realm's only owner;
 - Other users join this instance's Realm through a Realm invitation and obtain Realm membership;
-- The Actor runtime uses the Realm Infra Provider named in the Realm Profile, which stays the same for the Realm's lifetime;
+- The Actor runtime uses the Actr Facility Provider named in the Realm Profile, which stays the same for the Realm's lifetime;
 - Updates to the Realm Profile and to `realm_signing_keys` must both verify signatures, the rotation chain, and `sequence`.
 
 ## 6. Actor identity
@@ -340,8 +340,8 @@ A Realm must guarantee that an Actor serial is never reused within that Realm:
 - Use a Realm allocator with a uniqueness constraint;
 - Or use a sufficiently strong key-derived/random ID with collision checking;
 - Must not rely on a weak worker id derived from a hostname/PID hash and claim unconditional uniqueness;
-- After an Actor is revoked, the Realm Infra Provider keeps its Actor serial permanently and never reallocates it;
-- A Realm is permanently bound to its Realm Infra Provider, so Actor serials are always allocated by the same Realm Infra Provider.
+- After an Actor is revoked, the Actr Facility Provider keeps its Actor serial permanently and never reallocates it;
+- A Realm is permanently bound to its Actr Facility Provider, so Actor serials are always allocated by the same Actr Facility Provider.
 
 ### 6.4 Actr Host evidence identity
 
@@ -372,7 +372,7 @@ Joining an instance's Realm (once per instance):
 1. Obtain the Realm name from a Realm invitation or a Realm link; a Realm invitation may embed the Realm Profile;
 2. Fetch the Realm Profile and verify the Realm signing key signature, `sequence` and `status`;
 3. The client generates a Realm client key specific to this Realm and signs the redemption of the Realm invitation with it (the signature is the proof of possession);
-4. In one transaction the Realm Infra Provider consumes the invitation, creates the member (or adds a client to an existing member) as the invitation says, and registers that Realm client key, which completes client registration and grants Realm membership; no separate membership credential is issued;
+4. In one transaction the Actr Facility Provider consumes the invitation, creates the member (or adds a client to an existing member) as the invitation says, and registers that Realm client key, which completes client registration and grants Realm membership; no separate membership credential is issued;
 5. OS secure storage keeps the Realm client key;
 6. Actrium creates the Realm record.
 
@@ -380,7 +380,7 @@ Afterward, every request to register, reissue or renew an Actor credential is si
 
 Joining a Realm applies only to that one instance; when a user uses several instances, Actrium performs client registration for each Realm automatically, with a different Realm client key per Realm. Domain-level SSO/directories are a later capability, not part of v1.
 
-Membership and instance authorization are two separate layers: Realm membership only decides whether one can enter the instance's network, i.e. it is the prerequisite for obtaining an Actor credential, connecting to signaling, and performing the Attach handshake; roles and permissions inside the instance (read/write, administration, sharing) are application permissions, decided by the application and session authorization, where the member role (owner/editor/viewer) is kept by the Realm Infra Provider with the member record, written into the Actor credential, and enforced by the Service; the Actr runtime decides who can discover and connect to whom by Actor type, which is called the connection ACL. The two are never merged even though they belong to the same instance; obtaining membership grants no application permission.
+Membership and instance authorization are two separate layers: Realm membership only decides whether one can enter the instance's network, i.e. it is the prerequisite for obtaining an Actor credential, connecting to signaling, and performing the Attach handshake; roles and permissions inside the instance (read/write, administration, sharing) are application permissions, decided by the application and session authorization, where the member role (owner/editor/viewer) is kept by the Actr Facility Provider with the member record, written into the Actor credential, and enforced by the Service; the Actr runtime decides who can discover and connect to whom by Actor type, which is called the connection ACL. The two are never merged even though they belong to the same instance; obtaining membership grants no application permission.
 
 ### 7.2 Actor registration
 
@@ -410,10 +410,10 @@ Each networked Realm has exactly one owner: the instance's creator, who holds bo
 - Changing a role: owner only; it changes only application permissions and revokes no key; it takes effect in the member's next Actor credential.
 - Transferring ownership: atomic; the previous owner becomes an editor by default. The owner must transfer before leaving and cannot revoke its own last client.
 - Leaving a Realm: a member removes itself, with the same effect as removal.
-- Updates and retirement: for an instance under the Realm Infra Provider's domain the owner sends `update_realm` and the Realm Infra Provider signs the new or retired Realm Profile; other Realms go through the Realm signing key holder.
-- Owner recovery: when the owner has lost all its clients, the Realm signing key holder (`reissue_owner_invite`) or the Realm Infra Provider's operator issues a new owner invite; redeeming it adds a new client to the owner and revokes all of the owner's previous Realm client keys.
+- Updates and retirement: for an instance under the Actr Facility Provider's domain the owner sends `update_realm` and the Actr Facility Provider signs the new or retired Realm Profile; other Realms go through the Realm signing key holder.
+- Owner recovery: when the owner has lost all its clients, the Realm signing key holder (`reissue_owner_invite`) or the Actr Facility Provider's operator issues a new owner invite; redeeming it adds a new client to the owner and revokes all of the owner's previous Realm client keys.
 
-Once a Realm client key is revoked, the Realm Infra Provider immediately refuses its new requests and new Actor credentials, revokes the unused invites it issued, disables every Actor bound to it and closes those Actors' signaling connections and TURN allocations; the same member can reissue with another of its unrevoked keys and the Actor private key to move an Actor over (FR-NET-006), while a removed member cannot; Actor credentials already issued stop working outside the Realm Infra Provider (for example where a Service checks a Front) when they expire (at most 1 hour by default on Loran). A Service treats the Front credential's expiry as the limit of an Attach session and reads the role again when the Front presents a renewed credential.
+Once a Realm client key is revoked, the Actr Facility Provider immediately refuses its new requests and new Actor credentials, revokes the unused invites it issued, disables every Actor bound to it and closes those Actors' signaling connections and TURN allocations; the same member can reissue with another of its unrevoked keys and the Actor private key to move an Actor over (FR-NET-006), while a removed member cannot; Actor credentials already issued stop working outside the Actr Facility Provider (for example where a Service checks a Front) when they expire (at most 1 hour by default on Loran). A Service treats the Front credential's expiry as the limit of an Attach session and reads the role again when the Front presents a renewed credential.
 
 ## 8. Signaling authentication credentials
 
@@ -470,9 +470,9 @@ TURN usually cannot see DTLS/SRTP/DataChannel plaintext, but it can see:
 - Allocations;
 - Relay relationships.
 
-It can also drop packets, throttle, refuse or log traffic. A Realm must therefore be explicit about its TURN Realm Infra Provider and its privacy policy.
+It can also drop packets, throttle, refuse or log traffic. A Realm must therefore be explicit about its TURN Actr Facility Provider and its privacy policy.
 
-## 10. Realm Infra Provider delegation and failover
+## 10. Actr Facility Provider delegation and failover
 
 A Realm Profile can declare multiple endpoints:
 
@@ -496,8 +496,8 @@ Rules:
 - Where the Realm Profile is stored does not affect its validity;
 - Non-default ports are allowed;
 - Switching endpoints never changes the Realm or the ActorId;
-- Failover cannot jump to an undeclared Realm Infra Provider;
-- The Realm Infra Provider's certificate and the ticket audience must match.
+- Failover cannot jump to an undeclared Actr Facility Provider;
+- The Actr Facility Provider's certificate and the ticket audience must match.
 
 ## 11. Port policy
 
@@ -547,7 +547,7 @@ When the Realm Profile, credentials or revocation information are unreachable:
 
 ## 14. Privacy
 
-The metadata a Realm and its Realm Infra Provider can observe must be stated on the privacy page:
+The metadata a Realm and its Actr Facility Provider can observe must be stated on the privacy page:
 
 - ActorId;
 - IP;
@@ -561,9 +561,9 @@ Minimization measures:
 - Do not send the Program route, Workspace name or business payload to signaling;
 - Use short-lived tickets;
 - Bind the offer/answer and encrypt the parts that can be encrypted;
-- Minimize and shorten retention of Realm Infra Provider logs;
+- Minimize and shorten retention of Actr Facility Provider logs;
 - Allow enterprise self-hosting;
-- Support multiple Realm Infra Providers and transparent status display;
+- Support multiple Actr Facility Providers and transparent status display;
 - The authority descriptor does not list Realms.
 
 The Realm name appears in ActorIds and URLs, exposing the domain and the instance name; Actrium generates a fully random RealmId by default to avoid names being guessed or enumerated; when a user explicitly chooses a readable name, they should know it is exposed whenever it is shared.

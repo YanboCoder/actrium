@@ -54,7 +54,7 @@ The security control on the left of the address bar must show:
 - Current application assurance: green / yellow / red, or re-validating;
 - Publisher domain and verified/development/revoked status;
 - Short fingerprint of the current package digest;
-- Realm name and its Realm domain; when the Realm domain equals or belongs to the Realm Infra Provider ID, state that the trust root is that Realm Infra Provider, otherwise the trust root is the Realm domain;
+- Realm name and its Realm domain; when the Realm domain equals or belongs to the Actr Facility Provider ID, state that the trust root is that Actr Facility Provider, otherwise the trust root is the Realm domain;
 - Service connection status: local, P2P, TURN relayed, offline;
 - Whether the current permissions include a high-risk grant.
 
@@ -129,7 +129,7 @@ sequenceDiagram
     U-->>A: Confirm creation
     A->>M: Create(idempotency_key, package, workspace, domain, realm_id, display_name)
     M->>M: Obtain authorization from the Realm signing key holder
-    M->>M: Realm Infra Provider creates a pending Realm
+    M->>M: Actr Facility Provider creates a pending Realm
     M->>M: Sign the Realm Profile (including package) and submit it for activation; Realm becomes active
     M->>M: Redeem the owner invite and become the Realm's owner (obtain Realm membership)
     M->>S: Persist identity within the new Realm and start the Service
@@ -147,10 +147,10 @@ sequenceDiagram
 
 Every new instance creates a new Realm. The confirmation page shows:
 
-- Realm domain: creates a local Realm by default; any trusted Realm domain can be chosen. Without a domain, no Realm is allocated (except the local Realm); a user without their own domain uses a Realm that a Realm Infra Provider allocates under its own domain;
+- Realm domain: creates a local Realm by default; any trusted Realm domain can be chosen. Without a domain, no Realm is allocated (except the local Realm); a user without their own domain uses a Realm that an Actr Facility Provider allocates under its own domain;
 - `realm_id`: by default Actrium generates a fully random short string (e.g. `k7m2q9xh`, lowercase base32) containing no program name or user input; a readable name goes into `display_name`, shown to the user, appearing only locally and in the Realm Profile, never in the ActorId; the user may also explicitly choose a readable `realm_id` (e.g. `notes`), and the confirmation page warns that a readable name will be exposed in shared links;
 - Creation must be authorized by the Realm signing key holder of that Realm domain: the holder's signing service authenticates the current user under its own policy and signs the Actr management envelope and the Realm Profile; after activation it hands the one-time owner invite back to Actrium, which redeems it at once, so the creator is the Realm's only owner; the confirmation page shows that Realm domain as the trust root (delegated custody is invisible to the user);
-- When the Realm domain equals or belongs to the Realm Infra Provider ID, v1 offers no self-service creation: the user contacts that Realm Infra Provider's operator, who creates the Realm and hands the owner invite to the user out of band; the user chooses "Join with an invitation" on the identity page, and after redeeming it Actrium creates the Service and Front in that Realm; the confirmation page states that the trust root is that Realm Infra Provider. Self-service creation with a Realm Infra Provider account is a later capability;
+- When the Realm domain equals or belongs to the Actr Facility Provider ID, v1 offers no self-service creation: the user contacts that Actr Facility Provider's operator, who creates the Realm and hands the owner invite to the user out of band; the user chooses "Join with an invitation" on the identity page, and after redeeming it Actrium creates the Service and Front in that Realm; the confirmation page states that the trust root is that Actr Facility Provider. Self-service creation with an Actr Facility Provider account is a later capability;
 - If authorization is refused or the holder is unreachable, a clear error is shown, with no fallback to another Realm domain.
 
 If the Realm domain is not yet trusted, first-time trust must be completed on the confirmation page.
@@ -187,10 +187,10 @@ Every creation must carry a locally persisted `idempotency_key`:
 
 Creation proceeds in the order "holder authorization → pending Realm → sign the Realm Profile and submit it for activation → Realm active → create Service":
 
-- If any step before the Realm becomes active fails, no Service is created and no half-finished instance appears in the Inventory; the page states which step failed (authorization refused, Realm Infra Provider unreachable, Realm Profile publication failed) and offers a retry;
+- If any step before the Realm becomes active fails, no Service is created and no half-finished instance appears in the Inventory; the page states which step failed (authorization refused, Actr Facility Provider unreachable, Realm Profile publication failed) and offers a retry;
 - The default random RealmId is generated once when creation begins and persisted with it; a retry never regenerates it;
 - A retry reuses the same `idempotency_key`, continuing the same pending Realm and the same RealmId, without creating a duplicate; if the Realm was already activated but the response was lost, the retry only returns its state, and the owner invite is reissued with `reissue_owner_invite`;
-- If the user abandons it, the Realm Infra Provider automatically cleans up the pending Realm on expiry.
+- If the user abandons it, the Actr Facility Provider automatically cleans up the pending Realm on expiry.
 
 ## 6. Connecting to an existing instance
 
@@ -199,7 +199,7 @@ Creation proceeds in the order "holder authorization → pending Realm → sign 
 1. Resolve the Realm link to get the Realm name;
 2. Fetch that domain's Realm signing key and Realm Profile and verify the signature;
 3. Per the Realm Profile's `package`, ensure the package is installed and the digest matches;
-4. Via the Realm Infra Provider specified by the Realm Profile, find within that Realm the Service whose Actor type matches the package;
+4. Via the Actr Facility Provider specified by the Realm Profile, find within that Realm the Service whose Actor type matches the package;
 5. Complete mutual identity and challenge verification;
 6. Negotiate the Front–Service contract;
 7. Obtain the exclusive lease;
@@ -423,7 +423,7 @@ A Realm corresponds to a single instance, so the identity page is organized in t
 - Member management (owner only): list members and roles, issue and revoke invitations, change roles, remove members (which also revokes all their clients), and transfer ownership to another member;
 - Leaving a Realm: means losing access to that instance, and all of this member's clients are revoked with it; first explain the affected Services, Workspaces and sharing relationships, and never silently migrate to the local Realm; the owner must transfer ownership first;
 - Realm signing key change: show the signed rotation chain; without a valid rotation chain, treat it as an identity change and reconfirm trust;
-- Recovery: after a device is lost, only encrypted backups or data on a remote host can be recovered; there is no promise to recover an Actor private key that was never backed up; a member revokes the lost client from another client, or requests an "add a client" invitation from the owner; when the owner has lost all its clients, it requests a new owner invite from the Realm signing key holder or the Realm Infra Provider's operator, and redeeming it revokes all previous clients.
+- Recovery: after a device is lost, only encrypted backups or data on a remote host can be recovered; there is no promise to recover an Actor private key that was never backed up; a member revokes the lost client from another client, or requests an "add a client" invitation from the owner; when the owner has lost all its clients, it requests a new owner invite from the Realm signing key holder or the Actr Facility Provider's operator, and redeeming it revokes all previous clients.
 
 Trusting a Realm domain does not join any Realm within it; joining a Realm only establishes a Realm client identity — actual Attach is still governed by application permissions. Realm-domain-level SSO/directory is a later capability; v1 does not include it.
 
@@ -437,7 +437,7 @@ The minimum application-permission roles for a Service are:
 | editor | Attach and modify business state per the contract |
 | viewer | Read-only Attach; availability depends on the program's contract |
 
-Each instance has exactly one owner, its creator; the owner can transfer ownership to another member (the previous owner becomes an editor by default), and v1 does not support several owners. The Realm Infra Provider keeps each member's role with the member record and writes it into the Actor credential; the Service reads it from the Front's credential and enforces it.
+Each instance has exactly one owner, its creator; the owner can transfer ownership to another member (the previous owner becomes an editor by default), and v1 does not support several owners. The Actr Facility Provider keeps each member's role with the member record and writes it into the Actor credential; the Service reads it from the Front's credential and enforces it.
 
 Sharing flow:
 

@@ -91,7 +91,7 @@ impl Database {
         // Create the Realm table, keyed by Realm name `<realm_id>@<domain>`.
         // Callers validate the name before writing; the CHECK is a backstop.
         //
-        // A retired row is the Realm Infra Provider tombstone: it is never deleted,
+        // A retired row is the Actr Facility Provider tombstone: it is never deleted,
         // so the primary key keeps the name from being reused. `enabled` is the
         // operator's local suspend switch and is independent of `status`.
         sqlx::query(
@@ -145,7 +145,7 @@ impl Database {
         .execute(&mut *tx)
         .await?;
 
-        // Realm issuer keys this Realm Infra Provider holds in the Signer. `key_id`
+        // Realm issuer keys this Actr Facility Provider holds in the Signer. `key_id`
         // is the Signer key id, the credential `key_id` and, in decimal, the
         // Realm Profile issuer key id. `next` is listed in the Realm Profile
         // but does not sign yet, `current` signs, `retired` only verifies

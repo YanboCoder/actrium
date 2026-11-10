@@ -822,7 +822,7 @@ Actrium / Actr Privacy Control Plane
 └── Audit & Transparency Log
 ```
 
-Realm 签名 key 持有方（Realm 域名所有者）或其委派的 Realm Infra Provider 可以运营或委派 Verifier、Reference Value、Revocation 和 Key Broker 服务，但它不是唯一全球信任根；单个实例 Realm 只在自己的 policy 中选择信任哪些 Verifier。组织和本地 Actrium 可以选择自己的 Verifier 与 appraisal policy。
+Realm 签名 key 持有方（Realm 域名所有者）或其委派的 Actr Facility Provider 可以运营或委派 Verifier、Reference Value、Revocation 和 Key Broker 服务，但它不是唯一全球信任根；单个实例 Realm 只在自己的 policy 中选择信任哪些 Verifier。组织和本地 Actrium 可以选择自己的 Verifier 与 appraisal policy。
 
 ## 16. 失败与撤销
 

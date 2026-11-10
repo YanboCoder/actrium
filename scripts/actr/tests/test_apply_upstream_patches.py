@@ -53,12 +53,44 @@ loran-turn = {{ path = {json.dumps((module.REPO / 'crates/loran-turn').as_posix(
         dependencies = tomllib.loads((module.REPO / "Cargo.toml").read_text())["workspace"]["dependencies"]
         for package, dependency in (
             ("webrtc", "webrtc"), ("rtc", "rtc"), ("rtc-turn", "rtc"),
-            ("rtc-rtp", "rtc-rtp"), ("turn", "turn_crate"),
-            ("stun", "webrtc-stun"), ("webrtc-util", "webrtc-util"),
+            ("rtc-rtp", "rtc-rtp"),
         ):
             with self.subTest(package=package):
                 self.assertEqual(patches[package]["git"], dependencies[dependency]["git"])
                 self.assertEqual(patches[package]["rev"], dependencies[dependency]["rev"])
+
+    def test_loran_consumer_sqlx_override_resolves_with_patched_sqlite(self):
+        dependencies = tomllib.loads((module.REPO / "Cargo.toml").read_text())["workspace"]["dependencies"]
+        patch = dependencies["sqlx"]
+        rusqlite = dependencies["rusqlite"]
+        with tempfile.TemporaryDirectory(prefix="actr-registry-sqlx-") as directory:
+            root = Path(directory)
+            (root / "src").mkdir()
+            (root / "src/main.rs").write_text("fn main() {}\n")
+            manifest = root / "Cargo.toml"
+            manifest.write_text(f'''[package]
+name = "actr-registry-sqlx-check"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+sqlx = {{ version = {json.dumps(patch["version"])}, default-features = false, features = ["runtime-tokio", "sqlite"] }}
+rusqlite = {{ version = {json.dumps(rusqlite["version"])}, features = ["bundled"] }}
+
+[patch.crates-io]
+sqlx = {{ git = {json.dumps(patch["git"])}, rev = {json.dumps(patch["rev"])} }}
+''')
+            subprocess.run(["cargo", "generate-lockfile", "--manifest-path", str(manifest)], check=True)
+            packages = tomllib.loads((root / "Cargo.lock").read_text())["package"]
+            sqlite = [package for package in packages if package["name"] == "libsqlite3-sys"]
+            self.assertEqual(len(sqlite), 1)
+            self.assertGreaterEqual(tuple(map(int, sqlite[0]["version"].split("."))), (0, 39, 0))
+            for name in ("sqlx", "sqlx-sqlite"):
+                matches = [package for package in packages if package["name"] == name]
+                self.assertEqual(len(matches), 1)
+                self.assertTrue(matches[0]["source"].startswith(f'git+{patch["git"]}?rev={patch["rev"]}#'))
 
     def test_merges_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -78,9 +110,9 @@ loran-turn = {{ path = {json.dumps((module.REPO / 'crates/loran-turn').as_posix(
     def test_rejects_conflicting_patch_without_writing(self):
         with tempfile.TemporaryDirectory() as directory:
             manifest = Path(directory) / "Cargo.toml"
-            original = '[package]\nname = "demo"\nversion = "0.1.0"\n\n[patch.crates-io]\nturn = { path = "../other" }\n'
+            original = '[package]\nname = "demo"\nversion = "0.1.0"\n\n[patch.crates-io]\nwebrtc = { path = "../other" }\n'
             manifest.write_text(original)
-            with self.assertRaisesRegex(ValueError, "conflicting patch for turn"):
+            with self.assertRaisesRegex(ValueError, "conflicting patch for webrtc"):
                 module.apply(module.PATCH_SOURCE, manifest)
             self.assertEqual(manifest.read_text(), original)
 

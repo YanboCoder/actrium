@@ -142,7 +142,7 @@ Version 1 defines these core relations:
 | `ice-config` | Obtain ICE server configuration and, after authorization, short-lived TURN credentials as defined by [Actr ICE Configuration](ice-configuration.md). |
 | `contracts` | Obtain public Actor contract and interface descriptions. |
 | `realms` | Retrieve signed Realm Profiles for Realms named under this domain from where they are stored, as defined by [Actr Realm Profile](realm-profile.md). The protocol value is `actr-realm-profile/1`. |
-| `realm-management` | Accept Realm management requests (`POST`) for Realms this authority serves as a Realm Infra Provider, as defined by [Actr Realm Profile](realm-profile.md), Section 8. The protocol value is `actr-realm-management/1`. |
+| `realm-management` | Accept Realm management requests (`POST`) for Realms this authority serves as an Actr Facility Provider, as defined by [Actr Realm Profile](realm-profile.md), Section 8. The protocol value is `actr-realm-management/1`. |
 
 Extension relation values **MUST** be absolute URIs controlled by the extension
 author. This avoids collisions with short core relation names.
@@ -153,8 +153,8 @@ credentials, private keys, or user-specific data. In particular,
 credentials in this public document.
 
 The `signaling` and `ice-config` links of a descriptor serve the authority
-itself; they have nothing to do with the Realms named under the domain. A client **MUST** reach a Realm only through the Realm Infra Provider named
-by that Realm's accepted Realm Profile and **MUST NOT** use any other Realm Infra
+itself; they have nothing to do with the Realms named under the domain. A client **MUST** reach a Realm only through the Actr Facility Provider named
+by that Realm's accepted Realm Profile and **MUST NOT** use any other Actr Facility
 Provider, including these links, when the Realm Profile is unavailable,
 invalid, or retired.
 
@@ -204,7 +204,7 @@ root of every Realm named under the domain:
   covers `sequence`.
 
 The first acceptance of a domain's Realm signing keys relies on HTTPS (Web PKI)
-or on a key pinned by enterprise policy. After that, a client or Realm Infra Provider
+or on a key pinned by enterprise policy. After that, a client or Actr Facility Provider
 keeps, for the domain, every key it has ever accepted (`id`, public key, and
 last state: `active`, `retired`, or removed) and the accepted member
 `sequence`. It processes a newly fetched member in this order:
@@ -290,7 +290,7 @@ descriptor level:
   package signing keys follow [Actor Package](actor-package.zh.md) (Chinese
   only), Section 6.8.
 
-A Realm Infra Provider that registers publishers does so through a
+An Actr Facility Provider that registers publishers does so through a
 `register_publisher` request in the Actr management envelope of
 [Actr Realm Profile](realm-profile.md), Section 8, with a `publisher` member
 (the normalized Publisher ID) in place of `realm`, signed by an active

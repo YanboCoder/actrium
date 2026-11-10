@@ -822,7 +822,7 @@ Actrium / Actr Privacy Control Plane
 └── Audit & Transparency Log
 ```
 
-The Realm signing key holder (the Realm domain owner), or a Realm Infra Provider it delegates to, may operate or delegate the Verifier, Reference Value, Revocation, and Key Broker services, but it is not the sole global root of trust; an individual instance Realm chooses which Verifiers to trust only within its own policy. Organizations and local Actrium installations may choose their own Verifier and appraisal policy.
+The Realm signing key holder (the Realm domain owner), or an Actr Facility Provider it delegates to, may operate or delegate the Verifier, Reference Value, Revocation, and Key Broker services, but it is not the sole global root of trust; an individual instance Realm chooses which Verifiers to trust only within its own policy. Organizations and local Actrium installations may choose their own Verifier and appraisal policy.
 
 ## 16. Failure and revocation
 

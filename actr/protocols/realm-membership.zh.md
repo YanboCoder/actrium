@@ -12,9 +12,9 @@
 Realm 与 Realm Profile 见 [Actr Realm Profile](realm-profile.zh.md)。本文只适用于 DNS 域名下的
 Realm；本机 Realm 没有成员与邀请。
 
-- **成员**：Realm Infra Provider 为某个 Realm 记录的一方，有 `member_id` 与一个角色。
+- **成员**：Actr Facility Provider 为某个 Realm 记录的一方，有 `member_id` 与一个角色。
 - **角色**：`owner`、`editor`、`viewer`。每个 Realm 恰好一个 owner：它同时持有该 Realm 的成员管理权与
-  应用内的 owner 角色。`editor`、`viewer` 的含义由应用决定；Realm Infra Provider 只记录并写入 Actor
+  应用内的 owner 角色。`editor`、`viewer` 的含义由应用决定；Actr Facility Provider 只记录并写入 Actor
   credential，不执行应用权限。
 - **Realm 客户端 key**：成员的某个客户端为该 Realm 生成的 Ed25519 key。一个成员可有多把（多台设备、
   多个安装），每把可单独撤销；**MUST NOT** 跨 Realm 复用。
@@ -23,7 +23,7 @@ Realm；本机 Realm 没有成员与邀请。
 - **Realm 邀请**：一次性 secret，兑换一次后失效。它或者带一个角色（邀请新成员），或者指向一个已有
   成员（为其添加客户端）。
 
-v1 不定义 Realm Infra Provider 账号、多个 owner 或域名级 SSO。
+v1 不定义 Actr Facility Provider 账号、多个 owner 或域名级 SSO。
 
 本文中的大写关键词 **MUST**、**MUST NOT**、**SHOULD**、**SHOULD NOT** 和 **MAY** 按 BCP 14 解释。
 
@@ -31,8 +31,8 @@ v1 不定义 Realm Infra Provider 账号、多个 owner 或域名级 SSO。
 
 - Realm 客户端 key 的 `key_id`：Ed25519 公钥（32 字节）SHA-256 的前 16 个小写十六进制字符。
 - 邀请 `secret`：32 字节随机数，以 base64url（无填充）表示。邀请的 `invite_id`：secret 字节的 SHA-256 的前
-  16 个小写十六进制字符。Realm Infra Provider 只保存 secret 的 SHA-256。
-- `member_id`：Realm Infra Provider 分配的 16 个小写十六进制字符，在该 Realm 内不复用。
+  16 个小写十六进制字符。Actr Facility Provider 只保存 secret 的 SHA-256。
+- `member_id`：Actr Facility Provider 分配的 16 个小写十六进制字符，在该 Realm 内不复用。
 
 ## 3. Realm 邀请
 
@@ -74,12 +74,12 @@ Actr Host 以 HTTPS `POST <issuer.url>/membership` 发送 membership 请求（pr
 | `set_role` | `member_id`、`role`（`editor`/`viewer`） | owner（不能是自己） | 只改角色 |
 | `transfer_owner` | `member_id`、可选 `previous_owner_role`（缺省 `editor`） | owner | 原子地把 owner 交给另一 active 且至少有一把未撤销客户端 key 的成员，原 owner 改为指定角色 |
 | `leave` | 无 | 非 owner 成员 | 移除自己，效果同 `remove_member` |
-| `update_realm` | 可选 `package`、`display_name`，或 `status: "retired"` | owner；只用于 Realm Infra Provider 域名下的 Realm | Realm Infra Provider 签署并发布 sequence 更高的 Realm Profile（Realm Profile 第 7.2、7.4 节）；响应 `{realm, sequence}` |
+| `update_realm` | 可选 `package`、`display_name`，或 `status: "retired"` | owner；只用于 Actr Facility Provider 域名下的 Realm | Actr Facility Provider 签署并发布 sequence 更高的 Realm Profile（Realm Profile 第 7.2、7.4 节）；响应 `{realm, sequence}` |
 
 `join` 请求中 `signature.key_id` **MUST** 等于由 `public_key` 算出的 `key_id`，签名即持有证明。其他请求的签名
 key **MUST** 是该 Realm 已登记、未撤销、属于 `active` 成员的 Realm 客户端 key。
 
-Realm Infra Provider 先检查角色，再查找目标：无权执行的请求一律 `forbidden`，不以 `not_found` 透露目标是否存在。
+Actr Facility Provider 先检查角色，再查找目标：无权执行的请求一律 `forbidden`，不以 `not_found` 透露目标是否存在。
 其他 Realm 的更新与退役仍由 Realm 签名 key 持有方经 Realm 管理请求完成，对它们发 `update_realm` 得到 `forbidden`。
 
 `label` 是客户端名称，至多 64 个字符，供成员辨认自己的客户端。`invite_expires_at` 为 RFC 3339 时间，不超过
@@ -87,11 +87,11 @@ Realm Infra Provider 先检查角色，再查找目标：无权执行的请求�
 
 ### 4.1 兑换规则
 
-Realm Infra Provider 在单个事务中兑换邀请：记录邀请已用，按邀请建立新成员或定位目标成员，登记 key。两个并发兑换
+Actr Facility Provider 在单个事务中兑换邀请：记录邀请已用，按邀请建立新成员或定位目标成员，登记 key。两个并发兑换
 最多一个成功；超过限额（`quota`）时邀请不被消耗。同一把 key 重复兑换同一邀请（响应丢失后的重试），只要
 该 key 仍未撤销、成员仍为 `active`，就返回首次的结果，否则返回 `invite_used`。
 
-- 带 `role` 的邀请建立新成员。`owner` 角色的邀请（owner 邀请）只由 Realm 签名 key 持有方或 Realm Infra Provider
+- 带 `role` 的邀请建立新成员。`owner` 角色的邀请（owner 邀请）只由 Realm 签名 key 持有方或 Actr Facility Provider
   运营者签发（第 5 节）：Realm 尚无 owner 时建立 owner；已有 owner 时，新 key 成为该 owner 成员的客户端，
   owner 原有的全部客户端 key 撤销。
 - 带 `member_id` 的邀请为该成员登记新客户端，目标成员 **MUST** 仍为 `active`。
@@ -103,7 +103,7 @@ Realm Infra Provider 在单个事务中兑换邀请：记录邀请已用，按�
 
 ### 4.3 错误
 
-Realm Infra Provider 以 JSON `{"error": "<code>", "message": "<text>"}` 返回错误，`code` 稳定、可供 Actr Host 分支：
+Actr Facility Provider 以 JSON `{"error": "<code>", "message": "<text>"}` 返回错误，`code` 稳定、可供 Actr Host 分支：
 
 | HTTP | `code` | 含义 |
 | --- | --- | --- |
@@ -130,7 +130,7 @@ owner 邀请是 `role = owner` 的邀请，有效期 7 天。签发新的 owner 
 - **其他域名的 Realm。** Realm 签名 key 持有方首次以 `publish_profile` 激活 Realm 时，响应一次性携带
   `owner_invite`（文本形式）；此后以 `reissue_owner_invite`（Realm Profile 第 8 节）签发新的，用于 owner 丢失
   全部客户端时的恢复。
-- **Realm Infra Provider 域名下的 Realm。** v1 只由 Realm Infra Provider 运营者创建，创建时得到 owner 邀请，经带外渠道交给
+- **Actr Facility Provider 域名下的 Realm。** v1 只由 Actr Facility Provider 运营者创建，创建时得到 owner 邀请，经带外渠道交给
   用户；恢复同样由运营者签发。签发接口不属于本协议。此后 owner 以 `update_realm` 更新或退役该 Realm。
 
 ## 6. Actor credential 与 membership
@@ -161,14 +161,14 @@ Actor credential 的 claims 包含成员 id、Realm 客户端 key id 与签发�
 应用权限；它 **MUST** 以 Front credential 的到期时间为该判断的有效期，Front 续期后出示新 credential 时再读取
 角色。
 
-撤销 Realm 客户端 key（包括移除成员、`leave` 与 owner 恢复）时，Realm Infra Provider **MUST** 立即：
+撤销 Realm 客户端 key（包括移除成员、`leave` 与 owner 恢复）时，Actr Facility Provider **MUST** 立即：
 
 - 拒绝该 key 的新请求，包括签发 Actor credential；撤销它签发的未用邀请；
 - 停用当前绑定到该 key 的全部 Actor：拒绝它们续期，关闭它们的 signaling 连接与 TURN allocation，拒绝它们
   重连、取得 TURN credential。
 
 ActorId 不因此作废：同一 `active` 成员可用自己另一把未撤销的 key 重签（上文第 2 条），Actor 随之恢复。被移除
-或离开的成员没有可用的 key，其 Actor 永久停用。已签发的 Actor credential 在 Realm Infra Provider 之外（例如对端
+或离开的成员没有可用的 key，其 Actor 永久停用。已签发的 Actor credential 在 Actr Facility Provider 之外（例如对端
 Actor 的验证）到期失效。改角色不撤销任何 key，
 在该成员下一份 Actor credential 生效。
 
@@ -183,10 +183,10 @@ Realm 客户端 key 是 Actr Host 的能力，**MUST NOT** 交给 Guest workload
   其他本机用户可见之处，例如命令行参数。
 - Realm 客户端 key 的私钥只在该客户端保存。Actr Host **SHOULD** 拒绝加载本机其他用户可读的 key 文件。
 - owner 邀请的持有方与运营者能恢复 owner，因此它们处于 Realm 的信任边界内，这与它们本就能签发 Realm Profile、
-  停用 Realm（Realm Infra Provider 还持有 Realm issuer key）一致。
+  停用 Realm（Actr Facility Provider 还持有 Realm issuer key）一致。
 - owner 恢复撤销 owner 原有的全部客户端 key 与它们签发的未用邀请，被盗的 owner key 因此无法与恢复者反复争夺。
   被盗期间对方可能已邀请成员或转让 owner；恢复后 owner **SHOULD** 在 `list_members` 中核对并移除。
-- Actor credential 有效期是撤销在 Realm Infra Provider 之外生效的上限；Realm Infra Provider **SHOULD** 保持较短的
+- Actor credential 有效期是撤销在 Actr Facility Provider 之外生效的上限；Actr Facility Provider **SHOULD** 保持较短的
   credential 有效期。
 
 ## 8. 测试向量与 Schema

@@ -258,7 +258,7 @@ export function RealmForm({ onSubmit, onClose, onRefresh }: RealmFormProps) {
               className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Required for Realms under this Realm Infra Provider&apos;s domain: it goes into the
+              Required for Realms under this Actr Facility Provider&apos;s domain: it goes into the
               Realm Profile this instance signs. The type is the package manifest&apos;s
               <code> publisher/program@version</code>.
             </p>
