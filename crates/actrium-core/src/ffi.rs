@@ -1,9 +1,11 @@
+use actr_protocol::uri::ActrUriError;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::actr_package::{
     self, ActrPackageManifest, ContractGateStatus as DomainContractGateStatus, ManifestError,
 };
+use crate::realm_link;
 use crate::auth;
 use crate::bridge;
 use crate::browser;
@@ -661,6 +663,18 @@ pub enum CoreError {
     UnknownAppSourceType(String),
     #[error("invalid Actr actor type `{0}`, expected `publisher/program@version`")]
     InvalidActrActorType(String),
+    #[error("invalid actr URI scheme")]
+    UriSchemeInvalid,
+    #[error("invalid actr URI Realm domain")]
+    UriDomainInvalid,
+    #[error("invalid actr URI RealmId or ActorId")]
+    UriLabelInvalid,
+    #[error("legacy actr URI form is not supported")]
+    UriLegacyForm,
+    #[error("local actr Realm does not belong to this installation")]
+    UriLocalRealmForeign,
+    #[error("invalid installation id, expected 26 lowercase base32 characters")]
+    InvalidInstallationId,
 }
 
 impl From<ManifestError> for CoreError {
@@ -687,6 +701,122 @@ pub fn parse_actr_package_manifest(source: String) -> Result<ActrPackageManifest
     actr_package::parse_manifest_toml(&source)
         .map(ActrPackageManifestInfo::from)
         .map_err(CoreError::from)
+}
+
+impl From<ActrUriError> for CoreError {
+    fn from(error: ActrUriError) -> Self {
+        // UDL error enums cannot carry fields, so the parse detail is dropped
+        // here; the shell renders variant-specific copy and holds the raw
+        // input for context.
+        match error {
+            ActrUriError::InvalidScheme(_) => Self::UriSchemeInvalid,
+            ActrUriError::InvalidDomain(_) => Self::UriDomainInvalid,
+            ActrUriError::InvalidLabel(_) | ActrUriError::InvalidPath(_) => Self::UriLabelInvalid,
+            ActrUriError::LegacyForm(_) => Self::UriLegacyForm,
+            ActrUriError::LocalRealmForeign(_) => Self::UriLocalRealmForeign,
+            // `ActrUriError` is `#[non_exhaustive]`; future variants surface
+            // as a label rejection until they get a dedicated mapping.
+            _ => Self::UriLabelInvalid,
+        }
+    }
+}
+
+/// Parsed `actr://` Realm link or Actor address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActrUriInfo {
+    /// Lowercase IDNA A-label domain, or `<installation-id>.actr.alt`.
+    pub domain: String,
+    pub realm_id: Option<String>,
+    pub serial: Option<String>,
+    /// Whether the link targets this installation's local Realm.
+    pub is_local: bool,
+    /// `https://<domain>/.well-known/actr`; `None` for a local Realm.
+    pub discovery_url: Option<String>,
+}
+
+/// Generate a fresh installation id: 16 bytes from the OS CSPRNG encoded as
+/// 26 unpadded lowercase RFC 4648 base32 characters.
+///
+/// The shape is the one `ActrUri`'s domain parser enforces for every
+/// `<installation-id>.actr.alt` domain. Platforms call this once on first
+/// use and own the persistence; later reads should be re-checked with
+/// `validate_installation_id`.
+pub fn generate_installation_id() -> String {
+    use rand::RngCore;
+
+    let mut bytes = [0u8; 16];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    encode_base32_lowercase(&bytes)
+}
+
+/// Validate an installation id against the `.actr.alt` domain rules.
+pub fn validate_installation_id(id: String) -> Result<(), CoreError> {
+    let valid = id.len() == 26
+        && id.bytes().all(|byte| matches!(byte, b'a'..=b'z' | b'2'..=b'7'));
+    if valid {
+        Ok(())
+    } else {
+        Err(CoreError::InvalidInstallationId)
+    }
+}
+
+/// Lowercase RFC 4648 base32 without padding. 16 bytes yield exactly 26
+/// characters, matching the shape `ActrUri::normalize_domain` accepts.
+fn encode_base32_lowercase(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
+    let mut output = String::with_capacity((bytes.len() * 8 + 4) / 5);
+    let mut buffer = 0u32;
+    let mut bits = 0u32;
+    for &byte in bytes {
+        buffer = (buffer << 8) | u32::from(byte);
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            output.push(ALPHABET[((buffer >> bits) & 0x1f) as usize] as char);
+        }
+    }
+    if bits > 0 {
+        output.push(ALPHABET[((buffer << (5 - bits)) & 0x1f) as usize] as char);
+    }
+    output
+}
+
+/// Parse and validate an `actr://` Realm link or Actor address.
+///
+/// Layer-0 verification-funnel step: zero network access. Delegates to
+/// `realm_link::open_realm_link`, which validates installation ownership and
+/// rejects authority-only URIs, then dispatches a matching local Realm to
+/// `open_local` and a DNS Realm to `discover_remote`. Both arms produce the
+/// same shape; `is_local` tells the shell which follow-up flow applies.
+pub fn parse_actr_uri(
+    uri: String,
+    installation_id: String,
+) -> Result<ActrUriInfo, CoreError> {
+    realm_link::open_realm_link::<ActrUriInfo, CoreError>(
+        &uri,
+        &installation_id,
+        // Matching local Realm: resolved from local records only, never via
+        // network discovery.
+        |parsed| {
+            Ok(ActrUriInfo {
+                domain: parsed.domain().to_string(),
+                realm_id: parsed.realm_id().map(ToOwned::to_owned),
+                serial: parsed.serial().map(ToOwned::to_owned),
+                is_local: true,
+                discovery_url: parsed.discovery_url(),
+            })
+        },
+        // DNS Realm: the discovery URL feeds the next funnel step.
+        |parsed| {
+            Ok(ActrUriInfo {
+                domain: parsed.domain().to_string(),
+                realm_id: parsed.realm_id().map(ToOwned::to_owned),
+                serial: parsed.serial().map(ToOwned::to_owned),
+                is_local: false,
+                discovery_url: parsed.discovery_url(),
+            })
+        },
+    )
 }
 
 pub fn validate_actr_package_manifest(source: String) -> Result<(), CoreError> {
@@ -4666,5 +4796,112 @@ mod tests {
             "b1a55027d4e0bb5d"
         );
         assert_eq!(stable_content_fingerprint("".to_string()).len(), 16);
+    }
+
+    /// A well-formed installation id: 26 lowercase base32 characters
+    /// (`a-z`, `2-7`), matching `ActrUri`'s `.actr.alt` domain rules.
+    const INSTALLATION_ID: &str = "qscmfu5tbhyeowlknav3zrij4x";
+
+    #[test]
+    fn parse_actr_uri_reads_realm_and_actor_links() {
+        let realm =
+            parse_actr_uri("actr://Acme.COM/k7m2q9xh".to_string(), INSTALLATION_ID.to_string())
+                .unwrap();
+        assert_eq!(realm.domain, "acme.com");
+        assert_eq!(realm.realm_id.as_deref(), Some("k7m2q9xh"));
+        assert_eq!(realm.serial, None);
+        assert!(!realm.is_local);
+        assert_eq!(
+            realm.discovery_url.as_deref(),
+            Some("https://acme.com/.well-known/actr")
+        );
+
+        let actor = parse_actr_uri(
+            "actr://acme.com/2af01.k7m2q9xh/notes?x=1#frag".to_string(),
+            INSTALLATION_ID.to_string(),
+        )
+        .unwrap();
+        assert_eq!(actor.realm_id.as_deref(), Some("k7m2q9xh"));
+        assert_eq!(actor.serial.as_deref(), Some("2af01"));
+    }
+
+    #[test]
+    fn parse_actr_uri_resolves_owned_local_realm() {
+        let local = parse_actr_uri(
+            "actr://qscmfu5tbhyeowlknav3zrij4x.actr.alt/k7m2q9xh".to_string(),
+            INSTALLATION_ID.to_string(),
+        )
+        .unwrap();
+        assert!(local.is_local);
+        assert_eq!(local.discovery_url, None);
+    }
+
+    #[test]
+    fn parse_actr_uri_rejects_foreign_local_realm() {
+        let error = parse_actr_uri(
+            "actr://aaaaaaaaaaaaaaaaaaaaaaaaaa.actr.alt/k7m2q9xh".to_string(),
+            INSTALLATION_ID.to_string(),
+        )
+        .unwrap_err();
+        assert!(matches!(error, CoreError::UriLocalRealmForeign));
+    }
+
+    #[test]
+    fn parse_actr_uri_rejects_authority_only_uri_without_realm_id() {
+        // Mirrors `realm_link::open_realm_link`: a Realm link must name an
+        // instance; an authority-only URI is not openable.
+        let error =
+            parse_actr_uri("actr://acme.com".to_string(), INSTALLATION_ID.to_string()).unwrap_err();
+        assert!(matches!(error, CoreError::UriLabelInvalid));
+    }
+
+    #[test]
+    fn parse_actr_uri_rejects_bad_scheme_and_legacy_forms() {
+        let scheme =
+            parse_actr_uri("https://acme.com/k7m2q9xh".to_string(), INSTALLATION_ID.to_string())
+                .unwrap_err();
+        assert!(matches!(scheme, CoreError::UriSchemeInvalid));
+
+        // A legacy form must be rejected, never silently normalized:
+        // `actr://<publisher>/<program>@<version>` (uri.rs `is_legacy`).
+        let legacy =
+            parse_actr_uri("actr://acme.com/counter@1.0.0".to_string(), INSTALLATION_ID.to_string())
+                .unwrap_err();
+        assert!(matches!(legacy, CoreError::UriLegacyForm));
+
+        // Ports are not a legacy form; they are a plain domain rejection.
+        let port =
+            parse_actr_uri("actr://acme.com:8443/k7m2q9xh".to_string(), INSTALLATION_ID.to_string())
+                .unwrap_err();
+        assert!(matches!(port, CoreError::UriDomainInvalid));
+    }
+
+    #[test]
+    fn parse_actr_uri_rejects_invalid_labels() {
+        let label =
+            parse_actr_uri("actr://acme.com/Bad_Label".to_string(), INSTALLATION_ID.to_string())
+                .unwrap_err();
+        assert!(matches!(label, CoreError::UriLabelInvalid));
+    }
+
+    #[test]
+    fn generated_installation_id_roundtrips_through_validation_and_parsing() {
+        let id = generate_installation_id();
+        validate_installation_id(id.clone()).unwrap();
+
+        // A generated id opens its own local Realm link end to end.
+        let link = format!("actr://{id}.actr.alt/k7m2q9xh");
+        let local = parse_actr_uri(link, id).unwrap();
+        assert!(local.is_local);
+        assert_eq!(local.discovery_url, None);
+    }
+
+    #[test]
+    fn validate_installation_id_rejects_malformed_ids() {
+        assert!(validate_installation_id("short".to_string()).is_err());
+        assert!(validate_installation_id("QSCMFU5TBHYEOWLKNAV3ZRIJ4X".to_string()).is_err());
+        // `0`, `1`, `8`, `9` are outside the base32 `a-z` + `2-7` alphabet.
+        assert!(validate_installation_id("qscmfu5tbhyeowlknav3zrij08".to_string()).is_err());
+        assert!(validate_installation_id(INSTALLATION_ID.to_string()).is_ok());
     }
 }

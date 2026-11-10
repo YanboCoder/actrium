@@ -7,6 +7,23 @@ namespace actrium_core {
     [Throws=CoreError]
     void validate_actr_package_manifest(string source);
 
+    /// Generate a fresh installation id: 26 lowercase base32 characters
+    /// from 16 OS-CSPRNG bytes. Platforms persist the value once and own
+    /// the storage.
+    string generate_installation_id();
+
+    /// Validate an installation id against the `.actr.alt` domain rules.
+    [Throws=CoreError]
+    void validate_installation_id(string id);
+
+    /// Parse and validate an `actr://` Realm link or Actor address.
+    ///
+    /// Layer-0 verification-funnel step: zero network. Delegates to
+    /// `realm_link::open_realm_link`; `installation_id` is this
+    /// installation's local Realm id (26 lowercase base32 characters).
+    [Throws=CoreError]
+    ActrUriInfo parse_actr_uri(string uri, string installation_id);
+
     /// Evaluate a contract tuple using the current Actrium host compatibility rules.
     ContractGateInfo evaluate_contract(string? name, u32 version);
 
@@ -964,6 +981,18 @@ dictionary ActrPackageManifestInfo {
     string? theme_color;
 };
 
+/// Parsed `actr://` Realm link or Actor address.
+dictionary ActrUriInfo {
+    /// Lowercase IDNA A-label domain, or `<installation-id>.actr.alt`.
+    string domain;
+    string? realm_id;
+    string? serial;
+    /// Whether the link targets this installation's local Realm.
+    boolean is_local;
+    /// `https://<domain>/.well-known/actr`; null for a local Realm.
+    string? discovery_url;
+};
+
 enum ContractGateStatus {
     "Ok",
     "Compat",
@@ -1466,4 +1495,10 @@ enum CoreError {
     "UnknownSystemAppType",
     "UnknownAppSourceType",
     "InvalidActrActorType",
+    "UriSchemeInvalid",
+    "UriDomainInvalid",
+    "UriLabelInvalid",
+    "UriLegacyForm",
+    "UriLocalRealmForeign",
+    "InvalidInstallationId",
 };

@@ -1,6 +1,7 @@
 import Foundation
 import AppKit // Import AppKit for NSImage
 import Combine
+import ActriumCore
 
 private let logger = AppLogger.viewModel
 
@@ -681,6 +682,23 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
 
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // 0. Realm link resolution — the address bar only accepts actr://
+        // links; the core parser owns that decision (case-insensitive scheme,
+        // format rules, local-Realm ownership) and every other input is
+        // rejected as invalid.
+        do {
+            let info = try ActriumCore.parseActrUri(
+                uri: trimmed,
+                installationId: InstallationIdProvider.getOrCreate()
+            )
+            handleResolvedRealmLink(info, input: trimmed, tabIndex: index)
+            return
+        } catch {
+            logger.warning("⚠️ [navigateCurrentTab] input rejected: \(error)")
+            presentRealmLinkError(error)
+            return
+        }
+
         // 1. Check for local file path
         if isLocalFilePath(trimmed) {
             let fileURL = URL(fileURLWithPath: trimmed).standardizedFileURL
@@ -899,6 +917,85 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         } catch {
             logger.error("❌ [loadActrPackageIntoCurrentTab] Loading failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Handle a Realm link already resolved by `ActriumCore.parseActrUri`
+    /// (which delegates to `realm_link::open_realm_link` for ownership and
+    /// dispatch). Realm discovery and package download are out of scope for
+    /// this milestone: a resolved link currently updates the tab and logs
+    /// the follow-up step. Opening a local Realm instance is also not wired
+    /// yet and is reported as such.
+    private func handleResolvedRealmLink(
+        _ info: ActrUriInfo,
+        input: String,
+        tabIndex: Int
+    ) {
+        // The core parser guarantees a RealmId for every resolved link.
+        guard let realmId = info.realmId else { return }
+
+        let realmDisplay: String
+        if let serial = info.serial {
+            realmDisplay = "\(serial).\(realmId)@\(info.domain)"
+        } else {
+            realmDisplay = "\(realmId)@\(info.domain)"
+        }
+        logger.notice("🔗 [navigateCurrentTab] Resolved actr:// link: \(realmDisplay), local=\(info.isLocal)")
+        if info.isLocal {
+            logger.notice("ℹ️ [navigateCurrentTab] Opening a local Realm instance is not wired yet.")
+        } else if let discoveryURL = info.discoveryUrl {
+            logger.notice("ℹ️ [navigateCurrentTab] Realm discovery is not wired yet; next step would fetch \(discoveryURL)")
+        }
+
+        tabs[tabIndex].title = realmDisplay
+        tabs[tabIndex].url = URL(string: input)
+        tabs[tabIndex].appId = nil
+        tabs[tabIndex].systemTabType = nil
+        tabs[tabIndex].htmlContent = nil
+        tabs[tabIndex].unifiedScript = nil
+        tabs[tabIndex].leftPanelScript = nil
+        tabs[tabIndex].rightPanelScript = nil
+        tabs[tabIndex].guestScript = nil
+        tabs[tabIndex].contractName = nil
+        objectWillChange.send()
+        persistBrowserPageSession()
+    }
+
+    /// Surface a rejected actr:// link with variant-specific copy.
+    private func presentRealmLinkError(_ error: Error) {
+        let message: String
+        switch error {
+        case CoreError.UriSchemeInvalid:
+            message = NSLocalizedString(
+                "Only actr:// links are supported here.",
+                comment: "Actr URI scheme error")
+        case CoreError.UriDomainInvalid:
+            message = NSLocalizedString(
+                "The domain in this link is not a valid Realm domain.",
+                comment: "Actr URI domain error")
+        case CoreError.UriLabelInvalid:
+            message = NSLocalizedString(
+                "The RealmId or ActorId in this link is missing or invalid.",
+                comment: "Actr URI label error")
+        case CoreError.UriLegacyForm:
+            message = NSLocalizedString(
+                "This link uses an outdated address format that is no longer supported.",
+                comment: "Actr URI legacy form error")
+        case CoreError.UriLocalRealmForeign:
+            message = NSLocalizedString(
+                "This local Realm belongs to a different installation.",
+                comment: "Actr URI foreign local Realm error")
+        default:
+            message = "\(error)"
+        }
+        presentRealmLinkMessage(message)
+    }
+
+    private func presentRealmLinkMessage(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("Invalid Actr Link", comment: "Actr URI error title")
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 
     /// Checks whether input is a local file path

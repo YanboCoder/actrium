@@ -1685,6 +1685,121 @@ public func FfiConverterTypeActrPackageManifestInfo_lower(_ value: ActrPackageMa
 }
 
 
+/**
+ * Parsed `actr://` Realm link or Actor address.
+ */
+public struct ActrUriInfo {
+    /**
+     * Lowercase IDNA A-label domain, or `<installation-id>.actr.alt`.
+     */
+    public var domain: String
+    public var realmId: String?
+    public var serial: String?
+    /**
+     * Whether the link targets this installation's local Realm.
+     */
+    public var isLocal: Bool
+    /**
+     * `https://<domain>/.well-known/actr`; null for a local Realm.
+     */
+    public var discoveryUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Lowercase IDNA A-label domain, or `<installation-id>.actr.alt`.
+         */domain: String, realmId: String?, serial: String?,
+        /**
+         * Whether the link targets this installation's local Realm.
+         */isLocal: Bool,
+        /**
+         * `https://<domain>/.well-known/actr`; null for a local Realm.
+         */discoveryUrl: String?) {
+        self.domain = domain
+        self.realmId = realmId
+        self.serial = serial
+        self.isLocal = isLocal
+        self.discoveryUrl = discoveryUrl
+    }
+}
+
+#if compiler(>=6)
+extension ActrUriInfo: Sendable {}
+#endif
+
+
+extension ActrUriInfo: Equatable, Hashable {
+    public static func ==(lhs: ActrUriInfo, rhs: ActrUriInfo) -> Bool {
+        if lhs.domain != rhs.domain {
+            return false
+        }
+        if lhs.realmId != rhs.realmId {
+            return false
+        }
+        if lhs.serial != rhs.serial {
+            return false
+        }
+        if lhs.isLocal != rhs.isLocal {
+            return false
+        }
+        if lhs.discoveryUrl != rhs.discoveryUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(domain)
+        hasher.combine(realmId)
+        hasher.combine(serial)
+        hasher.combine(isLocal)
+        hasher.combine(discoveryUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeActrUriInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActrUriInfo {
+        return
+            try ActrUriInfo(
+                domain: FfiConverterString.read(from: &buf),
+                realmId: FfiConverterOptionString.read(from: &buf),
+                serial: FfiConverterOptionString.read(from: &buf),
+                isLocal: FfiConverterBool.read(from: &buf),
+                discoveryUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ActrUriInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.domain, into: &buf)
+        FfiConverterOptionString.write(value.realmId, into: &buf)
+        FfiConverterOptionString.write(value.serial, into: &buf)
+        FfiConverterBool.write(value.isLocal, into: &buf)
+        FfiConverterOptionString.write(value.discoveryUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActrUriInfo_lift(_ buf: RustBuffer) throws -> ActrUriInfo {
+    return try FfiConverterTypeActrUriInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActrUriInfo_lower(_ value: ActrUriInfo) -> RustBuffer {
+    return FfiConverterTypeActrUriInfo.lower(value)
+}
+
+
 public struct AppSourceTypeInfo {
     public var kind: String
     public var displayName: String
@@ -6026,6 +6141,18 @@ public enum CoreError: Swift.Error {
 
     case InvalidActrActorType(message: String)
 
+    case UriSchemeInvalid(message: String)
+
+    case UriDomainInvalid(message: String)
+
+    case UriLabelInvalid(message: String)
+
+    case UriLegacyForm(message: String)
+
+    case UriLocalRealmForeign(message: String)
+
+    case InvalidInstallationId(message: String)
+
 }
 
 
@@ -6070,6 +6197,30 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
 
+        case 8: return .UriSchemeInvalid(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 9: return .UriDomainInvalid(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 10: return .UriLabelInvalid(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 11: return .UriLegacyForm(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 12: return .UriLocalRealmForeign(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 13: return .InvalidInstallationId(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -6095,6 +6246,18 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
         case .InvalidActrActorType(_ /* message is ignored*/):
             writeInt(&buf, Int32(7))
+        case .UriSchemeInvalid(_ /* message is ignored*/):
+            writeInt(&buf, Int32(8))
+        case .UriDomainInvalid(_ /* message is ignored*/):
+            writeInt(&buf, Int32(9))
+        case .UriLabelInvalid(_ /* message is ignored*/):
+            writeInt(&buf, Int32(10))
+        case .UriLegacyForm(_ /* message is ignored*/):
+            writeInt(&buf, Int32(11))
+        case .UriLocalRealmForeign(_ /* message is ignored*/):
+            writeInt(&buf, Int32(12))
+        case .InvalidInstallationId(_ /* message is ignored*/):
+            writeInt(&buf, Int32(13))
 
 
         }
@@ -8284,6 +8447,17 @@ public func extractAppIdFromUrl(url: String) -> String?  {
 })
 }
 /**
+ * Generate a fresh installation id: 26 lowercase base32 characters
+ * from 16 OS-CSPRNG bytes. Platforms persist the value once and own
+ * the storage.
+ */
+public func generateInstallationId() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_actrium_core_fn_func_generate_installation_id($0
+    )
+})
+}
+/**
  * Return whether the path points to a known ACTR asset extension.
  */
 public func isAssetPath(path: String) -> Bool  {
@@ -8460,6 +8634,21 @@ public func parseActrPackageManifest(source: String)throws  -> ActrPackageManife
     return try  FfiConverterTypeActrPackageManifestInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
     uniffi_actrium_core_fn_func_parse_actr_package_manifest(
         FfiConverterString.lower(source),$0
+    )
+})
+}
+/**
+ * Parse and validate an `actr://` Realm link or Actor address.
+ *
+ * Layer-0 verification-funnel step: zero network. Delegates to
+ * `realm_link::open_realm_link`; `installation_id` is this
+ * installation's local Realm id (26 lowercase base32 characters).
+ */
+public func parseActrUri(uri: String, installationId: String)throws  -> ActrUriInfo  {
+    return try  FfiConverterTypeActrUriInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_actrium_core_fn_func_parse_actr_uri(
+        FfiConverterString.lower(uri),
+        FfiConverterString.lower(installationId),$0
     )
 })
 }
@@ -9018,6 +9207,15 @@ public func validateActrPackageManifest(source: String)throws   {try rustCallWit
     )
 }
 }
+/**
+ * Validate an installation id against the `.actr.alt` domain rules.
+ */
+public func validateInstallationId(id: String)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_actrium_core_fn_func_validate_installation_id(
+        FfiConverterString.lower(id),$0
+    )
+}
+}
 
 private enum InitializationResult {
     case ok
@@ -9529,6 +9727,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_actrium_core_checksum_func_extract_app_id_from_url() != 65157) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_actrium_core_checksum_func_generate_installation_id() != 33456) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_actrium_core_checksum_func_is_asset_path() != 48112) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9578,6 +9779,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_actrium_core_checksum_func_parse_actr_package_manifest() != 53207) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_actrium_core_checksum_func_parse_actr_uri() != 57552) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_actrium_core_checksum_func_parse_app_source_type() != 15889) {
@@ -9791,6 +9995,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_actrium_core_checksum_func_validate_actr_package_manifest() != 38515) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_actrium_core_checksum_func_validate_installation_id() != 9871) {
         return InitializationResult.apiChecksumMismatch
     }
 
