@@ -65,6 +65,9 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
     /// Notice for formal actr:// addresses (realm resolution pending in prototype).
     @Published var actrUriNotice: ActrUriNotice?
 
+    /// actr:// link awaiting invite-code redemption (临时方案 sheet presented).
+    @Published var pendingInviteRedeem: PendingInviteRedeem?
+
     /// Current download task handle, kept for cancellation.
     private var packageDownloadTask: Task<Void, Never>?
 
@@ -711,7 +714,10 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 uri: trimmed,
                 installationId: InstallationIdProvider.getOrCreate()
             )
-            handleResolvedRealmLink(info, input: trimmed, tabIndex: index)
+            // 临时方案:打开任何 actr:// 链接前先要求邀请码。兑换后由 Rust
+            // 提供的方法接管后续流程(FFI 未接入前不直接进入解析流程)。
+            guard pendingInviteRedeem == nil else { return }
+            pendingInviteRedeem = PendingInviteRedeem(uri: trimmed, domain: info.domain)
             return
         } catch {
             logger.warning("⚠️ [navigateCurrentTab] input rejected: \(error)")
@@ -894,6 +900,27 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
 
     func cancelInstanceCreation() {
         pendingInstanceCreation = nil
+    }
+
+    // MARK: - Invite Code Redemption (临时方案)
+    // Address-bar actr:// links are gated behind an invite-code sheet; 兑换
+    // hands over to the Rust-provided method for the follow-up flow.
+
+    func cancelInviteRedeem() {
+        pendingInviteRedeem = nil
+    }
+
+    /// 兑换:调用 Rust 提供的方法处理后续流程(FFI 接入点,当前为占位)。
+    func confirmInviteRedeem(code: String) {
+        guard let pending = pendingInviteRedeem else { return }
+        pendingInviteRedeem = nil
+        let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedCode.isEmpty else { return }
+        // TODO(rust-ffi): 调用 Rust 提供的兑换方法(入参 pending.uri + 邀请码),
+        // 由它接管后续流程(验证/发现/打开)。
+        logger.notice(
+            "🎟️ [InviteRedeem] redeem requested for \(pending.uri), code length \(trimmedCode.count) — rust FFI TODO"
+        )
     }
 
     func confirmInstanceCreation() {

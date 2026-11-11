@@ -307,3 +307,102 @@ struct ActrUriNoticeSheet: View {
         .frame(width: 460)
     }
 }
+
+/// 邀请码兑换弹窗(临时方案):地址栏输入 actr:// 链接后先弹出本弹窗填写
+/// 邀请码;点击「兑换」后由 Rust 提供的方法接管后续流程。
+struct InviteCodeRedeemSheet: View {
+    let pending: PendingInviteRedeem
+    let onConfirm: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var inviteCode: String = ""
+
+    private var trimmedCode: String {
+        inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("邀请码兑换")
+                    .font(.headline)
+                Spacer()
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 14) {
+                // Domain — the trust root shown for confirmation (04 §3)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("来源域名")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(pending.domain.isEmpty ? "未知" : pending.domain)
+                        .font(.title3.weight(.semibold))
+                        .textSelection(.enabled)
+                }
+
+                // Target — the actr:// link being redeemed
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("目标地址")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(pending.uri)
+                        .font(.caption.monospaced())
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+
+                // Invite code input
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("邀请码")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    TextField("请输入邀请码", text: $inviteCode)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospaced())
+                        .autocorrectionDisabled()
+                        .onSubmit { confirm() }
+                }
+
+                Label {
+                    Text("打开该地址需要邀请码。点击「兑换」后由 Actrium 校验邀请码并继续打开。")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } icon: {
+                    Image(systemName: "ticket")
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding()
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("取消", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("兑换", action: confirm)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(trimmedCode.isEmpty)
+            }
+            .padding()
+        }
+        .frame(width: 460)
+    }
+
+    private func confirm() {
+        guard !trimmedCode.isEmpty else { return }
+        onConfirm(trimmedCode)
+    }
+}
