@@ -7,7 +7,7 @@ The distribution design must keep three things separate:
 | Layer | Identifier | What it proves |
 |---|---|---|
 | Publisher | Normalized domain name | Who currently controls the publishing entry point |
-| Program Release | `publisher/program@version` + digest | Which immutable set of bytes to run |
+| Program Release | `publisher/program@version` with pinned Service and Front digests | Which two archives make up the release |
 | Service | ActorId + Actor credential | Which running instance is currently being talked to |
 
 HTTPS cannot prove a program is not malicious; Marketplace review cannot prove an Actor's identity on the network; an Actor credential cannot prove that the Guest loaded locally is the correct version either.
@@ -67,7 +67,7 @@ An offline root is a strongly recommended Publisher operating practice, but whet
 
 Control of a domain only determines the future publishing entry point; it must not silently rewrite history:
 
-- an already-installed `Program Release + digest + signing key` can keep running offline;
+- an installed release can run offline with its verified release record and both pinned packages.
 - when a new key has no verifiable rotation chain from the historical key, treat it as a Publisher ownership change;
 - an already-installed version must not change just because the current domain now returns a different package;
 - a new install or update must display the identity change;
@@ -75,47 +75,63 @@ Control of a domain only determines the future publishing entry point; it must n
 
 ## 3. Where a package comes from
 
-The platform is not responsible for "find the package by program name." A package has only two sources:
+A Publisher-signed Program Release record pairs the Front and Service packages by download
+address, SHA-256 digest, and Actor type. Actrium verifies the record against the Publisher's
+trusted keys and verifies each package independently. See the
+[signed record example](12-reference-spec.md#31-signed-program-release-record).
 
-- **Opening an instance**: the Realm Profile's `package` gives the download address, SHA-256 and Actor type ([Actr Realm Profile](../../../actr/protocols/realm-profile.md));
-- **Creating an instance**: the user selects one from the Program Catalog, the Marketplace, a local file, or a package address. Discovering programs and checking for new versions is the Marketplace's and the Publisher's own channel.
+- **Opening an instance.** The Realm Profile's `package` pins the Service package. Match its
+  Actor type and digest to a verified Program Release record to find the Front package.
+  Actrium uses the installed record or obtains it from the Publisher or a Marketplace.
+  See the [Actr Realm Profile](../../../actr/protocols/realm-profile.md).
+- **Creating an instance.** The user selects a release from the Program Catalog, the Marketplace,
+  or a Publisher source. For local development, Actrium can verify and record the pair of
+  archives explicitly supplied by the user under local trust policy.
 
-Whatever the source, verification is the same: check the SHA-256, then verify the package signature with the Publisher Profile's package signing key (§8). Where the download address is hosted has no bearing on security.
+## 4. Service and Front packages
 
-## 4. One Program Release, one `.actr` package
+### 4.1 Package boundaries
 
-### 4.1 What the package is responsible for
+Each Program Release binds two independently signed `actr-package/2` archives. Each manifest
+declares one Actor type and one Workload under the
+[Actor Package protocol](../../../actr/protocols/actor-package.zh.md) (Chinese).
+During verification, the record's `service` and `front` members select the expected package role
+and the Host checks the Workload Profile against that role and the distribution policy.
 
-Actrium's Program Release directly reuses the Actr `.actr` package:
+- **Service package.** `[workload]` selects the Service executable. The Realm Profile's `package`
+  points to this archive. A Marketplace Service uses `actr.component/1`.
+- **Front package.** `[workload]` selects the Keel Guest under `keel.guest/1`.
+  `[workload.keel]` names its runtime, capability manifest, and Keel contract.
+  Product v1 reserves the `service` dependency alias in the Front manifest. It must declare
+  `required = true`. Its `actor` and `version` constraint must match the Service pinned by the release record.
 
-- the executable body is the Service workload;
-- Keel Guest is a signed package resource;
-- the Front–Service proto/contract is a signed package resource;
-- icons, static assets and default configuration go into the resource area;
-- Actrium extension fields declare the front-end entry point, permissions, components, Workspace and compatibility range.
-
-Actrium does not invent a second installer layer wrapped around `.actr`.
+Each package's entry has role `workload`. The Guest capability manifest has role `profile`,
+the Keel and Proto contract files have role `contract`, and icons and static assets have role `resource`.
 
 ### 4.2 Recommended layout
 
 ```text
-package.actr
+team-notes.actr
 ├── manifest.toml
 ├── manifest.sig
-├── manifest.lock.toml
-├── bin/
+├── workload/
 │   └── service.wasm
-├── ui/
-│   ├── guest.bundle.js
-│   └── capability-manifest.json
-├── proto/
-│   └── service.proto
-└── assets/
-    ├── icon.png
-    └── ...
+└── contracts/
+    └── service.proto
+
+team-notes-front.actr
+├── manifest.toml
+├── manifest.sig
+├── workload/
+│   ├── guest.js
+│   └── capabilities.json
+└── contracts/
+    ├── notes.json
+    └── service.proto
 ```
 
-The manifest signature must bind the hashes of all resources, so replacing the Guest, the contract or the icon all change the package digest.
+Each manifest signature binds the hashes of its own payloads. The release record binds the two
+package digests to the Program Release.
 
 ### 4.3 What a package must not contain
 
@@ -129,7 +145,7 @@ A formal third-party package must not contain:
 - executable scripts not listed in the manifest;
 - a Guest entry point that is swapped in from the network at runtime.
 
-A Publisher may only supply the Guest and its declarations; the Actr Host implementation always ships with the Actrium client.
+The Actrium client supplies the Front Host. The Publisher supplies the Keel Guest Workload and its declarations in the Front package.
 
 ## 5. Service workload policy
 
@@ -180,63 +196,33 @@ v1 does not introduce a special case for "a page app with no Service." The toolc
 
 So every app Tab still uniformly Attaches to a Service; the only difference is whether that Service contains custom logic.
 
-## 6. Actrium Manifest extensions
+## 6. Package manifest fields
 
-The Actr base manifest continues to provide:
+The Actr base manifest provides the following tables.
 
-- publisher;
-- name/program;
-- version;
-- binary target/kind/hash;
-- Ed25519 signature and key id;
-- resources;
-- proto files;
-- dependency lock.
+- `[actor]` for Publisher, program name, and release version.
+- `[workload]` for each package's profile and entry, and `[host]` for its Host API and capability requirements.
+- `[dependencies.<alias>]` for required Actor types, version constraints, and contract paths.
+- `[signature]` for the signature algorithm and `key-id`.
+- `[[files]]` for payload roles, sizes, and SHA-256 hashes, including any lock file.
+- `[workspace]` in the Service manifest for static `requirement`, `access`, and `providers` declarations.
 
-Actrium adds:
+For a Product v1 pair, `dependencies.service.contract` selects the RPC Proto by package-relative path.
+During pair verification, both Hosts read this selector from the verified Front manifest.
+The Service Host obtains the paired Front manifest through the signed release record and retains
+the verified selector for Attach, then reads the selected Proto from its own verified Service archive.
+Both manifests must declare the file at that path with role `contract` and the same SHA-256.
+The explicit path selects the RPC contract when the archives carry other contract files. Actr Host
+derives the Attach fingerprint as described in [06 §2.2](06-runtime-and-protocol.md#22-front-actor-type).
 
-```toml
-[actrium]
-schema_version = 1
-min_actrium_version = "1.0.0"
-front_host_api = "^1.0"
-service_host_api = "^1.0"
+Service nodes use the existing Actr `actr.toml` schema for deployment settings such as Realm,
+signaling, and trust. The [node configuration definition](../../../crates/actr-config/src/actr_raw.rs)
+describes these fields. Workspace requirements come from the signed Service manifest's `[workspace]`
+table. The deployment or creation flow selects `provisioning`, and the Host stores the binding and grant per instance.
 
-[actrium.front]
-guest_runtime = "keel-js"
-guest_entry = "ui/guest.bundle.js"
-keel_api = "^1.0"
-contract_manifest = "ui/capability-manifest.json"
-contract_digest = "sha256:..."
+See both manifests in the [Reference Specification](12-reference-spec.md#4-actr-manifest).
 
-[actrium.service]
-contract = "proto/service.proto"
-protocol_fingerprint = "sha256:..."
-
-[actrium.service.workspace]
-requirement = "required"
-provisioning = "user-selected"
-access = "read-write"
-providers = ["managed-store", "local-folder", "cloud-drive"]
-lease = "exclusive-writer"
-
-[actrium.session]
-attachment_policy = "exclusive"
-
-[actrium.privacy]
-schema_version = 1
-data_classes = ["public", "private", "secret"]
-default_unknown_action = "block-private-and-secret"
-
-[[actrium.privacy.actor_egress]]
-actr_type = "notes.example/index-worker@1.4.2"
-required = false
-data_classes = ["private"]
-```
-
-See the full example in [Reference Specification](12-reference-spec.md).
-
-## 7. Permission, component and quota declarations
+## 7. Capability declarations and runtime policy
 
 What a package declares is a "request," not an actual grant:
 
@@ -249,7 +235,15 @@ effective capabilities =
   ∩ current session scope
 ```
 
-The manifest must declare at least:
+The Actr Host evaluates the following as product policy. Package capability requirements come
+from `[host]`, and Guest declarations come from its signed Keel capability manifest.
+The signed Service manifest declares Workspace requirements. Deployment and authorization supply
+the instance-specific settings and grants.
+Guest heap, execution time, render-operation limits, and Service memory, fuel, storage, and network
+quotas come from platform or deployment policy and are enforced by the Host.
+Minimum Actrium client and supported SDK/toolchain versions are platform release policy.
+Package compatibility is checked through `host.api`, `workload.profile`, `workload.keel.guest-api`,
+and the verified RPC contract fingerprint.
 
 - Front capability;
 - Service capability;
@@ -259,7 +253,7 @@ The manifest must declare at least:
 - Workspace access mode;
 - Guest heap, single-execution time, render ops;
 - Service memory/fuel/storage/network;
-- minimum Actr Host/SDK/contract version;
+- Host API and Workload/Guest contract compatibility under the supported platform toolchain;
 - data classes, expected Actor egress, terminal egress, required/optional, and the minimum node conclusion.
 
 Adding a new high-risk permission requires a new version, and reconfirmation at upgrade time.
@@ -269,14 +263,9 @@ The Privacy Declaration is a static allowlist and installation notice, not the a
 ## 8. Download and verification pipeline
 
 ```text
-Realm Profile package / user-selected package
-  → HTTPS download
-  → package digest
-  → package signature/key history
-  → ZIP structural limits
-  → manifest identity
-  → every file hash
-  → ABI/contract/import validation
+Realm Profile package / user-selected release
+  → verify the Program Release and its Service package
+  → verify the Front package and its Service dependency
   → policy + permission review
   → content-addressed cache
   → Service Runtime / verified Guest bytes
@@ -284,20 +273,33 @@ Realm Profile package / user-selected package
 
 ### 8.1 Check order
 
+First verify the Program Release record under [12 §3.1](12-reference-spec.md#31-signed-program-release-record).
+Check its schema, `release_id = service.type`, distinct Service and Front Actor types under the
+declared Publisher, and the JCS/Ed25519 signature with the accepted Publisher key.
+Compare its immutable package and Privacy Contract bindings with any previously accepted record.
+On Realm entry, also match `service.type` and `service.sha256` to the verified Realm Profile.
+
+Then apply the following checks independently to the archive named by each `service` or `front`
+member. Match its Actor type and SHA-256 to that member, and resolve the Front's
+`dependencies.service` against the verified Service package.
+
 1. verify the Publisher's DNS/IDNA;
 2. TLS and hostname;
 3. download size limit;
 4. package SHA-256;
-5. the Publisher Profile of the publisher declared in the manifest;
-6. Ed25519 key id and signature;
-7. ZIP path, file count, compression ratio and total decompressed size;
-8. the manifest's publisher/program/version;
-9. binary kind/target;
-10. every resource/proto/lock hash;
-11. the Guest's static dependencies and capability manifest;
-12. the Service WASM imports;
-13. Host API, Keel API and contract compatibility;
+5. ZIP paths, STORE method, file count, and size limits.
+6. The `actr-package/2` format and `signature.key-id`.
+7. The Publisher Profile of the Publisher declared in the manifest.
+8. The Ed25519 signature.
+9. The signed Actor identity and entry, and whether the Workload Profile matches the record's package role and distribution policy under §4.1.
+10. The exact ZIP inventory, sizes, and SHA-256 hashes against `[[files]]`.
+11. For the Front package, the Guest's static dependencies and capability manifest.
+12. For a WASM Service package, its WASM imports.
+13. Host API, Keel API and compatibility between the Front's expected Service contract and the Service package;
 14. local/organizational security policy.
+
+For any declared Privacy Contract, verify its exact-byte SHA-256 against the signed record,
+then check its release and both package bindings before using its policy for authorization.
 
 If any step fails, no part of the content may be handed to the Keel or Service runtime.
 
@@ -305,7 +307,7 @@ If any step fails, no part of the content may be handed to the Keel or Service r
 
 Keel's `Engine.loadBundle(URL)` is only a loading mechanism, not an installation trust mechanism. Actrium must:
 
-1. download and verify the package itself;
+1. independently verify the Front package pinned by the verified Program Release record.
 2. read the already-verified Guest bytes from the content-addressed cache;
 3. hand the local bytes/code to Keel;
 4. forbid the Guest from specifying an alternate URL at startup.
@@ -315,18 +317,21 @@ Keel's `Engine.loadBundle(URL)` is only a loading mechanism, not an installation
 Actrium stores locally under the following composite key:
 
 ```text
-(publisher, program, version, package_digest)
+(publisher, program, version, service_package_digest)
 ```
+
+The key uses the Service package digest. The Program Release record also fixes the Front digest
+and any Privacy Contract content digest.
 
 Rules:
 
-- the digest is fixed after the first acceptance;
-- the same Program Release appearing with a different digest is `PACKAGE_EQUIVOCATION`;
+- The first acceptance pins both package digests and any Privacy Contract binding for the Program Release.
+- A different Service, Front, or Privacy Contract binding for the same Program Release is `PACKAGE_EQUIVOCATION`.
 - "the Publisher updated the file" cannot be used to overwrite the cache;
 - an update must use a new SemVer;
-- a Service instance is fixed to its package digest;
-- cache cleanup must not delete a digest still referenced by a Service;
-- re-downloading must be re-verified and compared against the fixed digest.
+- a Service instance is fixed to its Service package digest.
+- The Service and Front packages and any bound Privacy Contract stay cached while referenced by a Service instance.
+- each re-downloaded archive is re-verified against its pinned digest.
 
 A local first-seen pin only protects the current install; a Marketplace can help multiple clients compare digests they have seen. Providing global non-equivocation across all clients requires introducing a public, append-only transparency log later. v1 does not overstate a single-machine pin into global transparency.
 
@@ -358,7 +363,7 @@ A Marketplace may:
 - record Publisher verification;
 - do static/dynamic review;
 - give a risk rating;
-- record Program Releases/digests it has seen;
+- record the Service and Front digests it has seen for each Program Release.
 - publish revocations and malware intelligence;
 - provide a cache or mirror.
 
@@ -383,7 +388,7 @@ Revocation tiers:
 
 A revocation record must contain:
 
-- Program Release/digest/key;
+- the Program Release and the affected package digest or signing key.
 - the reason;
 - the publication time;
 - the publisher's or marketplace's signature;
@@ -412,15 +417,15 @@ This avoids a mismatch between the version in an ActorId and the workload actual
 
 Supported:
 
-- a local `.actr` file;
-- a package address on localhost, a loopback address, or an explicitly trusted private CA;
+- a local pair of Service and Front `.actr` files.
+- a pair of package addresses on localhost, a loopback address, or an explicitly trusted private CA.
 - a local development signing key;
 - hot-updating the Guest;
 - an unpublished Program Catalog entry.
 
 Restrictions:
 
-- every code change produces a new dev digest;
+- each changed archive gets a new development digest.
 - an unverified key does not inherit the formal Publisher permissions of the same domain;
 - a local package does not enter the formal Marketplace;
 - private-network, loopback and link-local URLs are only allowed in development mode or under enterprise policy;
@@ -442,5 +447,6 @@ Requirements:
 - atomic writes;
 - incomplete downloads are isolated;
 - cache metadata records the Publisher key and verification time;
-- an existing local Service can keep running its fixed digest while the Publisher is offline;
+- Store the signed release record and cache any Privacy Contract bytes under `privacy_contract.sha256` for offline re-verification.
+- a local instance can run offline from its pinned Service and Front packages under the offline policy.
 - expiry of Realm credentials/revocations is handled under offline security policy, and is not equivalent to package verification failure.

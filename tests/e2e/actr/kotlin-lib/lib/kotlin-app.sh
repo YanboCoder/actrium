@@ -390,8 +390,8 @@ render_linked_client_config() {
         "__HYPER_DATA_DIR__=/data/data/${application_id}/files/hyper" \
         "__ACL_TYPE__=$acl_type"
 
-    # The client's Realm client key, next to actr.toml (`realm_client_key`).
-    cp "$REALM_CLIENT_KEY" "$assets_dir/realm-client.json"
+    # Keys are created on the device; remove legacy generated private-key assets.
+    rm -f "$assets_dir/realm-client.json"
 
     # manifest.toml is read by resolveActorType(); copy the (corrected) project manifest.
     cp "$app_dir/manifest.toml" "$assets_dir/manifest.toml"
@@ -435,9 +435,16 @@ run_connected_android_test() {
     [ -f "$app_apk" ] || fail "app APK missing: $app_apk"
     [ -f "$test_apk" ] || fail "androidTest APK missing: $test_apk"
 
+    python3 "$REPO_ROOT/scripts/actr/check-mobile-assets.py" "$app_apk" "$test_apk"
+
     section "📲 Installing APKs (${serial:-default device})"
     adb "${adb_flag[@]}" install -r "$app_apk" >/dev/null
     adb "${adb_flag[@]}" install -r "$test_apk" >/dev/null
+    source "$REPO_ROOT/tests/e2e/actr/mobile-enrollment.sh"
+    mobile_invitation_file
+    adb "${adb_flag[@]}" shell run-as "$app_id" mkdir -p no_backup
+    adb "${adb_flag[@]}" shell "run-as $app_id sh -c 'umask 077; cat > no_backup/actr-enrollment.json'" < "$RUN_DIR/keys/mobile-enrollment.json"
+    rm "$RUN_DIR/keys/mobile-enrollment.json"
 
     # The instrumentation target is <test applicationId>/<runner>. AGP defaults the
     # test app's applicationId to "<app.applicationId>.test"; the runner is set in

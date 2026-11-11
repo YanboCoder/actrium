@@ -35,8 +35,9 @@ actr://acme.com/k7m2q9xh/today?view=week#item-3
 
 ## 3. Opening
 
-Actrium opens links per Actr URI §4: obtain and verify the Realm Profile → download and verify
-the package per its `package` field → start the front end → connect to the instance's Service.
+Actrium opens links per Actr URI §4. It verifies the Realm Profile and the Service package in its
+`package` field, then verifies the matching Program Release record and its Front package. It creates the
+Front Actor from the verified Front manifest and Attaches to the instance's Service.
 
 Product-level requirements:
 
@@ -45,8 +46,8 @@ Product-level requirements:
   program name, version) after download and verification; first-time trust of a Realm domain must
   be confirmed. When the Realm domain equals or belongs to the Actr Facility Provider ID, the trust root
   is displayed as that Actr Facility Provider.
-- **Fail closed**: if the Realm Profile cannot be fetched, fails verification, or is retired, or
-  the package's SHA-256 or signature does not match, opening stops; Actrium does not fall back to
+- **Fail closed**: opening stops when the Realm Profile or matching release record is unavailable
+  or fails verification, the Realm is retired, or either package's digest or signature fails verification. Actrium does not fall back to
   another Actr Facility Provider, does not swap packages, and does not create a new instance.
 - **No membership yet**: enter the join flow (e.g., a Realm invitation) instead of failing
   silently.
@@ -107,10 +108,10 @@ See [12 §10](12-reference-spec.md) for the full list. Those related to links:
 | `REALM_PROFILE_ROLLBACK` | The Realm Profile's `sequence` rolls back |
 | `ACTR_FACILITY_PROVIDER_MISMATCH` | `provider.id` differs from the one already accepted |
 | `REALM_RETIRED` | The Realm is retired |
-| `PACKAGE_DIGEST_MISMATCH` | The downloaded package does not match `package.sha256` |
+| `PACKAGE_DIGEST_MISMATCH` | A downloaded archive differs from the digest pinned for its package role |
 | `PACKAGE_SIGNATURE_INVALID` | Package signature verification failed |
-| `SERVICE_NOT_FOUND` | There is not exactly one Actor in the Realm whose type matches the package |
-| `SERVICE_ACTOR_TYPE_MISMATCH` | The Actor an Actor link points to has a type that does not match the package |
+| `SERVICE_NOT_FOUND` | The Realm has zero or multiple Actors whose type matches the pinned Service package |
+| `SERVICE_ACTOR_TYPE_MISMATCH` | The linked Actor's type differs from the type in the pinned Service package |
 
 Error codes are for logs, tests, and developer tools; user-facing copy must explain what the user
 can do.

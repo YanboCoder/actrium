@@ -81,160 +81,200 @@ https://notes.example/.well-known/actr
 }
 ```
 
-`publisher.signature` 对象本身不进入 payload；`publisher` 成员的其余 JSON 按 RFC 8785 JCS 规范化后做 detached Ed25519 验证。`sequence` 必须单调递增。descriptor 中 `publisher` 以外的部分不签名，不参与 Publisher 信任判断。`profile_signing_keys` 与可选的 `rotations` 的格式、接受与轮换规则同 `realm_signing_keys`（Actr Authority Discovery §4.4）。包签名 key 的 `id` 由公钥算出，与 manifest `signing_key_id` 相同；`keys` 至多 8 项、其中 `active` 至多 2 项，轮换时先发布新 key、至少 24 小时后再用它签包（[Actor Package](../../../actr/protocols/actor-package.zh.md) §6.8）。
+`publisher.signature` 对象本身不进入 payload；`publisher` 成员的其余 JSON 按 RFC 8785 JCS 规范化后做 detached Ed25519 验证。`sequence` 必须单调递增。descriptor 中 `publisher` 以外的部分不签名，不参与 Publisher 信任判断。`profile_signing_keys` 与可选的 `rotations` 的格式、接受与轮换规则同 `realm_signing_keys`（Actr Authority Discovery §4.4）。包签名 key 的 `id` 由公钥算出，与 manifest `signature.key-id` 相同；`keys` 至多 8 项、其中 `active` 至多 2 项，轮换时先发布新 key、至少 24 小时后再用它签包（[Actor Package](../../../actr/protocols/actor-package.zh.md) §6.8）。
 
 ## 3. 包下载
 
-实例运行哪个包，写在其 Realm Profile 的 `package` 中（样例见 §6.2）：
+Realm Profile 的 `package` 指定实例的 Service 包（样例见 §6.2）。
 
 ```json
-"package": {
-  "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-  "sha256": "<64 hex>",
-  "type": "notes.example/team-notes@1.4.2"
+{
+  "package": {
+    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
+    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "type": "notes.example/team-notes@1.4.2"
+  }
 }
 ```
 
 Actrium 按 [Realm Profile 协议](../../../actr/protocols/realm-profile.zh.md)第 6 节下载 `href`（不带 credential 的 HTTPS GET）、核对 `sha256`，再用 Publisher Profile（§2）中的包签名 key 验证 manifest 签名；manifest 声明的 Actor 类型即该实例的程序。下载地址可以在任何位置（Publisher CDN、Loran 包托管、对象存储），不是信任源。
 
+Actrium 按 Service 包的 Actor 类型和 SHA-256 匹配 Publisher 签名的 Program Release 记录，
+再独立验证该记录固定的 Front 包。
+
+### 3.1 签名 Program Release 记录
+
+发布记录分别标识两个包。以下归档的 SHA-256 和签名均为示例值。
+
+```json
+{
+  "schema": "actrium.program-release/v1",
+  "release_id": "notes.example/team-notes@1.4.2",
+  "service": {
+    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
+    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "type": "notes.example/team-notes@1.4.2"
+  },
+  "front": {
+    "href": "https://cdn.notes.example/team-notes-front-1.4.2.actr",
+    "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "type": "notes.example/team-notes-front@1.4.2"
+  },
+  "privacy_contract": {
+    "href": "https://cdn.notes.example/team-notes-1.4.2.privacy.toml",
+    "sha256": "0f9e4a476a26c7d6896f8be66f3dec4ebfb3168addde52d3ff339662e12d2147"
+  },
+  "signature": {
+    "key_id": "actr-pub-3f9a1c0d2b7e4a61",
+    "algorithm": "Ed25519",
+    "value": "<base64>"
+  }
+}
+```
+
+`schema` 为 `actrium.program-release/v1`。`release_id` 是 `publisher/program@version` 形式的
+Service Actor 类型。两个包使用不同的 Actor 类型，均归属该 Publisher。`service` 与 `front` 标识包角色，
+并分别绑定 HTTPS 下载地址、SHA-256 和精确的 Actor 类型。
+同一发布版本固定两个包的类型和摘要，以及是否携带 Privacy Contract 和该契约的摘要。下载地址可变。
+
+Publisher 使用 Publisher Profile 的 `keys` 中状态为 `active` 的包签名 key 签署发布记录。
+签名覆盖去掉 `signature` 成员后按 RFC 8785 JCS 规范化的记录，签名值为 Ed25519 签名的 base64 编码。
+Actrium 按 `signature.key_id` 选择已信任的 Publisher key，并沿用包签名的 key 接受和吊销规则。
+
+Workspace 要求由签名的 Service manifest 中的 `[workspace]` 声明，
+见[第 03 章 §5.3](03-user-experience.zh.md#53-workspace-选择)。
+
+使用 Program Privacy Contract 的发布版本，必须在签名记录的 `privacy_contract` 中提供该文件的
+HTTPS 地址和原始字节的 SHA-256。Actrium 先验证发布记录，再按其摘要校验获取的契约内容，
+随后才能使用其中的授权声明。它还会核对契约的 `release_id` 和两个包摘要是否匹配发布记录。
+契约内容和绑定均验证通过后，Host 才能授予受该契约约束的能力。
+见[第 14 章 §4.2](14-privacy-primitives-and-attestation.zh.md#42-program-privacy-contract)。
+
+Actrium 可使用已验证的本地记录，或从 Publisher、Marketplace 取得记录。打开 Realm 时，
+记录的 `service.type` 和 `service.sha256` 必须匹配 `Realm Profile.package`。
+安装正式发布版本需要已验证且匹配的发布记录。已接受的发布版本出现冲突的包或 Privacy Contract 绑定时，Actrium 必须拒绝。
+包的选择流程见[第 05 章 §3](05-program-package-and-distribution.zh.md#3-包从哪来)。
+
 ## 4. `.actr` Manifest
 
-示意：
+Team Notes 为每个 Workload 分发一个独立签名的 `actr-package/2` 包。文件大小、摘要和 key id 为示例值。
+
+### 4.1 Service 包
+
+WASM Component 是该包的 Workload。示例中的唯一 Proto 是 Service 的 RPC 契约。
 
 ```toml
+format = "actr-package/2"
+
+[actor]
 publisher = "notes.example"
 name = "team-notes"
 version = "1.4.2"
-signature_algorithm = "ed25519"
-signing_key_id = "actr-pub-3f9a1c0d2b7e4a61"
 
-[binary]
-path = "bin/service.wasm"
-target = "wasm32-wasip2"
-kind = "component"
-hash = "<sha256>"
-size = 1832000
+[workload]
+profile = "actr.component/1"
+entry = "workload/service.wasm"
 
-[metadata]
-description = "Workspace-bound team notes"
-license = "Apache-2.0"
+[host]
+profile = "actr.host/1"
+api = "^1.0.0"
+required-capabilities = []
+optional-capabilities = []
 
-[actrium]
-schema_version = 1
-min_actrium_version = "1.0.0"
-front_host_api = "^1.0"
-service_host_api = "^1.0"
-
-[actrium.front]
-guest_runtime = "keel-js"
-guest_entry = "ui/guest.bundle.js"
-keel_api = "^1.0"
-contract_manifest = "ui/capability-manifest.json"
-contract_digest = "sha256:<digest>"
-
-[actrium.service]
-contract = "proto/service.proto"
-protocol_fingerprint = "sha256:<digest>"
-
-[actrium.service.workspace]
+[workspace]
 requirement = "required"
-provisioning = "user-selected"
 access = "read-write"
 providers = ["managed-store", "local-folder", "cloud-drive"]
-lease = "exclusive-writer"
 
-[actrium.session]
-attachment_policy = "exclusive"
-lease_seconds = 45
-heartbeat_seconds = 15
+[signature]
+algorithm = "ed25519"
+key-id = "actr-pub-3f9a1c0d2b7e4a61"
 
-[actrium.privacy]
-schema_version = 1
-data_classes = ["public", "private", "secret"]
-default_unknown_action = "block-private-and-secret"
+[[files]]
+path = "workload/service.wasm"
+role = "workload"
+media-type = "application/wasm"
+size = 1832000
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 
-[[actrium.privacy.actor_egress]]
-actr_type = "notes.example/index-worker@1.4.2"
-required = false
-data_classes = ["private"]
-
-[actrium.permissions.front]
-capabilities = [
-  "service",
-  "host:clipboard.write",
-  "host:notifications"
-]
-
-[actrium.permissions.service]
-capabilities = [
-  "workspace:read-write",
-  "net:https://api.notes.example",
-  "actor:call:notes.example:index-worker:1"
-]
-
-[actrium.components]
-allow = [
-  "View",
-  "Text",
-  "ScrollView",
-  "TextInput",
-  "Button",
-  "FlatList",
-  "ImageAsset"
-]
-
-[actrium.resources.front]
-heap_bytes = 67108864
-js_turn_timeout_ms = 100
-max_render_nodes = 10000
-max_batch_ops = 5000
-max_rpc_concurrency = 32
-
-[actrium.resources.service]
-memory_bytes = 268435456
-max_mailbox = 4096
-max_rpc_concurrency = 128
-max_workspace_bytes = 10737418240
-
-[[resources]]
-path = "ui/guest.bundle.js"
-hash = "<sha256>"
-
-[[resources]]
-path = "ui/capability-manifest.json"
-hash = "<sha256>"
-
-[[resources]]
-path = "assets/icon.png"
-hash = "<sha256>"
-
-[[proto_files]]
-name = "service.proto"
-path = "proto/service.proto"
-hash = "<sha256>"
-
-[lock_file]
-path = "manifest.lock.toml"
-hash = "<sha256>"
+[[files]]
+path = "contracts/service.proto"
+role = "contract"
+media-type = "text/plain"
+size = 1204
+sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
 ```
 
-正式 schema 需要决定如何让 Actr 基础 manifest 保持向后兼容，并确保 `[actrium]` 字段也位于 manifest signature 覆盖范围内。
+### 4.2 Front 包
 
-Native Capsule workload 另需：
+Keel Guest 是该包的 Workload。`workload.keel.contract` 指向 Guest 自身的 Keel 契约。
+`dependencies.service.contract` 指向生成 Service RPC 编解码代码时使用的 Proto。
 
 ```toml
-[actrium.native_capsule]
-profile = "privacy-closed-v1"
-network = "broker-only"
-workspace = "broker-only"
-child_process = false
-ptrace = false
-shared_writable_memory = false
-dynamic_libraries = "sealed"
-ipc = ["actr.capability.v1"]
+format = "actr-package/2"
+
+[actor]
+publisher = "notes.example"
+name = "team-notes-front"
+version = "1.4.2"
+
+[workload]
+profile = "keel.guest/1"
+entry = "workload/guest.js"
+
+[workload.keel]
+runtime = "js"
+guest-api = "keel.guest/1"
+capabilities = "workload/capabilities.json"
+contract = "contracts/notes.json"
+
+[host]
+profile = "actr.host/1"
+api = "^1.0.0"
+required-capabilities = ["actor.call", "ui.render"]
+optional-capabilities = []
+
+[dependencies.service]
+actor = "notes.example/team-notes"
+version = "=1.4.2"
+contract = "contracts/service.proto"
+required = true
+
+[signature]
+algorithm = "ed25519"
+key-id = "actr-pub-3f9a1c0d2b7e4a61"
+
+[[files]]
+path = "workload/guest.js"
+role = "workload"
+media-type = "text/javascript"
+size = 18432
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[[files]]
+path = "workload/capabilities.json"
+role = "profile"
+media-type = "application/json"
+size = 746
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[[files]]
+path = "contracts/notes.json"
+role = "contract"
+media-type = "application/json"
+size = 512
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[[files]]
+path = "contracts/service.proto"
+role = "contract"
+media-type = "text/plain"
+size = 1204
+sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
 ```
 
-同进程 `NativeCdylib` 不使用该 profile，也不能因此评为 `CONTROLLED`。
+两个示例使用同一份 `contracts/service.proto`。每个归档各自包含 `manifest.sig`。
+Realm、信令与信任等部署参数由 `actr.toml` 提供。
 
 ## 5. Keel Capability Manifest
 
@@ -242,7 +282,7 @@ ipc = ["actr.capability.v1"]
 {
   "schemaVersion": 1,
   "keelApi": "1.0",
-  "guestEntry": "ui/guest.bundle.js",
+  "guestEntry": "workload/guest.js",
   "imports": [
     "react",
     "react/jsx-runtime",
@@ -370,7 +410,7 @@ https://realms.provider.example/acme.com/k7m2q9xh
   },
   "package": {
     "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-    "sha256": "<64 hex>",
+    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
     "type": "notes.example/team-notes@1.4.2"
   },
   "issuer": {
@@ -422,7 +462,7 @@ https://realms.provider.example/acme.com/k7m2q9xh
 }
 ```
 
-`signature` 由 `realm_signing_keys` 中的 `active` key 签署；Actor credential 的 issuer 即 `realm.name`，存放位置不影响有效性；由后来退役的 key 签发的既有 Realm Profile 在被更高 `sequence` 取代前仍有效。Realm Profile 不设过期时间，回滚保护只靠 `sequence`；`provider.id` 是 Actr Facility Provider 的规范化 DNS authority，在 Realm 生命周期内不可变。多个 signaling endpoint 共享 `control_plane_id`，表示它们是同一 Actr Facility Provider presence/control plane 的副本或故障切换入口，而不是 v1 federation。`package` 给出该实例运行的包（§3），升级程序即发布 `package` 不同、`sequence` 更高的 Realm Profile。同一 Actr Facility Provider 下轮换 Realm issuer key 或变更端点时同样发布更高 `sequence` 的 Realm Profile；退役时发布 `status` 为 `retired` 的新 Realm Profile，永久有效。
+`signature` 由 `realm_signing_keys` 中的 `active` key 签署；Actor credential 的 issuer 即 `realm.name`，存放位置不影响有效性；由后来退役的 key 签发的既有 Realm Profile 在被更高 `sequence` 取代前仍有效。Realm Profile 不设过期时间，回滚保护只靠 `sequence`；`provider.id` 是 Actr Facility Provider 的规范化 DNS authority，在 Realm 生命周期内不可变。多个 signaling endpoint 共享 `control_plane_id`，表示它们是同一 Actr Facility Provider presence/control plane 的副本或故障切换入口，而不是 v1 federation。`package` 固定该实例的 Service 包（§3）。升级程序时发布指向新 Service 包、`sequence` 更高的 Realm Profile。同一 Actr Facility Provider 下轮换 Realm issuer key 或变更端点时同样发布更高 `sequence` 的 Realm Profile；退役时发布 `status` 为 `retired` 的新 Realm Profile，永久有效。
 
 ## 7. Service Inventory Record
 

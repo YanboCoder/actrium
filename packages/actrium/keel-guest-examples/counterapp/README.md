@@ -1,7 +1,9 @@
 # Counter Keel Guest
 
-Counter is a small reusable `keel.guest/1` workload for exercising Actrium's
-Actor Host. It is distributed only as an `actr-package/2` `.actr` archive.
+Counter is a standalone `keel.guest/1` example for Actrium's Actor Host. The
+example builds one `actr-package/2` Guest archive. See the
+[Product v1 reference manifests](../../../../docs/product/actrium-v1/12-reference-spec.md#4-actr-manifest)
+for a release with both a Front package and a Service package.
 
 From this directory:
 
@@ -23,7 +25,8 @@ actrium-counter-1.0.0.actr
 ├── manifest.toml
 ├── manifest.sig
 └── workload/
-    └── guest.js
+    ├── guest.js
+    └── *.png
 ```
 
 The normative package model is documented in

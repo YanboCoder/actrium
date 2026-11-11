@@ -42,7 +42,6 @@ import java.util.Locale
 class ClientActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "ClientActivity"
-        private const val REALM_CLIENT_KEY_ASSET = "realm-client.json"
 
         // Limit log buffer to avoid exceeding Android clipboard ~1MB transaction limit
         private const val MAX_LOG_CHARS = 500_000
@@ -121,6 +120,21 @@ class ClientActivity : AppCompatActivity() {
         initViews()
         initLogcatReader() // Start early to capture actr library's early logs
         setupClickListeners()
+        mainTabContent.addView(
+            Button(this).apply {
+                text = "Realm membership / devices"
+                setOnClickListener {
+                    if (clientSystem == null &&
+                        connectButton.isEnabled
+                    ) {
+                        startActivity(Intent(this@ClientActivity, RealmMembershipActivity::class.java))
+                    } else {
+                        Toast.makeText(this@ClientActivity, "Disconnect before managing membership", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            0,
+        )
         switchToTab(TAB_MAIN)
 
         log("Ready to connect (linked multi-service workload)")
@@ -259,10 +273,19 @@ class ClientActivity : AppCompatActivity() {
             try {
                 val configPath = copyAssetToInternalStorage("actr.toml")
                 val manifestPath = copyAssetToInternalStorage("manifest.toml")
-                // The Realm client key `actr.toml` names, if bundled.
-                if (assets.list("")?.contains(REALM_CLIENT_KEY_ASSET) == true) {
-                    copyAssetToInternalStorage(REALM_CLIENT_KEY_ASSET)
-                }
+                val realmConfig = io.actrium.actr.readRealmRuntimeConfiguration(configPath)
+                val provider =
+                    getSharedPreferences("realm-membership", MODE_PRIVATE)
+                        .getString("provider:${realmConfig.realm}", null)
+                        ?: error("Join this Realm using the membership screen first")
+                val membership =
+                    RealmIdentityStore(this@ClientActivity).membership(
+                        realmConfig.realm,
+                        provider,
+                        realmConfig.issuer,
+                        true,
+                    )
+                membership.members()
                 Log.i(TAG, "Config path: $configPath")
                 Log.i(TAG, "Manifest path: $manifestPath")
 
@@ -287,6 +310,7 @@ class ClientActivity : AppCompatActivity() {
                 val system =
                     linkedWithMonitoring(
                         configPath = manifestPath,
+                        membership = membership,
                         actorType = actorType,
                         workload =
                             lifecycle.toDynamicWorkload(

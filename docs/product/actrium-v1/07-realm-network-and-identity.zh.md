@@ -44,7 +44,9 @@ v1 中多个 signaling endpoint 必须属于同一个逻辑控制面，使用共
 
 ### 2.1 Realm 是实例概念
 
-Realm 是一个应用实例的逻辑信任和治理域。在 Actrium 中，新建实例就是在所选域名下创建一个新 Realm；该实例的 Service、它编排的其他 Actor，以及 Attach 到它的 Front，都属于这个 Realm。Realm Profile 的 `package` 写明该实例运行的包。
+Realm 是一个应用实例的逻辑信任和治理域。在 Actrium 中，新建实例就是在所选域名下创建一个新 Realm。
+该实例的 Service、它编排的其他 Actor，以及 Attach 到它的 Front，都属于这个 Realm。
+Realm Profile 的 `package` 固定 Service 包。
 
 Realm 不跟程序走：同一个 `notes.example/team-notes` 被 A 组织创建一次、被 B 组织创建一次，就是两个 Realm。Realm 也不是组织级成员域：一个组织运营多少个应用实例，就有多少个 Realm。
 
@@ -140,7 +142,7 @@ Realm Profile 至少包含：
 - schema（`actr.realm/v1`）；
 - `realm.name`（完整 Realm 名）与显示名；
 - `status`：`active` 或 `retired`；
-- `package`：实例运行的包（下载地址、SHA-256 与 Actor 类型），active 时必填；
+- `active` Realm 必须声明 `package`，记录 Service 包的下载地址、SHA-256 和 Actor 类型。
 - 单调 `sequence` 与签发时间 `issued_at`（Realm Profile 不设过期时间）；
 - issuer URL、Realm issuer keys/key ids（Actor credential 的 issuer 即 Realm 名）；
 - Actr Facility Provider ID、signaling endpoints、STUN/TURN endpoints；

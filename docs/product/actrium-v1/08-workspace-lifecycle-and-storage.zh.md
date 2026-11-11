@@ -44,16 +44,20 @@ Guest 可见的 launch context 只包含：
 
 ## 3. Workspace 声明
 
-Workspace 由互相正交的字段描述：
+签名的 Service manifest 在 `[workspace]` 中声明以下静态要求。
 
 | 维度 | 值 | 含义 |
 |---|---|---|
 | requirement | `none` / `optional` / `required` | 是否需要用户 Workspace，以及何时必须绑定 |
-| provisioning | `managed` / `user-selected` | 由 Actrium 创建，还是由用户选择 |
-| access | `read-only` / `read-write` | Service 获得的访问能力 |
+| access | `read-only` / `read-write` | Service 申请的访问能力 |
 | providers | 一组 Workspace Provider 类型 | 允许 `managed-store`、`local-folder`、`cloud-drive` 等实现 |
 
-`requirement=none` 时 Service 仍可使用实例私有 store，但不能获得用户 Workspace。`requirement=required` 与 `provisioning=managed` 可以同时出现，含义是创建 Service 时由 Actrium 自动创建一个必需 Workspace。
+省略 `[workspace]` 等同于 `requirement = "none"`，Service 仍可使用实例私有存储。
+字段校验和就绪规则见[包协议](../../../actr/protocols/actor-package.zh.md#69-workspace)。
+
+部署或实例创建流程选择 `provisioning`。`managed` 表示由 Actrium 准备 Workspace，
+`user-selected` 表示由用户选择并授权。实际 Provider、位置、凭据、访问授权和租约
+保存在实例的 Workspace 绑定中。
 
 写入并发策略：
 
@@ -181,8 +185,11 @@ Deleted 是彻底清除后的终态，不可恢复。恢复窗口只属于 Trash
 ```text
 CreationIntent
 ├── idempotency_key
-├── package_source
-├── program_release + digest
+├── package_sources
+├── program_release
+├── service_package_digest
+├── front_package_digest
+├── privacy_contract_digest (when declared)
 ├── realm_name
 ├── workspace_selection
 ├── requested_permissions
@@ -254,10 +261,11 @@ actrium-data/
 
 ```text
 program_release
-  publisher, program, version, digest, key_id, manifest, trust_state
+  publisher, program, version, service_package_digest, front_package_digest,
+  privacy_contract_digest, release_record, trust_state
 
 service
-  realm_name, actor_id, actor_id_hash, publisher, program, version, digest,
+  realm_name, actor_id, actor_id_hash, publisher, program, version, service_package_digest,
   workspace_id, runtime_location,
   lifecycle_state, desired_state, reachability, health,
   attachment_state, placement, created_at, last_opened_at
@@ -380,7 +388,7 @@ Snapshot 分两层：
 
 Manifest 应声明 snapshot schema version。恢复必须验证：
 
-- Program Release/digest；
+- Program Release 与固定的 Service 包摘要。
 - snapshot schema；
 - Workspace fingerprint；
 - ActorId；
@@ -407,19 +415,20 @@ Old Service ActorId + v1 Workspace
   → import/migrate
   → Workspace lease handoff
   → user verification
-  → Realm Profile 的 package 改指 v2 包
+  → Realm Profile 的 package 指向新 Service 包
   → Old archived
 ```
 
 优点：
 
 - 精确版本语义不破坏；
-- package digest 仍可审计；
+- Service 与 Front 包摘要可供审计。
 - 可回滚；
 - 新旧 contract 可以并存；
 - 旧 ActorId 不会被说成已变成新类型。
 
-新 Service 创建在原实例的同一 Realm 内：实例没有变，Realm 链接、Realm 成员与应用权限都延续，只有 Service 的 ActorId 变化。其他设备打开同一 Realm 链接时，按新的 Realm Profile 取得新包，并按其 Actor 类型找到新 Service。
+升级会更换 Service 的 ActorId，并延续原有 Realm 链接、成员和应用权限。其他设备打开该链接时，
+验证 Realm Profile 固定的新 Service 包，通过匹配的发布记录取得 Front 包，再按 Actor 类型 Attach 到新 Service。
 
 ## 12. Service 迁移设备
 

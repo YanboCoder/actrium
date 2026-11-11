@@ -402,7 +402,12 @@ async fn handle_actr_to_server(
             let pong = actr_protocol::Pong {
                 seq: state.message_count.load(Ordering::Relaxed) as u64,
                 suggest_interval_secs: Some(30),
-                credential_warning: None,
+                credential_warning: state.credential_warning.load(Ordering::Relaxed).then(|| {
+                    actr_protocol::CredentialWarning {
+                        r#type: 0,
+                        message: "test requested credential renewal".into(),
+                    }
+                }),
             };
 
             send_response(

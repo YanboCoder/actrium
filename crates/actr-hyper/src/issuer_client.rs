@@ -70,12 +70,42 @@ pub enum ReissueError {
     Protocol(String),
 }
 
+/// Signing boundary for OS-managed Realm keys. Implementations retain private
+/// material in platform storage; the Host receives only public keys/signatures.
+pub trait RealmKeySigner: Send + Sync {
+    fn public_key(&self) -> [u8; 32];
+    fn sign_payload(&self, payload: &[u8]) -> Result<[u8; 64], HyperError>;
+}
+
+impl RealmKeySigner for ed25519_dalek::SigningKey {
+    fn public_key(&self) -> [u8; 32] {
+        self.verifying_key().to_bytes()
+    }
+    fn sign_payload(&self, payload: &[u8]) -> Result<[u8; 64], HyperError> {
+        Ok(ed25519_dalek::Signer::sign(self, payload).to_bytes())
+    }
+}
+
+/// Mobile wall clocks can lead the Issuer by a few seconds. Backdate the
+/// envelope while preserving the protocol's maximum five-minute lifetime;
+/// this does not relax the Issuer's window or replay checks.
+pub(crate) fn client_proof_window() -> (String, String) {
+    let issued = chrono::Utc::now() - chrono::Duration::seconds(30);
+    let expires =
+        issued + chrono::Duration::seconds(actr_protocol::realm_management::MAX_VALIDITY_SECS);
+    (
+        issued.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        expires.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+    )
+}
+
 /// A Realm client key: signs the `x-actr-client-proof` of Issuer requests.
 #[derive(Clone)]
 pub struct RealmClientKey {
     realm: String,
     provider_id: String,
-    key: ed25519_dalek::SigningKey,
+    public_key: [u8; 32],
+    key: std::sync::Arc<dyn RealmKeySigner>,
 }
 
 impl std::fmt::Debug for RealmClientKey {
@@ -97,8 +127,62 @@ impl RealmClientKey {
         Self {
             realm: realm.into(),
             provider_id: provider_id.into(),
+            public_key: key.verifying_key().to_bytes(),
+            key: std::sync::Arc::new(key),
+        }
+    }
+
+    pub fn from_signer(
+        realm: String,
+        provider_id: String,
+        key: std::sync::Arc<dyn RealmKeySigner>,
+    ) -> Self {
+        Self {
+            realm,
+            provider_id,
+            public_key: key.public_key(),
             key,
         }
+    }
+
+    pub fn provider_id(&self) -> &str {
+        &self.provider_id
+    }
+    pub fn public_key(&self) -> [u8; 32] {
+        self.public_key
+    }
+    pub fn key_id(&self) -> String {
+        actr_protocol::realm_membership::client_key_id(&self.public_key())
+    }
+
+    pub(crate) fn sign_document(
+        &self,
+        mut document: serde_json::Value,
+    ) -> HyperResult<serde_json::Value> {
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        document
+            .as_object_mut()
+            .ok_or_else(|| HyperError::Config("signing payload must be an object".into()))?
+            .remove("signature");
+        let payload = actr_protocol::realm_profile::jcs(&document);
+        let signature = self
+            .key
+            .sign_payload(payload.as_bytes())
+            .map_err(|_| HyperError::Config("Realm client signer unavailable".into()))?;
+        let public_key = ed25519_dalek::VerifyingKey::from_bytes(&self.public_key())
+            .map_err(|_| HyperError::Config("invalid Realm client public key".into()))?;
+        public_key
+            .verify_strict(
+                payload.as_bytes(),
+                &ed25519_dalek::Signature::from_bytes(&signature),
+            )
+            .map_err(|_| {
+                HyperError::Config("Realm client signer returned an invalid signature".into())
+            })?;
+        document["signature"] = serde_json::json!({
+            "key_id": self.key_id(), "algorithm": "Ed25519", "value": STANDARD.encode(signature),
+        });
+        Ok(document)
     }
 
     /// Load a key file written by `actr realm join`; it must be readable
@@ -131,9 +215,17 @@ impl RealmClientKey {
     }
 
     /// A freshly signed proof for `body` of an `op` request on `realm`.
-    pub(crate) fn proof(&self, op: ProofOp, realm: &str, body: &[u8]) -> String {
+    pub(crate) fn proof(&self, op: ProofOp, realm: &str, body: &[u8]) -> HyperResult<String> {
+        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+        if realm != self.realm {
+            return Err(HyperError::Config("Realm client key realm mismatch".into()));
+        }
         let nonce = uuid::Uuid::new_v4().simple().to_string();
-        ClientProof::new(op, realm, &self.provider_id, body, &nonce).header_value(&self.key)
+        let mut proof = ClientProof::new(op, realm, &self.provider_id, body, &nonce);
+        (proof.issued_at, proof.expires_at) = client_proof_window();
+        let document = serde_json::to_value(proof)
+            .map_err(|_| HyperError::Config("invalid client proof".into()))?;
+        Ok(URL_SAFE_NO_PAD.encode(self.sign_document(document)?.to_string()))
     }
 }
 
@@ -194,10 +286,14 @@ impl IssuerClient {
         op: ProofOp,
         realm: &str,
         body: &[u8],
-    ) -> Option<(&'static str, String)> {
+    ) -> HyperResult<Option<(&'static str, String)>> {
         self.client_key
             .as_ref()
-            .map(|key| (CLIENT_PROOF_HEADER, key.proof(op, realm, body)))
+            .map(|key| {
+                key.proof(op, realm, body)
+                    .map(|value| (CLIENT_PROOF_HEADER, value))
+            })
+            .transpose()
     }
 
     /// Initial registration: authenticate with publisher manifest
@@ -280,8 +376,9 @@ impl IssuerClient {
                 .header("Content-Type", "application/x-protobuf")
                 .header("Accept", "application/x-protobuf");
             // Each try is signed anew: the proof's nonce is single-use.
-            if let Some((name, value)) =
-                self.proof_header(ProofOp::Renew, &req.actr_id.realm, &body)
+            if let Some((name, value)) = self
+                .proof_header(ProofOp::Renew, &req.actr_id.realm, &body)
+                .map_err(|_| RenewError::Protocol("Realm client signer unavailable".into()))?
             {
                 builder = builder.header(name, value);
             }
@@ -417,7 +514,9 @@ impl IssuerClient {
                 .header("Content-Type", "application/x-protobuf")
                 .header("Accept", "application/x-protobuf");
 
-            if let Some((name, value)) = self.proof_header(op, realm, &body) {
+            if let Some((name, value)) = self.proof_header(op, realm, &body).map_err(|_| {
+                ProtobufRequestError::Protocol("Realm client signer unavailable".into())
+            })? {
                 request_builder = request_builder.header(name, value);
             }
 

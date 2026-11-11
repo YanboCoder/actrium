@@ -195,7 +195,9 @@ pub use actr_platform_traits::{
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use issuer_client::{IssuerClient, RealmClientKey};
+pub use issuer_client::{IssuerClient, RealmClientKey, RealmKeySigner};
+#[cfg(not(target_arch = "wasm32"))]
+pub mod realm_membership;
 // Conflict-key dispatch scheduling (B2).
 #[cfg(not(target_arch = "wasm32"))]
 pub use config::DispatchConcurrency;
@@ -1079,6 +1081,22 @@ impl Node<Init> {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Node<Attached> {
+    /// Use a platform-managed membership key for initial registration and all
+    /// renew/reissue/re-registration proofs. No private key file is needed.
+    pub fn with_realm_client_key(mut self, key: RealmClientKey) -> HyperResult<Self> {
+        let node = &mut self.attachment.as_mut().expect("attached node").node;
+        if key.realm() != node.config.realm {
+            return Err(HyperError::Config("Realm client key realm mismatch".into()));
+        }
+        if node.config.realm_client_key.is_some() {
+            return Err(HyperError::Config(
+                "configure either a platform signer or a key file".into(),
+            ));
+        }
+        node.realm_client_key = Some(key);
+        Ok(self)
+    }
+
     /// Add a host-side observer to an already attached node.
     ///
     /// Package-backed nodes keep their guest hook observer installed; this
@@ -1236,15 +1254,18 @@ impl Node<Attached> {
                     realm: &config.realm,
                     service_spec,
                     acl: config.acl.clone(),
-                    client_key: RealmClientKey::load_for(
-                        config.realm_client_key.as_deref(),
-                        &config.realm,
-                    )?,
+                    client_key: attachment.node.resolved_realm_client_key()?,
                 },
             )
             .await?
         } else {
-            bootstrap_linked_credential_inner(config, issuer_endpoint, service_spec).await?
+            bootstrap_linked_credential_inner(
+                config,
+                issuer_endpoint,
+                service_spec,
+                attachment.node.resolved_realm_client_key()?,
+            )
+            .await?
         };
         Ok(self.finish_registration(register_ok, context))
     }
@@ -1732,10 +1753,10 @@ async fn bootstrap_linked_credential_inner(
     config: &actr_config::RuntimeConfig,
     issuer_endpoint: &str,
     service_spec: Option<ServiceSpec>,
+    client_key: Option<RealmClientKey>,
 ) -> HyperResult<register_response::RegisterOk> {
     let mut issuer = IssuerClient::new(issuer_endpoint);
-    if let Some(key) = RealmClientKey::load_for(config.realm_client_key.as_deref(), &config.realm)?
-    {
+    if let Some(key) = client_key {
         issuer = issuer.with_client_key(key);
     }
 

@@ -106,8 +106,14 @@ class EchoIntegrationTest {
     @Test
     fun testEchoRecoversAfterShortAndLongBackground(): Unit = runBlocking {
         Log.i(TAG, "=== Kotlin Echo integration test (linked mode + monitoring) ===")
-        copyAsset("actr.toml")
-        copyAsset("realm-client.json")
+        val config = io.actrium.actr.readRealmRuntimeConfiguration(copyAsset("actr.toml"))
+        val enrollmentFile = File(ctx().noBackupFilesDir, "actr-enrollment.json")
+        val enrollment = org.json.JSONObject(enrollmentFile.readText())
+        val membership = io.actrium.actr.dsl.RealmIdentityStore(ctx()).membership(
+            config.realm, enrollment.getString("provider_id"), config.issuer, true)
+        membership.join(enrollment.getString("invite"), "Kotlin E2E device")
+        check(enrollmentFile.delete())
+        membership.members()
         val manifestPath = copyAsset("manifest.toml")
         val shortBackgroundSeconds =
             backgroundDurationSeconds(
@@ -133,6 +139,7 @@ class EchoIntegrationTest {
             workload = lifecycle.toDynamicWorkload(),
             context = ctx(),
             scope = monitorScope,
+            membership = membership,
             onNetworkStatusLog = { status -> Log.i(TAG, "Network status: $status") },
         )
 

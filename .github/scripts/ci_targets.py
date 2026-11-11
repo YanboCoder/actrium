@@ -247,6 +247,11 @@ def detect_targets(changed_files: list[str], full_run: bool) -> tuple[dict[str, 
             reasons.append(f"typescript_stream_e2e:{path}")
             continue
 
+        if path == "scripts/actr/tests/test_mobile_fixture_cfg.py":
+            targets["rust_core"] = True
+            reasons.append(f"mobile_fixture_cfg:{path}")
+            continue
+
         # These inputs must run the native checksum gate even without Rust edits.
         # Fall through so the committed binding also selects its normal SDK job.
         if path in (

@@ -14,12 +14,7 @@ url = "http://127.0.0.1:9080/issuer"
 
 [deployment]
 realm = "demo@example.com"
-# Realm client key written by `actr realm join <invite> --issuer <url>
-# --output demo/src/main/assets/realm-client.json`; the app copies it next to
-# this file. Development only: a key bundled into the APK is shared by every
-# install, like the removed Realm secret. A real app redeems its own invite
-# on the device, one Realm client key per install.
-realm_client_key = "realm-client.json"
+# Join on this device using the Realm membership screen.
 
 [discovery]
 visible = true

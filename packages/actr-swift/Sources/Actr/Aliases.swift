@@ -10,3 +10,7 @@ public typealias ReconnectReason = ActrBindings.ReconnectReason
 public typealias NetworkEvent = ActrBindings.NetworkEvent
 public typealias NetworkEventResult = ActrBindings.NetworkEventResult
 public typealias RtcPeerStateSubscription = ActrBindings.RtcPeerStateSubscription
+
+public typealias RealmMembership = ActrBindings.RealmMembership
+public typealias RealmMembershipError = ActrBindings.RealmMembershipError
+public typealias RealmRuntimeConfiguration = ActrBindings.RealmRuntimeConfiguration

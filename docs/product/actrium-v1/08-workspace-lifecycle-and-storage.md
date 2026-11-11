@@ -44,16 +44,20 @@ It must not contain:
 
 ## 3. Workspace declaration
 
-A Workspace is described by mutually orthogonal fields:
+The signed Service manifest declares the following static requirements in `[workspace]`.
 
 | Dimension | Values | Meaning |
 |---|---|---|
 | requirement | `none` / `optional` / `required` | whether a user Workspace is needed, and when it must be bound |
-| provisioning | `managed` / `user-selected` | created by Actrium, or chosen by the user |
-| access | `read-only` / `read-write` | the access the Service is granted |
+| access | `read-only` / `read-write` | the access requested by the Service |
 | providers | a set of Workspace Provider types | which implementations are allowed, e.g. `managed-store`, `local-folder`, `cloud-drive` |
 
-With `requirement=none`, a Service can still use the instance's private store, but cannot obtain a user Workspace. `requirement=required` and `provisioning=managed` can occur together, meaning Actrium automatically creates a required Workspace when the Service is created.
+Omitting `[workspace]` means `requirement = "none"`. A Service can still use its private instance store.
+The [package protocol](../../../actr/protocols/actor-package.zh.md#69-workspace) (Chinese) defines field validation and readiness rules.
+
+The deployment or instance-creation flow chooses `provisioning`. With `managed`, Actrium prepares
+the Workspace. With `user-selected`, the user selects and authorizes one. The actual Provider,
+location, credentials, access grant, and lease are stored in the instance's Workspace binding.
 
 Write-concurrency policy:
 
@@ -181,8 +185,11 @@ Local creation must use a durable intent:
 ```text
 CreationIntent
 ├── idempotency_key
-├── package_source
-├── program_release + digest
+├── package_sources
+├── program_release
+├── service_package_digest
+├── front_package_digest
+├── privacy_contract_digest (when declared)
 ├── realm_name
 ├── workspace_selection
 ├── requested_permissions
@@ -254,10 +261,11 @@ A suggested minimal model:
 
 ```text
 program_release
-  publisher, program, version, digest, key_id, manifest, trust_state
+  publisher, program, version, service_package_digest, front_package_digest,
+  privacy_contract_digest, release_record, trust_state
 
 service
-  realm_name, actor_id, actor_id_hash, publisher, program, version, digest,
+  realm_name, actor_id, actor_id_hash, publisher, program, version, service_package_digest,
   workspace_id, runtime_location,
   lifecycle_state, desired_state, reachability, health,
   attachment_state, placement, created_at, last_opened_at
@@ -380,7 +388,7 @@ Snapshots have two layers:
 
 The manifest should declare a snapshot schema version. Restoring must verify:
 
-- Program Release/digest;
+- the Program Release and the pinned Service package digest.
 - the snapshot schema;
 - the Workspace fingerprint;
 - the ActorId;
@@ -407,19 +415,22 @@ Old Service ActorId + v1 Workspace
   → import/migrate
   → Workspace lease handoff
   → user verification
-  → the Realm Profile's package is repointed to the v2 package
+  → the Realm Profile's package points to the new Service package
   → Old archived
 ```
 
 Advantages:
 
 - exact version semantics are not broken;
-- the package digest remains auditable;
+- the Service and Front package digests remain auditable.
 - it can be rolled back;
 - the old and new contracts can coexist;
 - the old ActorId is never said to have become the new type.
 
-The new Service is created in the same Realm as the original instance: the instance has not changed, the Realm link, Realm membership and application permissions all carry over, and only the Service's ActorId changes. When another device opens the same Realm link, it fetches the new package per the new Realm Profile and finds the new Service by its Actor type.
+The upgrade changes the Service's ActorId and carries over the Realm link, membership, and
+application permissions. When another device opens that link, it verifies the new Service package
+pinned by the Realm Profile, finds the Front package through the matching release record, and
+Attaches to the new Service by its Actor type.
 
 ## 12. Migrating a Service to another device
 

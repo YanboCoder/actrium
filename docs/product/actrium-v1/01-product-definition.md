@@ -91,11 +91,11 @@ Provides program discovery, categorization, review, risk labeling and revocation
 
 ### 4.4 Install and verify
 
-> As a user, when I install `publisher/program@version`, I can confirm the Publisher domain, the exact version, the package digest, the permissions and the marketplace risk status; an already-installed version will never silently turn into a different set of bytes in the background.
+> As a user, when I install `publisher/program@version`, I can confirm the Publisher domain, exact version, Service and Front package digests, permissions, and Marketplace risk status. Each installed release stays pinned to those two archives.
 
 ### 4.5 Local development
 
-> As a developer, I can load an unpublished program from a local `.actr` file or a development HTTPS origin, but Actrium must clearly mark it as a "development source" and prevent it from impersonating a verified-domain Publisher.
+> As a developer, I can load an unpublished program from paired local `.actr` files or a development HTTPS origin. Actrium labels it a development source and uses a development identity.
 
 ### 4.6 Realm and network
 
@@ -127,7 +127,7 @@ UI-only programs also use the minimal Service the platform provides, instead of 
 ### G-03: Make addresses readable, copyable and recoverable
 
 - The Realm link `actr://<Realm domain>/<realm_id>` answers "which instance", i.e. where to verify and address it;
-- what runs is decided by the package the instance's Realm Profile points to, and is not written into the address;
+- the Realm Profile pins the Service package, and the matching signed Program Release record pins the Front package.
 - the address carries no secrets.
 
 ### G-04: Reuse the mature security infrastructure of the Web
@@ -178,7 +178,7 @@ The Tab, the Front Actor and the Guest can all be rebuilt; the Workspace binding
 
 ### 7.4 An exact version is immutable
 
-Once Actrium accepts `publisher/program@version`, it must permanently correspond to the same package digest.
+Once Actrium accepts `publisher/program@version`, the Service and Front package digests are fixed for that release.
 
 ### 7.5 Minimal capability by default
 

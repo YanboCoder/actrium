@@ -25,10 +25,12 @@ import io.actrium.actr.dsl.ActrContext
 import io.actrium.actr.dsl.ActrNode
 import io.actrium.actr.dsl.ActrRef
 import io.actrium.actr.dsl.ErrorEvent
+import io.actrium.actr.dsl.RealmIdentityStore
 import io.actrium.actr.dsl.RpcEnvelope
 import io.actrium.actr.dsl.Workload
 import io.actrium.actr.dsl.dynamicWorkload
 import io.actrium.actr.dsl.linkedWithMonitoring
+import io.actrium.actr.readRealmRuntimeConfiguration
 import io.actrium.demo.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -153,6 +155,19 @@ class ServerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val runtimeConfigPath = copyAssetToInternalStorage("actr.toml")
+                val realmConfig = readRealmRuntimeConfiguration(runtimeConfigPath)
+                val provider =
+                    getSharedPreferences("realm-membership", MODE_PRIVATE)
+                        .getString("provider:${realmConfig.realm}", null)
+                        ?: error("Join this Realm using the membership screen first")
+                val membership =
+                    RealmIdentityStore(this@ServerActivity).membership(
+                        realmConfig.realm,
+                        provider,
+                        realmConfig.issuer,
+                        true,
+                    )
+                membership.members()
                 val actorType =
                     ActrType(publisher = "actrium", name = "EchoService", version = "1.0.0")
                 val workload = dynamicWorkload(EchoServerWorkload())
@@ -161,6 +176,7 @@ class ServerActivity : AppCompatActivity() {
                         configPath = runtimeConfigPath,
                         actorType = actorType,
                         workload = workload,
+                        membership = membership,
                         context = this@ServerActivity,
                         scope = lifecycleScope,
                         onNetworkStatusLog = { message ->

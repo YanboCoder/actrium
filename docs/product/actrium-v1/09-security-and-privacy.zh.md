@@ -86,7 +86,7 @@ flowchart LR
 
 | 威胁 | 控制 |
 |---|---|
-| 同版本异包 | Realm Profile 固定 package SHA-256、包签名、equivocation hard fail |
+| 同版本异包 | Realm Profile 固定 Service 包摘要，签名发布记录固定两个包的摘要。任一不匹配时拒绝。 |
 | CDN/缓存篡改 | HTTPS + package digest + Ed25519 |
 | Zip slip/zip bomb | 路径拒绝、文件数/总量/压缩比限制、原子解压 |
 | Guest require 任意模块 | 构建与安装双重白名单、runtime resolver fail-closed |

@@ -20,6 +20,7 @@
 		B197E6D5577128E6A0460663 /* local_echo.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 397CC9BA582965117290965D /* local_echo.pb.swift */; };
 		C50A589CAA17315DC419073A /* echo.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44423C0003E6EA5259A3CA6E /* echo.pb.swift */; };
 		F75A077C7450E69D9CCB2E42 /* Actr in Frameworks */ = {isa = PBXBuildFile; productRef = 2324D5CF66901570ECA64901 /* Actr */; };
+		E225A1FBFB72F405C6C52A28 /* RealmEnrollment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B496B56C22C23DB16C60F208 /* RealmEnrollment.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,7 @@
 		E5303BF3B61A445B4D3FB951 /* EchoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoApp.swift; sourceTree = "<group>"; };
 		ECACC975AD8F559C49999427 /* manifest.toml */ = {isa = PBXFileReference; path = manifest.toml; sourceTree = "<group>"; };
 		F6548FAB001DD58641BC9998 /* actr.toml */ = {isa = PBXFileReference; path = actr.toml; sourceTree = "<group>"; };
+		B496B56C22C23DB16C60F208 /* RealmEnrollment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmEnrollment.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,6 +101,7 @@
 				5967BADDF5C90A79633B78B0 /* ContentView.swift */,
 				E5303BF3B61A445B4D3FB951 /* EchoApp.swift */,
 				43EB44115877066F6CB59748 /* Info.plist */,
+				B496B56C22C23DB16C60F208 /* RealmEnrollment.swift */,
 				A7567AEBC0F090CF314DD287 /* Generated */,
 			);
 			path = EchoApp;
@@ -187,6 +190,7 @@
 				12A73D984EBD4A2F8C10F001 /* actr_dispatch.swift in Sources */,
 				008B4CB5ED449B1607069FAE /* ContentView.swift in Sources */,
 				4D1218D21569E25EA912A9C1 /* EchoApp.swift in Sources */,
+				E225A1FBFB72F405C6C52A28 /* RealmEnrollment.swift in Sources */,
 				904E8B0C4FDAF56035816B19 /* echo.client.swift in Sources */,
 				C50A589CAA17315DC419073A /* echo.pb.swift in Sources */,
 				06DE979B2B3B8B0F5BD66BB7 /* local_echo.actor.swift in Sources */,

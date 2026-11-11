@@ -13,10 +13,10 @@ flowchart TB
     end
 
     subgraph Front["每个 resident app Tab 一个 Front Actor"]
-        NW["Actrium Native Linked Workload"]
+        NW["Actrium 原生 Front Host"]
         RH["Keel Host"]
         CB["Capability Broker"]
-        RG["Keel JS Guest（不受信）"]
+        RG["Keel JS Guest Workload（不受信）"]
         NW --> RH
         RH --> RG
         NW --> CB
@@ -40,37 +40,44 @@ flowchart TB
 
 ## 2. Front Actor
 
-### 2.1 固定 Native workload
+### 2.1 原生 Front Host 与 Keel Guest Workload
 
-Front 使用 Actr linked/native workload：
+Actrium 构建、签名和发布原生 Front Host。Front Host 为每个 resident app Tab 创建一个 Front Actor，
+并负责注册、身份、连接、会话、Keel Engine 和 Host capability。Publisher 的已验证 Front 包提供
+`keel.guest/1` Workload。
 
-- 与 Actrium 一起构建、签名和发布；
-- Publisher package 中不携带；
-- 每个 resident app Tab 创建一个逻辑 Front Actor 实例；
-- 负责 Actor 注册、身份、连接、会话、Keel Engine 和 Host capability；
-- Actor credential 只能证明 Actor key、ActorId、Actor 类型与 issuer claims，不能单独证明对端实际运行的代码（应用如何应对见[应用开发建议](app-development-guidance.zh.md)）。
-
-「Native workload」在这里表示 Actr Host 由平台原生提供，不表示 Guest 可以提供 native code。
+Actor credential 证明 Actor key、ActorId、Actor 类型与 issuer claims。验证对端实际运行的代码还需要其他证据。
+见[应用开发建议](app-development-guidance.zh.md)。
 
 ### 2.2 Front Actor 类型
 
-Front 的 Actor 类型是 Actrium 系统类型，例如：
+Front 的 Actor 类型由已验证的 Front 包声明。Team Notes 的 Front 使用以下类型。
 
 ```text
-actrium/actrium-front@1.0.0
+notes.example/team-notes-front@1.4.2
 ```
 
-它描述 Host runtime，不伪装成 Program 的 Service ActrType。Attach handshake 由 Actr Host 额外声明：
+Service 按已验证 Program Release 记录中的 Front 包类型校验该类型。Attach 时由 Actr Host 提供以下字段。
 
 - Program Release；
-- package digest；
-- Guest digest；
+- Service 包的 digest；
+- 已验证 Front 清单中 Guest 入口文件的 digest；
 - Front Host API；
 - Keel API；
 - protocol fingerprint；
 - local tab session nonce。
 
-这些字段由 Actrium Host 从已验证 package 构造，Guest 无法覆盖；对远端而言它们是客户端声明，用于兼容性协商。
+这些字段统一由 Actrium Host 根据已验证的包和本地会话状态构造。Service 将它们作为客户端声明用于兼容性协商。
+
+两个 Host 在配套包验证时，从已验证的 Front manifest 取得 `dependencies.service.contract`。
+各自从已验证归档读取该路径的 Proto，以路径最后一段文件名作为 `ProtoFile.name`，
+构成 `Fingerprint::calculate_service_semantic_fingerprint` 的单文件输入。
+
+算法通过 `proto_fingerprint::Spec` 取得每个文件的语义指纹，按 `name` 排序，
+将 `name:semantic-fingerprint` 条目用 LF 连接，末尾不加 LF。
+对该字符串的 UTF-8 字节计算 SHA-256，以小写十六进制编码并加上 `service_semantic:` 前缀。
+此处选定的 Product v1 契约只有一个输入条目。
+见[指纹实现](../../../crates/actr-service-compat/src/fingerprint.rs)。
 
 平台提供可选的远端证明：受管 Realm 可以把平台 app attestation、发行签名或企业设备证明纳入 credential，供需要的 Service 验证。
 
@@ -104,7 +111,7 @@ Allocated
 
 v1 正式 Marketplace：
 
-- `guest_runtime = "keel-js"`；
+- Front 包使用 `workload.profile = "keel.guest/1"` 和 `workload.keel.runtime = "js"`。
 - bundle 是自包含 CommonJS；
 - 仅允许 React、JSX runtime、Keel Guest SDK 和 Actrium 声明的 `host:*` capability；
 - 禁止任意 npm/runtime require；
@@ -354,7 +361,7 @@ actrium.session.v1.GetStatus
     "frontHostApi": "1.0",
     "keelApi": "1.0"
   },
-  "protocolFingerprint": "sha256:...",
+  "protocolFingerprint": "service_semantic:...",
   "tabSessionNonce": "<random>",
   "requestedLease": "exclusive",
   "challengeResponse": "<signed-proof>"
@@ -375,7 +382,7 @@ actrium.session.v1.GetStatus
     "actorId": "<ActorId>",
     "program": "notes.example/team-notes@1.4.2",
     "packageDigest": "sha256:...",
-    "protocolFingerprint": "sha256:..."
+    "protocolFingerprint": "service_semantic:..."
   },
   "workspace": {
     "displayName": "Team Notes",
@@ -404,7 +411,7 @@ Service 按顺序检查：
 4. challenge/nonce 防重放；
 5. target Service ActorId；
 6. Program Release（兼容性声明）；
-7. package digest（兼容性声明；无 attestation 时不是远端代码证明）；
+7. 用于兼容性协商的 Service 包 digest。验证远端代码需要独立证据。
 8. protocol fingerprint；
 9. 应用权限：Front credential 中的成员 id、Realm 客户端 key id 与角色（owner/editor/viewer），以及 Workspace 范围；
 10. attachment policy；

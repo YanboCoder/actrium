@@ -1,0 +1,44 @@
+name: MembershipHost
+options:
+  deploymentTarget:
+    iOS: "15.0"
+packages:
+  actr-swift:
+    path: ../../../../../packages/actr-swift
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ENABLE_TESTABILITY: YES
+    CODE_SIGN_STYLE: Automatic
+targets:
+  MembershipHost:
+    type: application
+    platform: iOS
+    sources: [MembershipHost.swift]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.actrium.membership-test
+        GENERATE_INFOPLIST_FILE: YES
+  MembershipTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../../../../../packages/actr-swift/Tests/ActrTests/RealmIdentityStoreTests.swift
+    dependencies:
+      - target: MembershipHost
+      - package: actr-swift
+        product: Actr
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.actrium.membership-test.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  MembershipHost:
+    build:
+      targets:
+        MembershipHost: all
+        MembershipTests: [test]
+    test:
+      targets: [MembershipTests]
+      environmentVariables:
+        ACTR_MOBILE_FIXTURE: $(ACTR_MOBILE_FIXTURE)

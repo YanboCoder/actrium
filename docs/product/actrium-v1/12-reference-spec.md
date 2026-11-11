@@ -100,20 +100,22 @@ member's JSON is normalized per RFC 8785 JCS and verified as a detached Ed25519 
 unsigned and play no part in Publisher trust decisions. `profile_signing_keys` and the
 optional `rotations` follow the format, acceptance, and rotation rules of
 `realm_signing_keys` (Actr Authority Discovery §4.4). A package signing key's `id` is computed
-from its public key and equals the manifest `signing_key_id`; `keys` has at most 8 entries, at
+from its public key and equals the manifest `signature.key-id`; `keys` has at most 8 entries, at
 most 2 of them `active`, and a rotation publishes the new key first and signs packages with it
 only 24 hours or more later ([Actor Package](../../../actr/protocols/actor-package.zh.md) §6.8,
 Chinese only).
 
 ## 3. Package download
 
-Which package an instance runs is written into its Realm Profile's `package` (sample in §6.2):
+The Realm Profile's `package` identifies the instance's Service package (sample in §6.2).
 
 ```json
-"package": {
-  "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-  "sha256": "<64 hex>",
-  "type": "notes.example/team-notes@1.4.2"
+{
+  "package": {
+    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
+    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "type": "notes.example/team-notes@1.4.2"
+  }
 }
 ```
 
@@ -123,147 +125,188 @@ the package signing key from the Publisher Profile (§2); the Actor type the man
 the instance's program. The download address can be anywhere (a Publisher CDN, Loran package
 hosting, object storage) — it is not a trust source.
 
+Actrium matches the Service package's Actor type and SHA-256 to a Publisher-signed Program Release
+record, then independently verifies the Front package pinned by that record.
+
+### 3.1 Signed Program Release record
+
+The release record names both packages. The archive SHA-256 values and signature below are illustrative.
+
+```json
+{
+  "schema": "actrium.program-release/v1",
+  "release_id": "notes.example/team-notes@1.4.2",
+  "service": {
+    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
+    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "type": "notes.example/team-notes@1.4.2"
+  },
+  "front": {
+    "href": "https://cdn.notes.example/team-notes-front-1.4.2.actr",
+    "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "type": "notes.example/team-notes-front@1.4.2"
+  },
+  "privacy_contract": {
+    "href": "https://cdn.notes.example/team-notes-1.4.2.privacy.toml",
+    "sha256": "0f9e4a476a26c7d6896f8be66f3dec4ebfb3168addde52d3ff339662e12d2147"
+  },
+  "signature": {
+    "key_id": "actr-pub-3f9a1c0d2b7e4a61",
+    "algorithm": "Ed25519",
+    "value": "<base64>"
+  }
+}
+```
+
+`schema` is `actrium.program-release/v1`. `release_id` is the Service Actor type in
+`publisher/program@version` form. The two Actor types must be distinct and belong to that Publisher.
+The `service` and `front` members identify the package roles and bind each archive's HTTPS address,
+SHA-256, and exact Actor type. Within a release, both package types and digests,
+and the presence and digest of a Privacy Contract, are fixed. Download addresses can change.
+
+The Publisher signs the record with an active package signing key from the Publisher Profile's
+`keys`. The signature covers the record with the `signature` member removed, canonicalized
+using RFC 8785 JCS. The signature value is the base64-encoded Ed25519 signature. Actrium
+verifies it with the trusted Publisher key selected by `signature.key_id`, following the key
+acceptance and revocation rules for package signatures.
+
+Workspace requirements are declared by `[workspace]` in the signed Service manifest, as described
+in [03 §5.3](03-user-experience.md#53-workspace-selection).
+
+When a release uses a Program Privacy Contract, its signed record must include `privacy_contract`
+with the HTTPS address and SHA-256 of that file's exact bytes. Actrium verifies the record, then
+checks the fetched contract against that digest before using its declarations for authorization.
+It also checks the contract's `release_id` and both package digests against the record.
+Contract contents and binding must pass verification before the Host can grant capabilities
+governed by that contract. See [14 §4.2](14-privacy-primitives-and-attestation.md#42-program-privacy-contract).
+
+Actrium can use a verified local record or obtain a record from the Publisher or Marketplace.
+When opening a Realm, the record's `service.type` and `service.sha256` must match
+`Realm Profile.package`. Installing a published release requires a verified matching record. Actrium rejects
+conflicting package or Privacy Contract bindings for an accepted release. See
+[05 §3](05-program-package-and-distribution.md#3-where-a-package-comes-from) for package selection.
+
 ## 4. `.actr` Manifest
 
-Illustrative:
+Team Notes uses a separate signed `actr-package/2` archive for each Workload. File sizes, digests,
+and the key ID are illustrative.
+
+### 4.1 Service package
+
+The WASM Component is this package's Workload. Its only Proto file is the Service RPC contract.
 
 ```toml
+format = "actr-package/2"
+
+[actor]
 publisher = "notes.example"
 name = "team-notes"
 version = "1.4.2"
-signature_algorithm = "ed25519"
-signing_key_id = "actr-pub-3f9a1c0d2b7e4a61"
 
-[binary]
-path = "bin/service.wasm"
-target = "wasm32-wasip2"
-kind = "component"
-hash = "<sha256>"
-size = 1832000
+[workload]
+profile = "actr.component/1"
+entry = "workload/service.wasm"
 
-[metadata]
-description = "Workspace-bound team notes"
-license = "Apache-2.0"
+[host]
+profile = "actr.host/1"
+api = "^1.0.0"
+required-capabilities = []
+optional-capabilities = []
 
-[actrium]
-schema_version = 1
-min_actrium_version = "1.0.0"
-front_host_api = "^1.0"
-service_host_api = "^1.0"
-
-[actrium.front]
-guest_runtime = "keel-js"
-guest_entry = "ui/guest.bundle.js"
-keel_api = "^1.0"
-contract_manifest = "ui/capability-manifest.json"
-contract_digest = "sha256:<digest>"
-
-[actrium.service]
-contract = "proto/service.proto"
-protocol_fingerprint = "sha256:<digest>"
-
-[actrium.service.workspace]
+[workspace]
 requirement = "required"
-provisioning = "user-selected"
 access = "read-write"
 providers = ["managed-store", "local-folder", "cloud-drive"]
-lease = "exclusive-writer"
 
-[actrium.session]
-attachment_policy = "exclusive"
-lease_seconds = 45
-heartbeat_seconds = 15
+[signature]
+algorithm = "ed25519"
+key-id = "actr-pub-3f9a1c0d2b7e4a61"
 
-[actrium.privacy]
-schema_version = 1
-data_classes = ["public", "private", "secret"]
-default_unknown_action = "block-private-and-secret"
+[[files]]
+path = "workload/service.wasm"
+role = "workload"
+media-type = "application/wasm"
+size = 1832000
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 
-[[actrium.privacy.actor_egress]]
-actr_type = "notes.example/index-worker@1.4.2"
-required = false
-data_classes = ["private"]
-
-[actrium.permissions.front]
-capabilities = [
-  "service",
-  "host:clipboard.write",
-  "host:notifications"
-]
-
-[actrium.permissions.service]
-capabilities = [
-  "workspace:read-write",
-  "net:https://api.notes.example",
-  "actor:call:notes.example:index-worker:1"
-]
-
-[actrium.components]
-allow = [
-  "View",
-  "Text",
-  "ScrollView",
-  "TextInput",
-  "Button",
-  "FlatList",
-  "ImageAsset"
-]
-
-[actrium.resources.front]
-heap_bytes = 67108864
-js_turn_timeout_ms = 100
-max_render_nodes = 10000
-max_batch_ops = 5000
-max_rpc_concurrency = 32
-
-[actrium.resources.service]
-memory_bytes = 268435456
-max_mailbox = 4096
-max_rpc_concurrency = 128
-max_workspace_bytes = 10737418240
-
-[[resources]]
-path = "ui/guest.bundle.js"
-hash = "<sha256>"
-
-[[resources]]
-path = "ui/capability-manifest.json"
-hash = "<sha256>"
-
-[[resources]]
-path = "assets/icon.png"
-hash = "<sha256>"
-
-[[proto_files]]
-name = "service.proto"
-path = "proto/service.proto"
-hash = "<sha256>"
-
-[lock_file]
-path = "manifest.lock.toml"
-hash = "<sha256>"
+[[files]]
+path = "contracts/service.proto"
+role = "contract"
+media-type = "text/plain"
+size = 1204
+sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
 ```
 
-The formal schema still needs to decide how to keep backward compatibility with the Actr base
-manifest, and to ensure `[actrium]` fields also fall within the scope the manifest signature
-covers.
+### 4.2 Front package
 
-A Native Capsule workload additionally needs:
+The Keel Guest is this package's Workload. `workload.keel.contract` selects its Keel contract.
+`dependencies.service.contract` selects the Proto used to generate the Guest's Service RPC codecs.
 
 ```toml
-[actrium.native_capsule]
-profile = "privacy-closed-v1"
-network = "broker-only"
-workspace = "broker-only"
-child_process = false
-ptrace = false
-shared_writable_memory = false
-dynamic_libraries = "sealed"
-ipc = ["actr.capability.v1"]
+format = "actr-package/2"
+
+[actor]
+publisher = "notes.example"
+name = "team-notes-front"
+version = "1.4.2"
+
+[workload]
+profile = "keel.guest/1"
+entry = "workload/guest.js"
+
+[workload.keel]
+runtime = "js"
+guest-api = "keel.guest/1"
+capabilities = "workload/capabilities.json"
+contract = "contracts/notes.json"
+
+[host]
+profile = "actr.host/1"
+api = "^1.0.0"
+required-capabilities = ["actor.call", "ui.render"]
+optional-capabilities = []
+
+[dependencies.service]
+actor = "notes.example/team-notes"
+version = "=1.4.2"
+contract = "contracts/service.proto"
+required = true
+
+[signature]
+algorithm = "ed25519"
+key-id = "actr-pub-3f9a1c0d2b7e4a61"
+
+[[files]]
+path = "workload/guest.js"
+role = "workload"
+media-type = "text/javascript"
+size = 18432
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[[files]]
+path = "workload/capabilities.json"
+role = "profile"
+media-type = "application/json"
+size = 746
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[[files]]
+path = "contracts/notes.json"
+role = "contract"
+media-type = "application/json"
+size = 512
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[[files]]
+path = "contracts/service.proto"
+role = "contract"
+media-type = "text/plain"
+size = 1204
+sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
 ```
 
-An in-process `NativeCdylib` does not use this profile, and must not be rated `CONTROLLED` on that
-basis.
+The two examples use the same `contracts/service.proto` bytes. Each archive has its own `manifest.sig`.
+Deployment settings such as Realm, signaling, and trust are supplied through `actr.toml`.
 
 ## 5. Keel Capability Manifest
 
@@ -271,7 +314,7 @@ basis.
 {
   "schemaVersion": 1,
   "keelApi": "1.0",
-  "guestEntry": "ui/guest.bundle.js",
+  "guestEntry": "workload/guest.js",
   "imports": [
     "react",
     "react/jsx-runtime",
@@ -414,7 +457,7 @@ Sample:
   },
   "package": {
     "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-    "sha256": "<64 hex>",
+    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
     "type": "notes.example/team-notes@1.4.2"
   },
   "issuer": {
@@ -473,7 +516,7 @@ higher `sequence`. A Realm Profile carries no expiry; rollback protection relies
 `sequence`. `provider.id` is the Actr Facility Provider's normalized DNS authority and is immutable for the
 life of the Realm. Multiple signaling endpoints sharing a `control_plane_id` are replicas or
 failover entry points of the same Actr Facility Provider presence/control plane, not v1 federation.
-`package` gives the package the instance runs (§3); upgrading the program means publishing a Realm
+`package` pins the instance's Service archive (§3). Upgrading the program means publishing a Realm
 Profile with a different `package` and a higher `sequence`. Rotating the Realm issuer key or
 changing endpoints under the same Actr Facility Provider likewise means publishing a Realm Profile with a
 higher `sequence`; retiring publishes a new Realm Profile with `status` set to `retired`, valid

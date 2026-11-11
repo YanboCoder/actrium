@@ -86,7 +86,7 @@ A trusted Actr Host can still have vulnerabilities; "trusted" means it sits insi
 
 | Threat | Control |
 |---|---|
-| Different package content under the same version | Realm Profile pins the package SHA-256 and package signature; equivocation hard-fails |
+| Different package content under the same version | The Realm Profile pins the Service digest, and the signed release record pins both digests. Reject either mismatch. |
 | CDN/cache tampering | HTTPS + package digest + Ed25519 |
 | Zip slip/zip bomb | Path rejection, limits on file count/total size/compression ratio, atomic extraction |
 | Guest requiring an arbitrary module | Dual allowlist at build and install time, fail-closed runtime resolver |

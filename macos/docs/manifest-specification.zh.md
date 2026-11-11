@@ -1,7 +1,8 @@
 # Actrium Actor Package Manifest
 
-Actrium 不再定义另一层应用归档格式。它直接读取通用的 `actr-package/2` `.actr`
-包，并要求主 Workload 使用 `keel.guest/1` Profile。
+本文说明 macOS 上的独立 Keel Guest 包。该包使用通用 `actr-package/2` 格式，主 Workload 为
+`keel.guest/1`。Product v1 发布版本配对分发 Front 包和 Service 包，见
+[Product v1 参考清单](../../docs/product/actrium-v1/12-reference-spec.zh.md#4-actr-manifest)。
 
 每个包的根目录包含 `manifest.toml`、Ed25519 原始签名 `manifest.sig`，以及所有在
 `[[files]]` 中声明的 payload。最小 Actrium Guest Manifest 如下：

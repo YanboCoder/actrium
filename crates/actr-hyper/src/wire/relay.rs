@@ -1200,11 +1200,15 @@ impl RelayClient {
             .post(self.ais_url("relay-identity")?)
             .header(reqwest::header::CONTENT_TYPE, "application/json");
         if let Some(key) = &self.client_key {
-            let proof = key.proof(
-                actr_protocol::realm_membership::ProofOp::RelayIdentity,
-                &actor.realm,
-                &body,
-            );
+            let proof = key
+                .proof(
+                    actr_protocol::realm_membership::ProofOp::RelayIdentity,
+                    &actor.realm,
+                    &body,
+                )
+                .map_err(|_| {
+                    NetworkError::ConnectionError("Realm client signer unavailable".into())
+                })?;
             request = request.header(actr_protocol::realm_membership::CLIENT_PROOF_HEADER, proof);
         }
         let issued: IssuedIdentity = bounded_json(request.body(body)).await?;

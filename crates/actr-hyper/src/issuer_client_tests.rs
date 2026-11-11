@@ -11,6 +11,7 @@ fn client_new_holds_endpoint_and_no_key() {
     assert!(c.client_key.is_none());
     assert!(
         c.proof_header(ProofOp::Register, "r@acme.com", b"x")
+            .unwrap()
             .is_none()
     );
 }
@@ -26,6 +27,7 @@ fn client_key_signs_a_fresh_proof_of_the_body() {
     ));
     let (name, first) = c
         .proof_header(ProofOp::Renew, "k7m2q9xh@acme.com", b"body")
+        .unwrap()
         .unwrap();
     assert_eq!(name, "x-actr-client-proof");
     let proof = ClientProof::parse_header(&first).unwrap();
@@ -41,6 +43,7 @@ fn client_key_signs_a_fresh_proof_of_the_body() {
         .unwrap();
     let (_, second) = c
         .proof_header(ProofOp::Renew, "k7m2q9xh@acme.com", b"body")
+        .unwrap()
         .unwrap();
     assert_ne!(first, second, "each request is signed with a new nonce");
 }
@@ -81,6 +84,50 @@ fn control_attempt_ids_are_raw_unique_uuids() {
     assert_eq!(first.len(), 16);
     assert_eq!(second.len(), 16);
     assert_ne!(first, second);
+}
+
+#[test]
+fn mobile_proofs_allow_small_positive_clock_skew_without_extending_lifetime() {
+    let key = RealmClientKey::new(
+        "r@example.com",
+        "provider.example",
+        ed25519_dalek::SigningKey::from_bytes(&[8; 32]),
+    );
+    for op in [
+        ProofOp::Register,
+        ProofOp::Renew,
+        ProofOp::Reissue,
+        ProofOp::RelayIdentity,
+    ] {
+        let proof =
+            ClientProof::parse_header(&key.proof(op, "r@example.com", b"body").unwrap()).unwrap();
+        proof
+            .check(
+                op,
+                "r@example.com",
+                "provider.example",
+                b"body",
+                chrono::Utc::now() - chrono::Duration::seconds(20),
+            )
+            .unwrap();
+        let issued = chrono::DateTime::parse_from_rfc3339(&proof.issued_at).unwrap();
+        let expires = chrono::DateTime::parse_from_rfc3339(&proof.expires_at).unwrap();
+        assert_eq!(
+            (expires - issued).num_seconds(),
+            actr_protocol::realm_management::MAX_VALIDITY_SECS
+        );
+        assert!(
+            proof
+                .check(
+                    op,
+                    "r@example.com",
+                    "provider.example",
+                    b"body",
+                    chrono::Utc::now() + chrono::Duration::minutes(5)
+                )
+                .is_err()
+        );
+    }
 }
 
 #[test]

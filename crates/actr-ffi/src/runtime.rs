@@ -110,7 +110,7 @@ impl ActrNode {
         config_path: String,
         package_path: String,
     ) -> ActrResult<Arc<Self>> {
-        new_from_package_file_inner(config_path, package_path, None).await
+        new_from_package_file_inner(config_path, package_path, None, None).await
     }
 
     /// Create a package-backed runtime and install host-side observers.
@@ -120,7 +120,7 @@ impl ActrNode {
         package_path: String,
         observers: Arc<RuntimeObservers>,
     ) -> ActrResult<Arc<Self>> {
-        new_from_package_file_inner(config_path, package_path, Some(observers)).await
+        new_from_package_file_inner(config_path, package_path, Some(observers), None).await
     }
 
     /// Create a linked/static runtime from a foreign-language workload.
@@ -140,6 +140,47 @@ impl ActrNode {
                 msg: format!("Failed to link foreign workload: {e}"),
             })?;
         register_linked_node(attached).await
+    }
+
+    /// Create a package-backed runtime using an OS-managed Realm identity.
+    #[uniffi::constructor(async_runtime = "tokio")]
+    pub async fn new_from_package_file_with_membership(
+        config_path: String,
+        package_path: String,
+        membership: Arc<crate::RealmMembership>,
+        observers: Option<Arc<RuntimeObservers>>,
+    ) -> ActrResult<Arc<Self>> {
+        run_on_tokio_runtime("package membership bootstrap", async move {
+            new_from_package_file_inner(config_path, package_path, observers, Some(membership))
+                .await
+        })
+        .await
+    }
+
+    /// Linked workloads use the same platform signer for their full credential lifecycle.
+    #[uniffi::constructor(async_runtime = "tokio")]
+    pub async fn new_from_linked_workload_with_membership(
+        config_path: String,
+        actor_type: ActrType,
+        workload: Arc<DynamicWorkload>,
+        membership: Arc<crate::RealmMembership>,
+    ) -> ActrResult<Arc<Self>> {
+        // UniFFI's Tokio compatibility enters the runtime but still polls on
+        // the foreign executor. Keep native bootstrap and signing callbacks
+        // on a Tokio worker, with the existing cancellation-on-drop boundary.
+        run_on_tokio_runtime("linked membership bootstrap", async move {
+            let actor_type: actr_protocol::ActrType = actor_type.into();
+            let init = load_linked_init(&config_path, &actor_type).await?;
+            let attached = init
+                .with_actor_type(actor_type)
+                .link(workload.as_ref().clone())
+                .await
+                .map_err(|_| ActrError::Internal {
+                    msg: "failed to link foreign workload".into(),
+                })?;
+            register_linked_node(membership.bind(attached)?).await
+        })
+        .await
     }
 
     /// Create a lifecycle-gated network event handle for platform callbacks.
@@ -186,6 +227,7 @@ async fn new_from_package_file_inner(
     config_path: String,
     package_path: String,
     observers: Option<Arc<RuntimeObservers>>,
+    membership: Option<Arc<crate::RealmMembership>>,
 ) -> ActrResult<Arc<ActrNode>> {
     let package_bytes = std::fs::read(&package_path).map_err(|e| {
         error!("Failed to read package at {}: {}", package_path, e);
@@ -221,6 +263,9 @@ async fn new_from_package_file_inner(
     })?;
     if let Some(observers) = observers {
         attached = attached.with_hook_observer(observers.as_ref().clone());
+    }
+    if let Some(membership) = membership {
+        attached = membership.bind(attached)?;
     }
     let issuer_endpoint = attached.issuer_endpoint().to_string();
     let registered = attached.register(&issuer_endpoint).await.map_err(|e| {

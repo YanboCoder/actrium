@@ -64,7 +64,7 @@ Turn this document's product semantics into a cross-repository, testable contrac
 
 - test vectors for the `actr://` Realm link;
 - Publisher Profile schema;
-- Actrium manifest extension schema;
+- signed Program Release record verification vectors and an online discovery interface.
 - the Realm signing key (the authority descriptor's `realm_signing_keys` member and the core `realms` relation, already defined in Actr Authority Discovery §4.3–4.4) and the Realm Profile schema;
 - persistent Actor identity lifecycle ADR;
 - Front–Service session proto;
@@ -129,8 +129,8 @@ Turn this document's product semantics into a cross-repository, testable contrac
 - domain/IDNA normalizer;
 - key history/rotation store;
 - package digest pinning;
-- Actrium manifest extension;
-- Guest/contract/assets folded into the `.actr` resource hash;
+- signed Program Release records that pair Front and Service packages.
+- Guest, contract, and assets covered by the signed `[[files]]` table.
 - content-addressed cache;
 - zip safety policy;
 - Marketplace metadata adapter;
@@ -138,16 +138,18 @@ Turn this document's product semantics into a cross-repository, testable contrac
 
 ### Actr package changes
 
-- the publisher field accepts a normalized Publisher domain;
-- the manifest gains a backward-compatible `[actrium]` section;
-- the verifier outputs typed Actrium metadata;
-- the binary only allows a supported kind;
-- the resource hash, lock, and proto are kept;
-- the package signing key id ties into the Publisher Profile.
+- `actor.publisher` carries a normalized Publisher domain.
+- Service and Front each use an `actr-package/2` manifest for one Workload.
+- Readers and packagers support the Service manifest's `[workspace]`, and the Host enforces required bindings before Ready.
+- The verifier checks each manifest and the release record that pairs the packages.
+- The verifier authenticates Privacy Contract bytes against `privacy_contract.sha256` in the signed release record.
+- The loader validates each package's Workload Profile before loading its entry.
+- `[[files]]` binds the files for the Guest, contracts, assets, and any dependency lock.
+- `signature.key-id` ties into the Publisher Profile.
 
 ### Exit criteria
 
-- a `.actr` can be downloaded and verified per the Realm Profile's `package`;
+- the Realm Profile pins the Service package. The matching signed release record identifies the independently verified Front package.
 - a mismatched package for the same version is reliably detected;
 - an offline cache can be re-verified;
 - the Front Host cannot be replaced from within a package.
@@ -390,7 +392,7 @@ The first demonstrable vertical slice does only:
 1. macOS;
 2. a local Realm;
 3. one signed `.actr` WASM Service;
-4. one Keel JS Guest inside the package;
+4. one separately signed `.actr` Keel JS Guest paired with the Service release.
 5. managed Workspace;
 6. creating an instance from a local package;
 7. the address bar shows the Realm link;

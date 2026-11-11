@@ -13,10 +13,10 @@ flowchart TB
     end
 
     subgraph Front["One Front Actor per resident app Tab"]
-        NW["Actrium Native Linked Workload"]
+        NW["Actrium Native Front Host"]
         RH["Keel Host"]
         CB["Capability Broker"]
-        RG["Keel JS Guest (untrusted)"]
+        RG["Keel JS Guest Workload (untrusted)"]
         NW --> RH
         RH --> RG
         NW --> CB
@@ -40,37 +40,48 @@ flowchart TB
 
 ## 2. Front Actor
 
-### 2.1 Fixed Native workload
+### 2.1 Native Front Host and Keel Guest Workload
 
-Front uses an Actr linked/native workload:
+Actrium builds, signs, and ships the native Front Host. It creates one Front Actor per resident app
+Tab and provides registration, identity, connections, session management, the Keel Engine, and Host
+capabilities. The Publisher's verified Front package supplies the `keel.guest/1` Workload.
 
-- built, signed and published together with Actrium;
-- not carried in the Publisher package;
-- one logical Front Actor instance is created per resident app Tab;
-- responsible for Actor registration, identity, connection, session, the Keel Engine and Host capabilities;
-- an Actor credential can only prove the Actor key, ActorId, Actor type and issuer claims; it cannot by itself prove what code the other end is actually running (see [application development guidance](app-development-guidance.md) for how an application should respond to that).
-
-Here, "Native workload" means the Actr Host is provided natively by the platform; it does not mean the Guest can supply native code.
+An Actor credential proves the Actor key, ActorId, Actor type, and issuer claims. Verifying the code
+running at the other end requires additional evidence. See
+[application development guidance](app-development-guidance.md).
 
 ### 2.2 Front Actor type
 
-The Front's Actor type is an Actrium system type, for example:
+The verified Front package declares the Front's Actor type. The Team Notes Front uses this type.
 
 ```text
-actrium/actrium-front@1.0.0
+notes.example/team-notes-front@1.4.2
 ```
 
-It describes the Host runtime and does not masquerade as a Program's Service ActrType. As part of the Attach handshake, the Actr Host additionally declares:
+The Service checks the Front's type against the Front package type in the verified Program Release record.
+The Actr Host supplies these values during Attach.
 
 - the Program Release;
-- the package digest;
-- the Guest digest;
+- the Service package digest;
+- the Guest entry's digest from the verified Front manifest;
 - the Front Host API;
 - the Keel API;
 - the protocol fingerprint;
 - a local tab session nonce.
 
-These fields are constructed by the Actrium Host from the verified package and cannot be overridden by the Guest; to the remote end they are client-declared values used for compatibility negotiation.
+The Actrium Host alone constructs these values from the verified packages and local session state.
+The Service treats them as client declarations for compatibility negotiation.
+
+During pair verification, both Hosts obtain `dependencies.service.contract` from the verified
+Front manifest. Each reads the selected Proto from its own verified archive and uses the path's
+basename as `ProtoFile.name`. This defines the single-file input to
+`Fingerprint::calculate_service_semantic_fingerprint`.
+
+The algorithm obtains each file's semantic fingerprint from `proto_fingerprint::Spec`,
+sorts files by `name`, and joins the `name:semantic-fingerprint` entries with LF, without a trailing LF.
+It hashes the UTF-8 bytes of that string with SHA-256 and prefixes the lowercase hexadecimal result
+with `service_semantic:`. For the selected Product v1 contract, the input contains one entry.
+See the [fingerprint implementation](../../../crates/actr-service-compat/src/fingerprint.rs).
 
 The platform provides optional remote attestation: a managed Realm can fold platform app attestation, distribution signatures, or enterprise device attestation into the credential, for a Service that needs it to verify.
 
@@ -104,7 +115,7 @@ The following must hold:
 
 For the v1 official Marketplace:
 
-- `guest_runtime = "keel-js"`;
+- the Front package uses `workload.profile = "keel.guest/1"` and `workload.keel.runtime = "js"`.
 - the bundle is self-contained CommonJS;
 - only React, the JSX runtime, the Keel Guest SDK, and `host:*` capabilities declared by Actrium are allowed;
 - arbitrary npm/runtime `require` is prohibited;
@@ -354,7 +365,7 @@ actrium.session.v1.GetStatus
     "frontHostApi": "1.0",
     "keelApi": "1.0"
   },
-  "protocolFingerprint": "sha256:...",
+  "protocolFingerprint": "service_semantic:...",
   "tabSessionNonce": "<random>",
   "requestedLease": "exclusive",
   "challengeResponse": "<signed-proof>"
@@ -375,7 +386,7 @@ actrium.session.v1.GetStatus
     "actorId": "<ActorId>",
     "program": "notes.example/team-notes@1.4.2",
     "packageDigest": "sha256:...",
-    "protocolFingerprint": "sha256:..."
+    "protocolFingerprint": "service_semantic:..."
   },
   "workspace": {
     "displayName": "Team Notes",
@@ -404,7 +415,7 @@ The Service checks, in order:
 4. the challenge/nonce, against replay;
 5. the target Service ActorId;
 6. the Program Release (a compatibility declaration);
-7. the package digest (a compatibility declaration; without attestation it is not proof of the remote code);
+7. the Service package digest as a compatibility declaration. Verifying the remote code requires separate evidence.
 8. the protocol fingerprint;
 9. Application permissions: the member id, Realm client key id and role (owner/editor/viewer) in the Front credential, plus the Workspace scope;
 10. the attachment policy;

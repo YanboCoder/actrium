@@ -210,6 +210,10 @@ version 时 **MUST** 拒绝，不能猜测其字段含义。`actr-package/1` 已
 需改用 `actr-package/2` 与 `publisher` 字段的错误；旧字段名不作为别名接受（历史字段名见
 [术语表](../../docs/GLOSSARY.zh.md)「历史名称对照」）。
 
+Actrium Product v1 的 Service 和 Keel Guest 分别使用独立的 `actr-package/2` 包，各自声明一个
+Workload。清单和依赖示例见
+[Product v1 参考清单](../../docs/product/actrium-v1/12-reference-spec.zh.md#4-actr-manifest)。
+
 ### 6.2 `[actor]`
 
 `[actor]` 必须包含：
@@ -287,20 +291,20 @@ Actor 依赖按 alias 声明。示例：
 
 ```toml
 [dependencies.sync]
-actor = "acme:notes-sync"
+actor = "acme.com/notes-sync"
 version = "^2.0.0"
 contract = "contracts/sync.proto"
 required = true
 
 [dependencies.index]
-actor = "acme:notes-index"
+actor = "acme.com/notes-index"
 version = "^1.4.0"
 required = false
 ```
 
-Alias 是当前 Workload 内的稳定引用名。`actor` 标识 publisher 与 Actor name，`version`
-给出允许范围。`contract` 可绑定调用方编译时使用的 interface；Profile 或下级规范可以增加
-contract fingerprint。
+Alias 是当前 Workload 内的稳定引用名。`actor` 使用 `publisher/program`，版本约束由
+`version` 单独声明。`contract` 可绑定调用方编译时使用的 interface。Profile 或下级规范可以
+增加 contract fingerprint。
 
 依赖：
 
@@ -387,6 +391,29 @@ Profile 的 `keys` 中找 key（`active` 或 `retired` 均可）验证 `manifest
 
 Publisher Profile 签名 key（`profile_signing_keys`）的轮换另按
 [Actr Authority Discovery](authority-discovery.zh.md) 第 4.4、4.5 节进行。
+
+### 6.9 `[workspace]`
+
+可选的顶层 `[workspace]` 表声明此 Workload 对用户工作空间的静态要求，由 manifest 签名覆盖。
+Product v1 在 Service 包中声明这些要求。
+
+| 字段 | 值 | 含义 |
+| --- | --- | --- |
+| `requirement` | `none` / `optional` / `required` | 是否申请 Workspace，以及进入 Ready 前是否必须绑定。 |
+| `access` | `read-only` / `read-write` | Workload 申请的访问级别。 |
+| `providers` | 非空字符串数组 | Workload 支持的 Workspace Provider 类型，例如 `local-folder`、`cloud-drive`。 |
+
+省略此表等同于 `requirement = "none"`。声明此表时必须提供 `requirement`。
+`requirement` 为 `optional` 或 `required` 时，必须提供 `access` 和至少一个 `providers` 条目。
+`requirement = "none"` 时省略 `access` 和 `providers`，Workload 仍可使用实例私有存储。
+
+Host 将 Provider 支持范围与平台能力、用户和组织策略取交集，并取得用户授权。
+绑定必须提供声明的访问级别，实际授权以 `access` 为上限。`required` 的绑定要求满足后，
+Workload 才能进入 Ready。`optional` 允许以未绑定 Workspace 的状态运行。
+
+`provisioning`（`managed` 或 `user-selected`）由部署或实例创建流程选择。
+实际 Provider、位置、凭据引用、授权和租约由 Host 按实例保存。
+`[workspace]` 仅接受上表定义的三个字段。
 
 ## 7. Workload Profile
 
@@ -633,7 +660,7 @@ required-capabilities = [
 optional-capabilities = ["actor.storage"]
 
 [dependencies.sync]
-actor = "acme:notes-sync"
+actor = "acme.com/notes-sync"
 version = "^2.0.0"
 contract = "contracts/sync.proto"
 required = true
