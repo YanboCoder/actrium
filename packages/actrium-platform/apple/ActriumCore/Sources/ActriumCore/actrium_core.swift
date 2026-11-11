@@ -4886,6 +4886,200 @@ public func FfiConverterTypePackageIntegrityPlanInfo_lower(_ value: PackageInteg
 
 
 /**
+ * A package signing key from a verified Publisher Profile.
+ */
+public struct PublisherPackageKeyInfo {
+    /**
+     * `actr-pub-` + 16 lowercase hex characters of the key digest.
+     */
+    public var id: String
+    /**
+     * Base64 Ed25519 public key.
+     */
+    public var publicKeyBase64: String
+    /**
+     * `active` or `retired`.
+     */
+    public var status: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `actr-pub-` + 16 lowercase hex characters of the key digest.
+         */id: String,
+        /**
+         * Base64 Ed25519 public key.
+         */publicKeyBase64: String,
+        /**
+         * `active` or `retired`.
+         */status: String) {
+        self.id = id
+        self.publicKeyBase64 = publicKeyBase64
+        self.status = status
+    }
+}
+
+#if compiler(>=6)
+extension PublisherPackageKeyInfo: Sendable {}
+#endif
+
+
+extension PublisherPackageKeyInfo: Equatable, Hashable {
+    public static func ==(lhs: PublisherPackageKeyInfo, rhs: PublisherPackageKeyInfo) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.publicKeyBase64 != rhs.publicKeyBase64 {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(publicKeyBase64)
+        hasher.combine(status)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublisherPackageKeyInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublisherPackageKeyInfo {
+        return
+            try PublisherPackageKeyInfo(
+                id: FfiConverterString.read(from: &buf),
+                publicKeyBase64: FfiConverterString.read(from: &buf),
+                status: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublisherPackageKeyInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.publicKeyBase64, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublisherPackageKeyInfo_lift(_ buf: RustBuffer) throws -> PublisherPackageKeyInfo {
+    return try FfiConverterTypePublisherPackageKeyInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublisherPackageKeyInfo_lower(_ value: PublisherPackageKeyInfo) -> RustBuffer {
+    return FfiConverterTypePublisherPackageKeyInfo.lower(value)
+}
+
+
+/**
+ * Verified Publisher Profile for a publisher domain.
+ */
+public struct PublisherProfileInfo {
+    public var domain: String
+    public var profileSequence: UInt64
+    /**
+     * RFC 3339; past this point the profile must be re-fetched.
+     */
+    public var profileExpiresAt: String
+    public var packageSigningKeys: [PublisherPackageKeyInfo]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(domain: String, profileSequence: UInt64,
+        /**
+         * RFC 3339; past this point the profile must be re-fetched.
+         */profileExpiresAt: String, packageSigningKeys: [PublisherPackageKeyInfo]) {
+        self.domain = domain
+        self.profileSequence = profileSequence
+        self.profileExpiresAt = profileExpiresAt
+        self.packageSigningKeys = packageSigningKeys
+    }
+}
+
+#if compiler(>=6)
+extension PublisherProfileInfo: Sendable {}
+#endif
+
+
+extension PublisherProfileInfo: Equatable, Hashable {
+    public static func ==(lhs: PublisherProfileInfo, rhs: PublisherProfileInfo) -> Bool {
+        if lhs.domain != rhs.domain {
+            return false
+        }
+        if lhs.profileSequence != rhs.profileSequence {
+            return false
+        }
+        if lhs.profileExpiresAt != rhs.profileExpiresAt {
+            return false
+        }
+        if lhs.packageSigningKeys != rhs.packageSigningKeys {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(domain)
+        hasher.combine(profileSequence)
+        hasher.combine(profileExpiresAt)
+        hasher.combine(packageSigningKeys)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublisherProfileInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublisherProfileInfo {
+        return
+            try PublisherProfileInfo(
+                domain: FfiConverterString.read(from: &buf),
+                profileSequence: FfiConverterUInt64.read(from: &buf),
+                profileExpiresAt: FfiConverterString.read(from: &buf),
+                packageSigningKeys: FfiConverterSequenceTypePublisherPackageKeyInfo.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublisherProfileInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.domain, into: &buf)
+        FfiConverterUInt64.write(value.profileSequence, into: &buf)
+        FfiConverterString.write(value.profileExpiresAt, into: &buf)
+        FfiConverterSequenceTypePublisherPackageKeyInfo.write(value.packageSigningKeys, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublisherProfileInfo_lift(_ buf: RustBuffer) throws -> PublisherProfileInfo {
+    return try FfiConverterTypePublisherProfileInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublisherProfileInfo_lower(_ value: PublisherProfileInfo) -> RustBuffer {
+    return FfiConverterTypePublisherProfileInfo.lower(value)
+}
+
+
+/**
  * A verified Realm Profile: the package target and endpoints that feed
  * package acquisition.
  */
@@ -7135,6 +7329,31 @@ fileprivate struct FfiConverterSequenceTypePackageIntegrityFilePlanInfo: FfiConv
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePublisherPackageKeyInfo: FfiConverterRustBuffer {
+    typealias SwiftType = [PublisherPackageKeyInfo]
+
+    public static func write(_ value: [PublisherPackageKeyInfo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePublisherPackageKeyInfo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PublisherPackageKeyInfo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PublisherPackageKeyInfo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePublisherPackageKeyInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRealmSigningKeyInfo: FfiConverterRustBuffer {
     typealias SwiftType = [RealmSigningKeyInfo]
 
@@ -7191,6 +7410,19 @@ fileprivate struct FfiConverterSequenceTypeRuntimeTabInfo: FfiConverterRustBuffe
 public func acceptAuthorityDescriptor(body: String, domain: String)throws  -> AuthorityDiscoveryInfo  {
     return try  FfiConverterTypeAuthorityDiscoveryInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
     uniffi_actrium_core_fn_func_accept_authority_descriptor(
+        FfiConverterString.lower(body),
+        FfiConverterString.lower(domain),$0
+    )
+})
+}
+/**
+ * Validate the descriptor served by a publisher domain and verify its
+ * inline Publisher Profile; extract the package signing keys that
+ * verify the `.actr` package signature.
+ */
+public func acceptPublisherProfile(body: String, domain: String)throws  -> PublisherProfileInfo  {
+    return try  FfiConverterTypePublisherProfileInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_actrium_core_fn_func_accept_publisher_profile(
         FfiConverterString.lower(body),
         FfiConverterString.lower(domain),$0
     )
@@ -9688,6 +9920,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if (uniffi_actrium_core_checksum_func_accept_authority_descriptor() != 22442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_actrium_core_checksum_func_accept_publisher_profile() != 50717) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_actrium_core_checksum_func_accept_realm_profile() != 6481) {

@@ -981,6 +981,80 @@ pub fn accept_realm_profile(
     })
 }
 
+/// A package signing key from a verified Publisher Profile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublisherPackageKeyInfo {
+    /// `actr-pub-` + 16 lowercase hex characters of the key digest.
+    pub id: String,
+    /// Base64 Ed25519 public key.
+    pub public_key_base64: String,
+    /// `active` or `retired`.
+    pub status: String,
+}
+
+/// Verified Publisher Profile for a publisher domain: the package signing
+/// keys that step ⑤ verifies the `.actr` package signature with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublisherProfileInfo {
+    pub domain: String,
+    pub profile_sequence: u64,
+    /// RFC 3339; past this point the profile must be re-fetched.
+    pub profile_expires_at: String,
+    pub package_signing_keys: Vec<PublisherPackageKeyInfo>,
+}
+
+/// Extract the package signing keys from the descriptor a publisher domain
+/// serves (`GET https://<domain>/.well-known/actr`).
+///
+/// Step ④ only fetches: no descriptor or profile validation happens here —
+/// digest and signature verification of the package are step ⑤. The only
+/// rejections are structural: no publisher member, or no signing keys in it.
+pub fn accept_publisher_profile(
+    body: String,
+    domain: String,
+) -> Result<PublisherProfileInfo, CoreError> {
+    let invalid = |reason: String| {
+        CoreError::AuthorityDescriptorInvalid(format!(
+            "publisher information for '{domain}' is unusable: {reason}"
+        ))
+    };
+
+    let value: serde_json::Value =
+        serde_json::from_str(&body).map_err(|error| invalid(format!("not valid JSON: {error}")))?;
+    let publisher = value
+        .get("publisher")
+        .ok_or_else(|| invalid("descriptor carries no publisher profile".into()))?;
+    let keys = publisher
+        .get("keys")
+        .and_then(|keys| keys.as_array())
+        .ok_or_else(|| invalid("publisher profile carries no signing keys".into()))?;
+
+    let package_signing_keys: Vec<PublisherPackageKeyInfo> = keys
+        .iter()
+        .filter_map(|key| {
+            Some(PublisherPackageKeyInfo {
+                id: key.get("id")?.as_str()?.to_string(),
+                public_key_base64: key.get("public_key")?.as_str()?.to_string(),
+                status: key.get("status")?.as_str()?.to_string(),
+            })
+        })
+        .collect();
+
+    Ok(PublisherProfileInfo {
+        domain,
+        profile_sequence: publisher
+            .get("sequence")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0),
+        profile_expires_at: publisher
+            .get("profile_expires_at")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        package_signing_keys,
+    })
+}
+
 pub fn validate_actr_package_manifest(source: String) -> Result<(), CoreError> {
     actr_package::parse_manifest_toml(&source)
         .map(|_| ())
@@ -5389,5 +5463,76 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(error, CoreError::RealmRetired(_)));
+    }
+
+    /// A publisher descriptor as received over HTTPS. Step ④ only extracts
+    /// the package signing keys, so the profile needs no valid signature
+    /// here; verification belongs to step ⑤.
+    const PUBLISHER_DESCRIPTOR: &str = r#"{
+        "version": 1,
+        "authority": "actr://notes.example",
+        "publisher": {
+            "schema": "actr.publisher/v1",
+            "sequence": 1,
+            "domain": "notes.example",
+            "profile_signing_keys": [
+                {
+                    "id": "profile-root",
+                    "algorithm": "Ed25519",
+                    "public_key": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+                    "status": "active"
+                }
+            ],
+            "keys": [
+                {
+                    "id": "actr-pub-0123456789abcdef",
+                    "algorithm": "Ed25519",
+                    "public_key": "PUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=",
+                    "status": "active"
+                }
+            ],
+            "profile_issued_at": "2026-11-11T00:00:00Z",
+            "profile_expires_at": "2027-11-11T00:00:00Z"
+        }
+    }"#;
+
+    #[test]
+    fn accept_publisher_profile_extracts_package_keys() {
+        let info = accept_publisher_profile(
+            PUBLISHER_DESCRIPTOR.to_string(),
+            "notes.example".to_string(),
+        )
+        .unwrap();
+        assert_eq!(info.domain, "notes.example");
+        assert_eq!(info.profile_sequence, 1);
+        assert_eq!(info.package_signing_keys.len(), 1);
+        assert_eq!(info.package_signing_keys[0].id, "actr-pub-0123456789abcdef");
+        assert_eq!(info.package_signing_keys[0].status, "active");
+    }
+
+    #[test]
+    fn accept_publisher_profile_reports_missing_publisher_member() {
+        let body = serde_json::json!({
+            "version": 1,
+            "authority": "actr://notes.example",
+            "services": []
+        })
+        .to_string();
+        let error =
+            accept_publisher_profile(body, "notes.example".to_string()).unwrap_err();
+        assert!(matches!(error, CoreError::AuthorityDescriptorInvalid(_)));
+    }
+
+    #[test]
+    fn accept_publisher_profile_reports_missing_signing_keys() {
+        let body = serde_json::json!({
+            "version": 1,
+            "authority": "actr://notes.example",
+            "publisher": {"schema": "actr.publisher/v1", "domain": "notes.example"}
+        })
+        .to_string();
+        let error =
+            accept_publisher_profile(body, "notes.example".to_string()).unwrap_err();
+        assert!(matches!(error, CoreError::AuthorityDescriptorInvalid(_)));
     }
 }

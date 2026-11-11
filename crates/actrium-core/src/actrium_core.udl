@@ -41,6 +41,12 @@ namespace actrium_core {
     [Throws=CoreError]
     RealmProfileInfo accept_realm_profile(string body, string realm_name, string signing_keys_json);
 
+    /// Validate the descriptor served by a publisher domain and verify its
+    /// inline Publisher Profile; extract the package signing keys that
+    /// verify the `.actr` package signature.
+    [Throws=CoreError]
+    PublisherProfileInfo accept_publisher_profile(string body, string domain);
+
     /// Evaluate a contract tuple using the current Actrium host compatibility rules.
     ContractGateInfo evaluate_contract(string? name, u32 version);
 
@@ -1047,6 +1053,25 @@ dictionary RealmProfileInfo {
     string package_type;
     /// Issuer endpoint that serves Actor credentials.
     string issuer_url;
+};
+
+/// A package signing key from a verified Publisher Profile.
+dictionary PublisherPackageKeyInfo {
+    /// `actr-pub-` + 16 lowercase hex characters of the key digest.
+    string id;
+    /// Base64 Ed25519 public key.
+    string public_key_base64;
+    /// `active` or `retired`.
+    string status;
+};
+
+/// Verified Publisher Profile for a publisher domain.
+dictionary PublisherProfileInfo {
+    string domain;
+    u64 profile_sequence;
+    /// RFC 3339; past this point the profile must be re-fetched.
+    string profile_expires_at;
+    sequence<PublisherPackageKeyInfo> package_signing_keys;
 };
 
 enum ContractGateStatus {

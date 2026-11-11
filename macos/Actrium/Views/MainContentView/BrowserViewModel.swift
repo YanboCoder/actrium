@@ -1053,12 +1053,123 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     signingKeysJson: descriptor.signingKeysJson
                 )
                 logger.notice("📄 [navigateCurrentTab] Realm Profile accepted: \(profile.displayName) (\(profile.realmName)), sequence=\(profile.sequence), package=\(profile.packageHref)")
-                logger.notice("ℹ️ [navigateCurrentTab] Package download is not wired yet; next step would fetch \(profile.packageHref) and verify sha256=\(profile.packageSha256.prefix(12))…")
+
+                // Package acquisition: the publisher identity is the domain
+                // prefix of the actor type; fetch its signing keys, then the
+                // package itself. Verification is the next funnel step.
+                let publisherDomain = profile.packageType
+                    .split(separator: "/").first.map(String.init) ?? ""
+                guard !publisherDomain.isEmpty,
+                      let publisherURL = URL(string: "https://\(publisherDomain)/.well-known/actr") else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 8,
+                        userInfo: [NSLocalizedDescriptionKey: String(
+                            format: NSLocalizedString(
+                                "The package type '%@' does not name a publisher domain.",
+                                comment: "Actr publisher domain error"),
+                            profile.packageType)])
+                }
+                let (publisherData, publisherResponse) =
+                    try await URLSession.shared.data(from: publisherURL)
+                try Self.requireSuccess(publisherResponse, insecureMessage: NSLocalizedString(
+                    "The publisher information was served over an insecure connection.",
+                    comment: "Actr publisher insecure transport error"))
+                guard let publisherBody = String(data: publisherData, encoding: .utf8) else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 9,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The publisher information is not valid text.",
+                            comment: "Actr publisher encoding error")])
+                }
+                let publisher = try ActriumCore.acceptPublisherProfile(
+                    body: publisherBody,
+                    domain: publisherDomain
+                )
+                let activePackageKeys = publisher.packageSigningKeys
+                    .filter { $0.status == "active" }
+                logger.notice("🔑 [navigateCurrentTab] Publisher accepted for \(publisherDomain): profile sequence=\(publisher.profileSequence), active package keys=\(activePackageKeys.count)")
+
+                guard let packageURL = URL(string: profile.packageHref),
+                      packageURL.scheme?.lowercased() == "https" else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 10,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The package location is invalid.",
+                            comment: "Actr package URL error")])
+                }
+                let packageURL_ = try await Self.downloadPackage(
+                    from: packageURL,
+                    expectedSha256: profile.packageSha256
+                )
+                logger.notice("📦 [navigateCurrentTab] Package downloaded to \(packageURL_.path)")
+                logger.notice("ℹ️ [navigateCurrentTab] Package verification is not wired yet; next step would check sha256=\(profile.packageSha256.prefix(12))… and the Ed25519 signature with \(activePackageKeys.count) publisher key(s).")
             } catch {
                 logger.warning("⚠️ [navigateCurrentTab] Realm discovery failed: \(error)")
                 presentRealmLinkError(error)
             }
         }
+    }
+
+    /// Transport checks shared by every discovery fetch.
+    private static func requireSuccess(_ response: URLResponse, insecureMessage: String) throws {
+        guard let http = response as? HTTPURLResponse,
+              (200 ..< 300).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw NSError(
+                domain: "ActrDiscovery", code: 20,
+                userInfo: [NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString(
+                        "The request failed (HTTP %ld).",
+                        comment: "Actr fetch failure"),
+                    status)])
+        }
+        guard response.url?.scheme?.lowercased() == "https" else {
+            throw NSError(
+                domain: "ActrDiscovery", code: 21,
+                userInfo: [NSLocalizedDescriptionKey: insecureMessage])
+        }
+    }
+
+    /// Download the `.actr` package into an isolated temp directory. Size is
+    /// capped at 64 MiB (Content-Length pre-check plus a post-download
+    /// check); digest and signature verification happen in the next funnel
+    /// step.
+    private static func downloadPackage(from url: URL, expectedSha256: String) async throws -> URL {
+        let maxBytes = 64 * 1024 * 1024
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard response.url?.scheme?.lowercased() == "https" else {
+            throw NSError(
+                domain: "ActrDiscovery", code: 22,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                    "The package was served over an insecure connection.",
+                    comment: "Actr package insecure transport error")])
+        }
+        guard let http = response as? HTTPURLResponse,
+              (200 ..< 300).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw NSError(
+                domain: "ActrDiscovery", code: 23,
+                userInfo: [NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString(
+                        "The package download failed (HTTP %ld).",
+                        comment: "Actr package fetch failure"),
+                    status)])
+        }
+        if http.expectedContentLength > maxBytes || data.count > maxBytes {
+            throw NSError(
+                domain: "ActrDiscovery", code: 24,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                    "The package exceeds the download size limit.",
+                    comment: "Actr package size error")])
+        }
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("actr-packages", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory
+            .appendingPathComponent("\(expectedSha256)-\(UUID().uuidString).actr")
+        try data.write(to: destination, options: .atomic)
+        return destination
     }
 
     /// Surface a rejected actr:// link with variant-specific copy.
