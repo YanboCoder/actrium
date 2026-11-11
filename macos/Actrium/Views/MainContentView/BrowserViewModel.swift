@@ -1097,10 +1097,10 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
 
     /// Handle a Realm link already resolved by `ActriumCore.parseActrUri`
     /// (which delegates to `realm_link::open_realm_link` for ownership and
-    /// dispatch). Realm discovery and package download are out of scope for
-    /// this milestone: a resolved link currently updates the tab and logs
-    /// the follow-up step. Opening a local Realm instance is also not wired
-    /// yet and is reported as such.
+    /// dispatch). A local instance address focuses an open tab or recovers
+    /// the instance through the instance store; a remote link kicks off
+    /// authority/Realm Profile discovery, and the tab also updates to the
+    /// resolved address.
     private func handleResolvedRealmLink(
         _ info: ActrUriInfo,
         input: String,
@@ -1138,8 +1138,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             return
         }
 
-        if let discoveryURL = info.discoveryUrl {
-            logger.notice("ℹ️ [navigateCurrentTab] Realm discovery is not wired yet; next step would fetch \(discoveryURL)")
+        if let discoveryURL = info.discoveryUrl, let url = URL(string: discoveryURL) {
+            discoverAuthority(url: url, domain: info.domain, realmId: realmId)
         }
 
         tabs[tabIndex].title = realmDisplay
@@ -1156,10 +1156,234 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         persistBrowserPageSession()
     }
 
+    /// Realm discovery (verification-funnel layer 1) followed by Realm
+    /// Profile discovery (layer 2): fetch the authority descriptor, validate
+    /// it, then fetch and verify the Realm Profile it points to. The package
+    /// target that comes out feeds package acquisition; downloads are not
+    /// wired in this milestone.
+    private func discoverAuthority(url: URL, domain: String, realmId: String) {
+        Task { @MainActor in
+            do {
+                let (data, response) = try await URLSession.shared.data(from: url)
+                guard let http = response as? HTTPURLResponse,
+                      (200 ..< 300).contains(http.statusCode) else {
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: String(
+                            format: NSLocalizedString(
+                                "The authority information for this domain is unavailable (HTTP %ld).",
+                                comment: "Actr authority fetch failure"),
+                            status)])
+                }
+                // Every hop of a redirect chain must stay on HTTPS; the
+                // default session follows redirects, so checking the final
+                // response URL is the minimal enforcement here.
+                guard let finalURL = response.url, finalURL.scheme?.lowercased() == "https" else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The authority information was served over an insecure connection.",
+                            comment: "Actr authority insecure transport error")])
+                }
+                guard let body = String(data: data, encoding: .utf8) else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 3,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The authority information is not valid text.",
+                            comment: "Actr authority encoding error")])
+                }
+
+                let descriptor = try ActriumCore.acceptAuthorityDescriptor(
+                    body: body,
+                    domain: domain
+                )
+                let activeKeys = descriptor.signingKeys.filter { $0.status == "active" }
+                logger.notice("🌐 [navigateCurrentTab] Authority accepted for \(domain): realms=\(descriptor.realmsHref), keys sequence=\(descriptor.keysSequence), active keys=\(activeKeys.count)")
+
+                // Realm Profile discovery: GET <realms_href>/<realm_id>.
+                var profilePath = descriptor.realmsHref
+                if profilePath.hasSuffix("/") { profilePath.removeLast() }
+                profilePath += "/\(realmId)"
+                guard let profileURL = URL(string: profilePath) else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 4,
+                        userInfo: [NSLocalizedDescriptionKey: String(
+                            format: NSLocalizedString(
+                                "The Realm Profile location '%@' is invalid.",
+                                comment: "Actr realm profile URL error"),
+                            profilePath)])
+                }
+                let (profileData, profileResponse) =
+                    try await URLSession.shared.data(from: profileURL)
+                guard let profileHTTP = profileResponse as? HTTPURLResponse,
+                      (200 ..< 300).contains(profileHTTP.statusCode) else {
+                    let status = (profileResponse as? HTTPURLResponse)?.statusCode ?? -1
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 5,
+                        userInfo: [NSLocalizedDescriptionKey: String(
+                            format: NSLocalizedString(
+                                "The Realm Profile for this instance is unavailable (HTTP %ld).",
+                                comment: "Actr realm profile fetch failure"),
+                            status)])
+                }
+                guard let profileFinal = profileResponse.url,
+                      profileFinal.scheme?.lowercased() == "https" else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 6,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The Realm Profile was served over an insecure connection.",
+                            comment: "Actr realm profile insecure transport error")])
+                }
+                guard let profileBody = String(data: profileData, encoding: .utf8) else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 7,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The Realm Profile is not valid text.",
+                            comment: "Actr realm profile encoding error")])
+                }
+
+                let profile = try ActriumCore.acceptRealmProfile(
+                    body: profileBody,
+                    realmName: "\(realmId)@\(domain)",
+                    signingKeysJson: descriptor.signingKeysJson
+                )
+                logger.notice("📄 [navigateCurrentTab] Realm Profile accepted: \(profile.displayName) (\(profile.realmName)), sequence=\(profile.sequence), package=\(profile.packageHref)")
+
+                // Package acquisition: the publisher identity is the domain
+                // prefix of the actor type; fetch its signing keys, then the
+                // package itself. Verification is the next funnel step.
+                let publisherDomain = profile.packageType
+                    .split(separator: "/").first.map(String.init) ?? ""
+                guard !publisherDomain.isEmpty,
+                      let publisherURL = URL(string: "https://\(publisherDomain)/.well-known/actr") else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 8,
+                        userInfo: [NSLocalizedDescriptionKey: String(
+                            format: NSLocalizedString(
+                                "The package type '%@' does not name a publisher domain.",
+                                comment: "Actr publisher domain error"),
+                            profile.packageType)])
+                }
+                let (publisherData, publisherResponse) =
+                    try await URLSession.shared.data(from: publisherURL)
+                try Self.requireSuccess(publisherResponse, insecureMessage: NSLocalizedString(
+                    "The publisher information was served over an insecure connection.",
+                    comment: "Actr publisher insecure transport error"))
+                guard let publisherBody = String(data: publisherData, encoding: .utf8) else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 9,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The publisher information is not valid text.",
+                            comment: "Actr publisher encoding error")])
+                }
+                let publisher = try ActriumCore.acceptPublisherProfile(
+                    body: publisherBody,
+                    domain: publisherDomain
+                )
+                let activePackageKeys = publisher.packageSigningKeys
+                    .filter { $0.status == "active" }
+                logger.notice("🔑 [navigateCurrentTab] Publisher accepted for \(publisherDomain): profile sequence=\(publisher.profileSequence), active package keys=\(activePackageKeys.count)")
+
+                guard let packageURL = URL(string: profile.packageHref),
+                      packageURL.scheme?.lowercased() == "https" else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 10,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The package location is invalid.",
+                            comment: "Actr package URL error")])
+                }
+                let packageURL_ = try await Self.downloadPackage(
+                    from: packageURL,
+                    expectedSha256: profile.packageSha256
+                )
+                logger.notice("📦 [navigateCurrentTab] Package downloaded to \(packageURL_.path)")
+                logger.notice("ℹ️ [navigateCurrentTab] Package verification is not wired yet; next step would check sha256=\(profile.packageSha256.prefix(12))… and the Ed25519 signature with \(activePackageKeys.count) publisher key(s).")
+            } catch {
+                logger.warning("⚠️ [navigateCurrentTab] Realm discovery failed: \(error)")
+                presentRealmLinkError(error)
+            }
+        }
+    }
+
+    /// Transport checks shared by every discovery fetch.
+    private static func requireSuccess(_ response: URLResponse, insecureMessage: String) throws {
+        guard let http = response as? HTTPURLResponse,
+              (200 ..< 300).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw NSError(
+                domain: "ActrDiscovery", code: 20,
+                userInfo: [NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString(
+                        "The request failed (HTTP %ld).",
+                        comment: "Actr fetch failure"),
+                    status)])
+        }
+        guard response.url?.scheme?.lowercased() == "https" else {
+            throw NSError(
+                domain: "ActrDiscovery", code: 21,
+                userInfo: [NSLocalizedDescriptionKey: insecureMessage])
+        }
+    }
+
+    /// Download the `.actr` package into an isolated temp directory. Size is
+    /// capped at 64 MiB (Content-Length pre-check plus a post-download
+    /// check); digest and signature verification happen in the next funnel
+    /// step.
+    private static func downloadPackage(from url: URL, expectedSha256: String) async throws -> URL {
+        let maxBytes = 64 * 1024 * 1024
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard response.url?.scheme?.lowercased() == "https" else {
+            throw NSError(
+                domain: "ActrDiscovery", code: 22,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                    "The package was served over an insecure connection.",
+                    comment: "Actr package insecure transport error")])
+        }
+        guard let http = response as? HTTPURLResponse,
+              (200 ..< 300).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw NSError(
+                domain: "ActrDiscovery", code: 23,
+                userInfo: [NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString(
+                        "The package download failed (HTTP %ld).",
+                        comment: "Actr package fetch failure"),
+                    status)])
+        }
+        if http.expectedContentLength > maxBytes || data.count > maxBytes {
+            throw NSError(
+                domain: "ActrDiscovery", code: 24,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                    "The package exceeds the download size limit.",
+                    comment: "Actr package size error")])
+        }
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("actr-packages", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory
+            .appendingPathComponent("\(expectedSha256)-\(UUID().uuidString).actr")
+        try data.write(to: destination, options: .atomic)
+        return destination
+    }
+
     /// Surface a rejected actr:// link with variant-specific copy.
     private func presentRealmLinkError(_ error: Error) {
         let message: String
         switch error {
+        case CoreError.AuthorityDescriptorInvalid:
+            message = NSLocalizedString(
+                "The authority information for this domain is invalid.",
+                comment: "Actr authority descriptor error")
+        case CoreError.RealmProfileInvalid:
+            message = NSLocalizedString(
+                "The Realm Profile for this instance is invalid.",
+                comment: "Actr realm profile error")
+        case CoreError.RealmRetired:
+            message = NSLocalizedString(
+                "This Realm instance has been retired.",
+                comment: "Actr realm retired error")
         case CoreError.UriSchemeInvalid:
             message = NSLocalizedString(
                 "Only actr:// links are supported here.",

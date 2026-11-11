@@ -432,6 +432,22 @@ fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
     typealias FfiType = Int64
     typealias SwiftType = Int64
@@ -2141,6 +2157,113 @@ public func FfiConverterTypeAsrSegmentInfo_lift(_ buf: RustBuffer) throws -> Asr
 #endif
 public func FfiConverterTypeAsrSegmentInfo_lower(_ value: AsrSegmentInfo) -> RustBuffer {
     return FfiConverterTypeAsrSegmentInfo.lower(value)
+}
+
+
+/**
+ * Validated authority descriptor for a Realm domain.
+ */
+public struct AuthorityDiscoveryInfo {
+    /**
+     * Realms service href; Realm Profile GETs append `/<realm_id>`.
+     */
+    public var realmsHref: String
+    /**
+     * Sequence of the accepted `realm_signing_keys` member.
+     */
+    public var keysSequence: UInt64
+    public var signingKeys: [RealmSigningKeyInfo]
+    /**
+     * The accepted member serialized; pass back to `accept_realm_profile`.
+     */
+    public var signingKeysJson: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Realms service href; Realm Profile GETs append `/<realm_id>`.
+         */realmsHref: String,
+        /**
+         * Sequence of the accepted `realm_signing_keys` member.
+         */keysSequence: UInt64, signingKeys: [RealmSigningKeyInfo],
+        /**
+         * The accepted member serialized; pass back to `accept_realm_profile`.
+         */signingKeysJson: String) {
+        self.realmsHref = realmsHref
+        self.keysSequence = keysSequence
+        self.signingKeys = signingKeys
+        self.signingKeysJson = signingKeysJson
+    }
+}
+
+#if compiler(>=6)
+extension AuthorityDiscoveryInfo: Sendable {}
+#endif
+
+
+extension AuthorityDiscoveryInfo: Equatable, Hashable {
+    public static func ==(lhs: AuthorityDiscoveryInfo, rhs: AuthorityDiscoveryInfo) -> Bool {
+        if lhs.realmsHref != rhs.realmsHref {
+            return false
+        }
+        if lhs.keysSequence != rhs.keysSequence {
+            return false
+        }
+        if lhs.signingKeys != rhs.signingKeys {
+            return false
+        }
+        if lhs.signingKeysJson != rhs.signingKeysJson {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(realmsHref)
+        hasher.combine(keysSequence)
+        hasher.combine(signingKeys)
+        hasher.combine(signingKeysJson)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthorityDiscoveryInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthorityDiscoveryInfo {
+        return
+            try AuthorityDiscoveryInfo(
+                realmsHref: FfiConverterString.read(from: &buf),
+                keysSequence: FfiConverterUInt64.read(from: &buf),
+                signingKeys: FfiConverterSequenceTypeRealmSigningKeyInfo.read(from: &buf),
+                signingKeysJson: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AuthorityDiscoveryInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.realmsHref, into: &buf)
+        FfiConverterUInt64.write(value.keysSequence, into: &buf)
+        FfiConverterSequenceTypeRealmSigningKeyInfo.write(value.signingKeys, into: &buf)
+        FfiConverterString.write(value.signingKeysJson, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthorityDiscoveryInfo_lift(_ buf: RustBuffer) throws -> AuthorityDiscoveryInfo {
+    return try FfiConverterTypeAuthorityDiscoveryInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthorityDiscoveryInfo_lower(_ value: AuthorityDiscoveryInfo) -> RustBuffer {
+    return FfiConverterTypeAuthorityDiscoveryInfo.lower(value)
 }
 
 
@@ -4762,6 +4885,451 @@ public func FfiConverterTypePackageIntegrityPlanInfo_lower(_ value: PackageInteg
 }
 
 
+/**
+ * A package signing key from a verified Publisher Profile.
+ */
+public struct PublisherPackageKeyInfo {
+    /**
+     * `actr-pub-` + 16 lowercase hex characters of the key digest.
+     */
+    public var id: String
+    /**
+     * Base64 Ed25519 public key.
+     */
+    public var publicKeyBase64: String
+    /**
+     * `active` or `retired`.
+     */
+    public var status: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `actr-pub-` + 16 lowercase hex characters of the key digest.
+         */id: String,
+        /**
+         * Base64 Ed25519 public key.
+         */publicKeyBase64: String,
+        /**
+         * `active` or `retired`.
+         */status: String) {
+        self.id = id
+        self.publicKeyBase64 = publicKeyBase64
+        self.status = status
+    }
+}
+
+#if compiler(>=6)
+extension PublisherPackageKeyInfo: Sendable {}
+#endif
+
+
+extension PublisherPackageKeyInfo: Equatable, Hashable {
+    public static func ==(lhs: PublisherPackageKeyInfo, rhs: PublisherPackageKeyInfo) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.publicKeyBase64 != rhs.publicKeyBase64 {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(publicKeyBase64)
+        hasher.combine(status)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublisherPackageKeyInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublisherPackageKeyInfo {
+        return
+            try PublisherPackageKeyInfo(
+                id: FfiConverterString.read(from: &buf),
+                publicKeyBase64: FfiConverterString.read(from: &buf),
+                status: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublisherPackageKeyInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.publicKeyBase64, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublisherPackageKeyInfo_lift(_ buf: RustBuffer) throws -> PublisherPackageKeyInfo {
+    return try FfiConverterTypePublisherPackageKeyInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublisherPackageKeyInfo_lower(_ value: PublisherPackageKeyInfo) -> RustBuffer {
+    return FfiConverterTypePublisherPackageKeyInfo.lower(value)
+}
+
+
+/**
+ * Verified Publisher Profile for a publisher domain.
+ */
+public struct PublisherProfileInfo {
+    public var domain: String
+    public var profileSequence: UInt64
+    /**
+     * RFC 3339; past this point the profile must be re-fetched.
+     */
+    public var profileExpiresAt: String
+    public var packageSigningKeys: [PublisherPackageKeyInfo]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(domain: String, profileSequence: UInt64,
+        /**
+         * RFC 3339; past this point the profile must be re-fetched.
+         */profileExpiresAt: String, packageSigningKeys: [PublisherPackageKeyInfo]) {
+        self.domain = domain
+        self.profileSequence = profileSequence
+        self.profileExpiresAt = profileExpiresAt
+        self.packageSigningKeys = packageSigningKeys
+    }
+}
+
+#if compiler(>=6)
+extension PublisherProfileInfo: Sendable {}
+#endif
+
+
+extension PublisherProfileInfo: Equatable, Hashable {
+    public static func ==(lhs: PublisherProfileInfo, rhs: PublisherProfileInfo) -> Bool {
+        if lhs.domain != rhs.domain {
+            return false
+        }
+        if lhs.profileSequence != rhs.profileSequence {
+            return false
+        }
+        if lhs.profileExpiresAt != rhs.profileExpiresAt {
+            return false
+        }
+        if lhs.packageSigningKeys != rhs.packageSigningKeys {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(domain)
+        hasher.combine(profileSequence)
+        hasher.combine(profileExpiresAt)
+        hasher.combine(packageSigningKeys)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublisherProfileInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublisherProfileInfo {
+        return
+            try PublisherProfileInfo(
+                domain: FfiConverterString.read(from: &buf),
+                profileSequence: FfiConverterUInt64.read(from: &buf),
+                profileExpiresAt: FfiConverterString.read(from: &buf),
+                packageSigningKeys: FfiConverterSequenceTypePublisherPackageKeyInfo.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublisherProfileInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.domain, into: &buf)
+        FfiConverterUInt64.write(value.profileSequence, into: &buf)
+        FfiConverterString.write(value.profileExpiresAt, into: &buf)
+        FfiConverterSequenceTypePublisherPackageKeyInfo.write(value.packageSigningKeys, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublisherProfileInfo_lift(_ buf: RustBuffer) throws -> PublisherProfileInfo {
+    return try FfiConverterTypePublisherProfileInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublisherProfileInfo_lower(_ value: PublisherProfileInfo) -> RustBuffer {
+    return FfiConverterTypePublisherProfileInfo.lower(value)
+}
+
+
+/**
+ * A verified Realm Profile: the package target and endpoints that feed
+ * package acquisition.
+ */
+public struct RealmProfileInfo {
+    /**
+     * Canonical Realm name `<realm_id>@<domain>`.
+     */
+    public var realmName: String
+    public var displayName: String
+    /**
+     * Always `active`; retired Realms are rejected.
+     */
+    public var status: String
+    public var sequence: UInt64
+    /**
+     * HTTPS download URL of the signed `.actr` package.
+     */
+    public var packageHref: String
+    /**
+     * Lowercase hex SHA-256 the package must match.
+     */
+    public var packageSha256: String
+    /**
+     * Actor type `publisher/program@version`.
+     */
+    public var packageType: String
+    /**
+     * Issuer endpoint that serves Actor credentials.
+     */
+    public var issuerUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Canonical Realm name `<realm_id>@<domain>`.
+         */realmName: String, displayName: String,
+        /**
+         * Always `active`; retired Realms are rejected.
+         */status: String, sequence: UInt64,
+        /**
+         * HTTPS download URL of the signed `.actr` package.
+         */packageHref: String,
+        /**
+         * Lowercase hex SHA-256 the package must match.
+         */packageSha256: String,
+        /**
+         * Actor type `publisher/program@version`.
+         */packageType: String,
+        /**
+         * Issuer endpoint that serves Actor credentials.
+         */issuerUrl: String) {
+        self.realmName = realmName
+        self.displayName = displayName
+        self.status = status
+        self.sequence = sequence
+        self.packageHref = packageHref
+        self.packageSha256 = packageSha256
+        self.packageType = packageType
+        self.issuerUrl = issuerUrl
+    }
+}
+
+#if compiler(>=6)
+extension RealmProfileInfo: Sendable {}
+#endif
+
+
+extension RealmProfileInfo: Equatable, Hashable {
+    public static func ==(lhs: RealmProfileInfo, rhs: RealmProfileInfo) -> Bool {
+        if lhs.realmName != rhs.realmName {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        if lhs.sequence != rhs.sequence {
+            return false
+        }
+        if lhs.packageHref != rhs.packageHref {
+            return false
+        }
+        if lhs.packageSha256 != rhs.packageSha256 {
+            return false
+        }
+        if lhs.packageType != rhs.packageType {
+            return false
+        }
+        if lhs.issuerUrl != rhs.issuerUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(realmName)
+        hasher.combine(displayName)
+        hasher.combine(status)
+        hasher.combine(sequence)
+        hasher.combine(packageHref)
+        hasher.combine(packageSha256)
+        hasher.combine(packageType)
+        hasher.combine(issuerUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRealmProfileInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RealmProfileInfo {
+        return
+            try RealmProfileInfo(
+                realmName: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                status: FfiConverterString.read(from: &buf),
+                sequence: FfiConverterUInt64.read(from: &buf),
+                packageHref: FfiConverterString.read(from: &buf),
+                packageSha256: FfiConverterString.read(from: &buf),
+                packageType: FfiConverterString.read(from: &buf),
+                issuerUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RealmProfileInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.realmName, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterUInt64.write(value.sequence, into: &buf)
+        FfiConverterString.write(value.packageHref, into: &buf)
+        FfiConverterString.write(value.packageSha256, into: &buf)
+        FfiConverterString.write(value.packageType, into: &buf)
+        FfiConverterString.write(value.issuerUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRealmProfileInfo_lift(_ buf: RustBuffer) throws -> RealmProfileInfo {
+    return try FfiConverterTypeRealmProfileInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRealmProfileInfo_lower(_ value: RealmProfileInfo) -> RustBuffer {
+    return FfiConverterTypeRealmProfileInfo.lower(value)
+}
+
+
+/**
+ * A trusted realm signing key from an accepted authority descriptor.
+ */
+public struct RealmSigningKeyInfo {
+    public var id: String
+    /**
+     * Base64 Ed25519 public key, as listed by the descriptor.
+     */
+    public var publicKeyBase64: String
+    /**
+     * `active` or `retired`.
+     */
+    public var status: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String,
+        /**
+         * Base64 Ed25519 public key, as listed by the descriptor.
+         */publicKeyBase64: String,
+        /**
+         * `active` or `retired`.
+         */status: String) {
+        self.id = id
+        self.publicKeyBase64 = publicKeyBase64
+        self.status = status
+    }
+}
+
+#if compiler(>=6)
+extension RealmSigningKeyInfo: Sendable {}
+#endif
+
+
+extension RealmSigningKeyInfo: Equatable, Hashable {
+    public static func ==(lhs: RealmSigningKeyInfo, rhs: RealmSigningKeyInfo) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.publicKeyBase64 != rhs.publicKeyBase64 {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(publicKeyBase64)
+        hasher.combine(status)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRealmSigningKeyInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RealmSigningKeyInfo {
+        return
+            try RealmSigningKeyInfo(
+                id: FfiConverterString.read(from: &buf),
+                publicKeyBase64: FfiConverterString.read(from: &buf),
+                status: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RealmSigningKeyInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.publicKeyBase64, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRealmSigningKeyInfo_lift(_ buf: RustBuffer) throws -> RealmSigningKeyInfo {
+    return try FfiConverterTypeRealmSigningKeyInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRealmSigningKeyInfo_lower(_ value: RealmSigningKeyInfo) -> RustBuffer {
+    return FfiConverterTypeRealmSigningKeyInfo.lower(value)
+}
+
+
 public struct RuntimeContainerSizeChangeEventInfo {
     public var containerWidth: Int32
     public var containerHeight: Int32
@@ -6153,6 +6721,12 @@ public enum CoreError: Swift.Error {
 
     case InvalidInstallationId(message: String)
 
+    case AuthorityDescriptorInvalid(message: String)
+
+    case RealmProfileInvalid(message: String)
+
+    case RealmRetired(message: String)
+
 }
 
 
@@ -6221,6 +6795,18 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
 
+        case 14: return .AuthorityDescriptorInvalid(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 15: return .RealmProfileInvalid(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 16: return .RealmRetired(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -6258,6 +6844,12 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(12))
         case .InvalidInstallationId(_ /* message is ignored*/):
             writeInt(&buf, Int32(13))
+        case .AuthorityDescriptorInvalid(_ /* message is ignored*/):
+            writeInt(&buf, Int32(14))
+        case .RealmProfileInvalid(_ /* message is ignored*/):
+            writeInt(&buf, Int32(15))
+        case .RealmRetired(_ /* message is ignored*/):
+            writeInt(&buf, Int32(16))
 
 
         }
@@ -6737,6 +7329,56 @@ fileprivate struct FfiConverterSequenceTypePackageIntegrityFilePlanInfo: FfiConv
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePublisherPackageKeyInfo: FfiConverterRustBuffer {
+    typealias SwiftType = [PublisherPackageKeyInfo]
+
+    public static func write(_ value: [PublisherPackageKeyInfo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePublisherPackageKeyInfo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PublisherPackageKeyInfo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PublisherPackageKeyInfo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePublisherPackageKeyInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRealmSigningKeyInfo: FfiConverterRustBuffer {
+    typealias SwiftType = [RealmSigningKeyInfo]
+
+    public static func write(_ value: [RealmSigningKeyInfo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRealmSigningKeyInfo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RealmSigningKeyInfo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RealmSigningKeyInfo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRealmSigningKeyInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRuntimeTabInfo: FfiConverterRustBuffer {
     typealias SwiftType = [RuntimeTabInfo]
 
@@ -6757,6 +7399,51 @@ fileprivate struct FfiConverterSequenceTypeRuntimeTabInfo: FfiConverterRustBuffe
         }
         return seq
     }
+}
+/**
+ * Validate an authority descriptor response for `domain` and extract
+ * the trusted realm signing keys plus the realms service href.
+ *
+ * `body` is the raw JSON text as received over HTTPS. Key pinning
+ * across visits is not applied yet.
+ */
+public func acceptAuthorityDescriptor(body: String, domain: String)throws  -> AuthorityDiscoveryInfo  {
+    return try  FfiConverterTypeAuthorityDiscoveryInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_actrium_core_fn_func_accept_authority_descriptor(
+        FfiConverterString.lower(body),
+        FfiConverterString.lower(domain),$0
+    )
+})
+}
+/**
+ * Validate the descriptor served by a publisher domain and verify its
+ * inline Publisher Profile; extract the package signing keys that
+ * verify the `.actr` package signature.
+ */
+public func acceptPublisherProfile(body: String, domain: String)throws  -> PublisherProfileInfo  {
+    return try  FfiConverterTypePublisherProfileInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_actrium_core_fn_func_accept_publisher_profile(
+        FfiConverterString.lower(body),
+        FfiConverterString.lower(domain),$0
+    )
+})
+}
+/**
+ * Validate a Realm Profile response for `realm_name` and extract the
+ * package target.
+ *
+ * `body` is the raw JSON text as received; `signing_keys_json` is the
+ * `signingKeysJson` output of `accept_authority_descriptor`. Retired
+ * Realms are rejected.
+ */
+public func acceptRealmProfile(body: String, realmName: String, signingKeysJson: String)throws  -> RealmProfileInfo  {
+    return try  FfiConverterTypeRealmProfileInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_actrium_core_fn_func_accept_realm_profile(
+        FfiConverterString.lower(body),
+        FfiConverterString.lower(realmName),
+        FfiConverterString.lower(signingKeysJson),$0
+    )
+})
 }
 /**
  * Convert a persisted active-tab row into the platform active-tab model.
@@ -9231,6 +9918,15 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_actrium_core_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_actrium_core_checksum_func_accept_authority_descriptor() != 22442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_actrium_core_checksum_func_accept_publisher_profile() != 50717) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_actrium_core_checksum_func_accept_realm_profile() != 6481) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_actrium_core_checksum_func_active_tab_from_row() != 51323) {
         return InitializationResult.apiChecksumMismatch
