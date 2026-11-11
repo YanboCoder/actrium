@@ -126,10 +126,10 @@ final class ActriumReactNativeHost {
     }
 
     func createRootView(initialProperties: [String: Any]) -> UIView {
-        nnotice("📱 [Native] Create RootView,module name: RuntimeApp")
+        nnotice("📱 [Native] Create RootView,module name: actrium")
 
         let rootView = factory.rootViewFactory.view(
-            withModuleName: "RuntimeApp",
+            withModuleName: "actrium",
             initialProperties: initialProperties,
             launchOptions: nil
         )

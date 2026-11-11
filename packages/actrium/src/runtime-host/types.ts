@@ -62,8 +62,6 @@ export type TabConfig = {
 export type RuntimeProps = {
   tabs: TabConfig[];
   currentTabId?: string;
-  isLeftPanelVisible: boolean;
-  isRightPanelVisible?: boolean;
   // Native Size of the container passed (when ensuring window shrinks) RN I can feel it.
   containerWidth?: number;
   containerHeight?: number;

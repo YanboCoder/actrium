@@ -671,8 +671,6 @@ elif ! rg -q 'getRecentHistory' "$android_browser_data_module_file" ||
   print_failure "Android BrowserDataModule does not expose shared browser data readback"
 elif ! rg -q 'BrowserDataModule' android/android/app/src/main/java/io/actrium/app/core/ActriumPackage.kt; then
   print_failure "Android BrowserDataModule is not registered in ActriumPackage"
-elif ! rg -q 'loadRecentBrowserHistory' packages/actrium/src/system-apps/HistoryApp.tsx; then
-  print_failure "RN HistoryApp does not read back shared browser history when native props are absent"
 elif ! rg -q 'BrowserDataRepository' android/android/app/src/main/java/io/actrium/app/MainViewModel.kt ||
   ! rg -q 'persistBrowserPageData' android/android/app/src/main/java/io/actrium/app/MainViewModel.kt ||
   ! rg -q 'restoreSharedBrowserSessionIfNeeded' android/android/app/src/main/java/io/actrium/app/MainViewModel.kt ||
@@ -908,20 +906,6 @@ else
   print_ok "Apple app ActriumCore imports stay confined to adapter/repository boundary files"
 fi
 
-runtime_dead_sha256_impl="$(
-  rg -n 'CryptoJS|Utils\.sha256|static sha256|readFileAsBinary|fetch\(guestUrl\)|arrayBuffer\(\)' \
-    packages/actrium/src/services/AppSessionService.ts \
-    packages/actrium/src/utils/utils.ts \
-    2>/dev/null || true
-)"
-
-if [[ -n "$runtime_dead_sha256_impl" ]]; then
-  print_failure "RN runtime reintroduces the old JS .actr SHA-256 helper path"
-  printf '%s\n' "$runtime_dead_sha256_impl"
-else
-  print_ok "RN runtime avoids the old JS .actr SHA-256 helper path"
-fi
-
 runtime_hash_dependency_files=(
   "packages/actrium/package.json"
   "packages/actrium/yarn.lock"
@@ -941,13 +925,6 @@ if [[ -n "$runtime_hash_dependency_residue" ]]; then
   printf '%s\n' "$runtime_hash_dependency_residue"
 else
   print_ok "runtime package manifests/locks avoid unused CryptoJS dependencies"
-fi
-
-if ! rg -q 'expectedSha256: guestHashCode' \
-  packages/actrium/src/services/AppSessionService.ts; then
-  print_failure "RN .actr session loading does not pass the server hash into ActrPackageLoader"
-else
-  print_ok "RN .actr session loading verifies the downloaded archive in ActrPackageLoader"
 fi
 
 # Windows OS-level interop (dwmapi window chrome) is not Rust-core access:
@@ -2181,18 +2158,7 @@ windows_browser_data_requirements=(
   "android/android/app/src/main/java/io/actrium/app/data/sync/BrowserSyncStack.kt|BrowserStorageSyncScheduler|Android shared sync stack owns the single sync scheduler"
   "android/android/app/src/main/java/io/actrium/app/generated/ActriumAndroidPersistenceContract.kt|object Runtime|Android generated persistence contract includes runtime database constants"
   "android/android/app/src/main/java/io/actrium/app/generated/ActriumAndroidPersistenceContract.kt|SELECT_TOKEN_BY_ENV|Android generated persistence contract includes auth token queries"
-  "packages/actrium/src/libs/Sqlite.ts|RUNTIME_DATABASE_NAME|RN runtime SQLite database name comes from Rust-generated contract"
   "packages/actrium/src/runtime-host/generated/actriumCoreContract.ts|RUNTIME_DATABASE_NAME = 'AppDatabase.db'|RN generated contract exports the runtime database name"
-  "packages/actrium/src/repository/AuthRepository.ts|saveBrowserSyncSession|RN auth token saves feed the native browser sync credential store"
-  "packages/actrium/src/repository/AuthRepository.ts|clearBrowserSyncSession|RN auth token clears remove native browser sync credentials"
-  "packages/actrium/src/native-bridge/browser-data/BrowserDataModule.ts|getBrowserSyncStatus|RN runtime exposes typed browser sync status"
-  "packages/actrium/src/native-bridge/browser-data/BrowserDataModule.ts|hasBrowserSyncModule|RN runtime gates sync UI by BrowserDataModule sync capability"
-  "packages/actrium/src/system-apps/HistoryApp.tsx|isBrowserPageUrl|RN History opens browser URLs through TabModule instead of legacy notification-only modules"
-  "packages/actrium/src/system-apps/bookmarks/useBookmarksPage.ts|loadBrowserBookmarks|RN Bookmarks consumes native browser bookmarks when available"
-  "packages/actrium/src/system-apps/bookmarks/useBookmarksPage.ts|deleteBrowserBookmark|RN Bookmarks deletes native browser bookmarks through BrowserDataModule"
-  "packages/actrium/src/system-apps/settings/SettingsMain.tsx|getBrowserSyncStatus|RN Settings shows browser sync status"
-  "packages/actrium/src/system-apps/settings/SettingsMain.tsx|hasBrowserSyncModule|RN Settings uses sync capability detection instead of full browser data detection"
-  "packages/actrium/src/system-apps/settings/SettingsMain.tsx|syncBrowserDataNow|RN Settings exposes manual browser sync"
   "android/android/app/src/androidTest/java/io/actrium/app/data/database/BrowserStorageDatabaseInstrumentedTest.kt|migratesBrowserStorageSQLiteV1V2V3ToV6|Android instrumentation tests cover browser storage v1/v2/v3 SQLite migration"
   "android/android/app/src/androidTest/java/io/actrium/app/data/database/BrowserStorageDatabaseInstrumentedTest.kt|plansCloudProviderAdapterObjectSpaceThroughRust|Android instrumentation tests cover provider adapter object-space plan"
   "android/android/app/src/androidTest/java/io/actrium/app/data/database/BrowserStorageDatabaseInstrumentedTest.kt|classifiesCloudProviderConnectionStatusThroughRust|Android instrumentation tests cover provider connection status policy"

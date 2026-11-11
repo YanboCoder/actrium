@@ -69,6 +69,15 @@ struct ActrUriNotice: Identifiable {
     var detail: String? = nil
 }
 
+/// Pending invite-code redemption (临时方案): an actr:// link entered in the
+/// address bar waits for an invite code first; on 「兑换」 the Rust-provided
+/// method takes over the follow-up flow (FFI not wired yet).
+struct PendingInviteRedeem: Identifiable {
+    let id = UUID()
+    let uri: String
+    let domain: String
+}
+
 enum ActrPackageDownloadError: LocalizedError {
     case sizeExceeded(maxBytes: Int64)
     case cancelled

@@ -9,13 +9,11 @@ a signed `.actr` package.
 ```text
 Actrium native shell
 ├── Rust core and Actor runtime bridge
-├── React Native system bundle
-└── React Native Actor Host bundle
-    └── Keel Host
-        └── signed .actr package
-            ├── manifest.toml
-            ├── manifest.sig
-            └── workload/guest.js
+└── React Native system bundle (system apps + Keel Host UI)
+    └── signed .actr package
+        ├── manifest.toml
+        ├── manifest.sig
+        └── workload/guest.js
 ```
 
 The package loading boundary is strict:
@@ -32,7 +30,7 @@ layer around `.actr`.
 
 Important paths:
 
-- `packages/actrium/index-runtime.tsx`: React Native Actor Host entry;
+- `packages/actrium/index-system.tsx`: React Native system bundle entry;
 - `packages/actrium/src/runtime-host/`: Keel Host and application UI;
 - `packages/keel/`: sandbox engine, reconciler, and Guest build tooling;
 - `packages/actrium-app-sdk/`: Host/Guest bridge APIs;

@@ -767,6 +767,14 @@ struct WorkspaceMainView: View {
                 viewModel.actrUriNotice = nil
             }
         }
+        // ━━━━ Invite-code redeem sheet (临时方案) ━━━━
+        .sheet(item: $viewModel.pendingInviteRedeem) { pending in
+            InviteCodeRedeemSheet(
+                pending: pending,
+                onConfirm: { code in viewModel.confirmInviteRedeem(code: code) },
+                onCancel: { viewModel.cancelInviteRedeem() }
+            )
+        }
     }
 
     // MARK: - Mode Switching (Unified entrance)

@@ -112,19 +112,14 @@ interface SystemAppProps {
   isRightPanelVisible?: boolean;
 }
 
-const SystemAppContent: React.FC<{
-  appType: string;
-  tab: NonNullable<SystemAppProps['tab']>;
-  containerWidth?: number;
-  containerHeight?: number;
-  isOverviewMode?: boolean;
-}> = ({
-  appType,
-  tab,
-  containerWidth,
-  containerHeight,
-  isOverviewMode,
-}) => {
+const SystemPlaceholder: React.FC<{ appType: string }> = ({ appType }) => (
+  <View style={styles.loading}>
+    <Text style={styles.loadingTitle}>{appType}</Text>
+    <Text style={styles.loadingSubtitle}>System page placeholder</Text>
+  </View>
+);
+
+const SystemAppContent: React.FC<{ appType: string }> = ({ appType }) => {
   switch (appType) {
     case 'loading':
       return (
@@ -133,37 +128,12 @@ const SystemAppContent: React.FC<{
           <Text style={styles.loadingSubtitle}>Waiting for tab config...</Text>
         </View>
       );
-    case 'history': {
-      const HistoryApp = require('./src/system-apps/HistoryApp').default;
-      return (
-        <HistoryApp
-          items={tab.historyItems ?? []}
-          groups={tab.historyGroups ?? []}
-          containerWidth={containerWidth}
-          containerHeight={containerHeight}
-          isOverviewMode={isOverviewMode}
-        />
-      );
-    }
-    case 'bookmarks': {
-      const BookmarksApp =
-        require('./src/system-apps/bookmarks/BookmarksApp').default;
-      return <BookmarksApp />;
-    }
-    case 'bookmarkTags': {
-      const BookmarkTagsApp =
-        require('./src/system-apps/BookmarkTagsApp').default;
-      return <BookmarkTagsApp />;
-    }
-    case 'settings': {
-      const SettingsApp = require('./src/system-apps/SettingsApp').default;
-      return <SettingsApp />;
-    }
-    case 'globalSearch': {
-      const GlobalSearchApp =
-        require('./src/system-apps/globalsearch/GlobalSearchApp').default;
-      return <GlobalSearchApp />;
-    }
+    case 'history':
+    case 'bookmarks':
+    case 'bookmarkTags':
+    case 'settings':
+    case 'globalSearch':
+      return <SystemPlaceholder appType={appType} />;
     default:
       return (
         <View style={styles.loading}>
@@ -208,9 +178,14 @@ const SystemAppRouter: React.FC<SystemAppProps> = (initialProps) => {
     return () => subscription.remove();
   }, []);
 
-  // 🔑 Container size: prefer onLayout (live) > initial props
-  const containerWidth = layoutSize?.width ?? initialProps?.containerWidth;
-  const containerHeight = layoutSize?.height ?? initialProps?.containerHeight;
+  // Wait for the first real layout. Loading the guest with a stale or zero
+  // initial size renders a black tab until the window is resized.
+  if (!layoutSize) {
+    return <View style={styles.container} onLayout={handleLayout} />;
+  }
+
+  const containerWidth = layoutSize.width;
+  const containerHeight = layoutSize.height;
 
   // Merge initial props with dynamic updates (except size which comes from onLayout)
   const props = { ...initialProps, ...dynamicProps };
@@ -250,13 +225,7 @@ const SystemAppRouter: React.FC<SystemAppProps> = (initialProps) => {
   return (
     <View style={styles.container} onLayout={handleLayout}>
       <ErrorBoundary>
-        <SystemAppContent
-          appType={tab.systemAppType}
-          tab={tab}
-          containerWidth={containerWidth}
-          containerHeight={containerHeight}
-          isOverviewMode={isOverviewMode}
-        />
+        <SystemAppContent appType={tab.systemAppType} />
       </ErrorBoundary>
     </View>
   );

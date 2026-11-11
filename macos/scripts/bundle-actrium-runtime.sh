@@ -6,19 +6,17 @@
 #   ./scripts/bundle-actrium-runtime.sh [options]
 #
 # Options:
-#   --target <name>   Bundle target: "system", "actr", or "all" (default: all)
+#   --target <name>   Bundle target: "system" (default: system)
 #   --dev             Build development bundle (with source maps, not minified)
 #   --help            Show this help message
 #
 # Bundles:
 #   system  -> Actrium/Resources/system.jsbundle  (for RCTViewService0)
-#   actr    -> Actrium/Resources/runtime.jsbundle    (for RCTViewService1-N)
 #
 # Examples:
-#   ./scripts/bundle-actrium-runtime.sh                    # Build both bundles (release)
+#   ./scripts/bundle-actrium-runtime.sh                    # Build system apps (release)
 #   ./scripts/bundle-actrium-runtime.sh --target system    # Build system apps only
-#   ./scripts/bundle-actrium-runtime.sh --target actr      # Build actr host only
-#   ./scripts/bundle-actrium-runtime.sh --dev              # Build both in dev mode
+#   ./scripts/bundle-actrium-runtime.sh --dev              # Build system apps in dev mode
 #
 
 set -euo pipefail
@@ -36,7 +34,7 @@ OUTPUT_DIR="$PROJECT_ROOT/Actrium/Resources"
 GENERATED_ASSETS_DIR="$PROJECT_ROOT/.generated/actrium-runtime-assets"
 
 # Default options
-TARGET="all"
+TARGET="system"
 DEV_MODE=false
 
 # Parse arguments
@@ -51,7 +49,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
-            head -25 "$0" | tail -22
+            head -20 "$0"
             exit 0
             ;;
         *)
@@ -63,9 +61,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate target
-if [[ ! "$TARGET" =~ ^(system|actr|all)$ ]]; then
+if [[ ! "$TARGET" =~ ^system$ ]]; then
     echo "❌ Invalid target: $TARGET"
-    echo "   Valid targets: system, actr, all"
+    echo "   Valid target: system"
     exit 1
 fi
 
@@ -164,23 +162,12 @@ bundle_target() {
     echo ""
 }
 
-# Bundle based on target
-if [ "$TARGET" = "system" ] || [ "$TARGET" = "all" ]; then
-    bundle_target "System Apps" "index-system.tsx" "$OUTPUT_DIR/system.jsbundle"
-fi
-
-if [ "$TARGET" = "actr" ] || [ "$TARGET" = "all" ]; then
-    bundle_target "Actr Host" "index-runtime.tsx" "$OUTPUT_DIR/runtime.jsbundle"
-fi
+# Bundle the system apps
+bundle_target "System Apps" "index-system.tsx" "$OUTPUT_DIR/system.jsbundle"
 
 echo "🎉 Done!"
 echo ""
 echo "Bundle locations:"
-if [ "$TARGET" = "system" ] || [ "$TARGET" = "all" ]; then
-    echo "   System Apps: $OUTPUT_DIR/system.jsbundle"
-fi
-if [ "$TARGET" = "actr" ] || [ "$TARGET" = "all" ]; then
-    echo "   Actr Host:   $OUTPUT_DIR/runtime.jsbundle"
-fi
+echo "   System Apps: $OUTPUT_DIR/system.jsbundle"
 echo ""
 echo "Note: Make sure bundle files are added to Xcode project resources."

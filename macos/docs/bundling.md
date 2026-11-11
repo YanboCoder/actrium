@@ -5,19 +5,15 @@ Actrium The project contains a stand-alone project React Native bundle. Current 
 | Bundle | Entry files | Output File | Purpose |
 |--------|----------|----------|------|
 | System Apps | `index-system.tsx` | `system.jsbundle` | System Renderer(`system.*`) |
-| Actr Host | `index-runtime.tsx` | `runtime.jsbundle` | Normal Renderer |
 
 ## Quick Use
 
 ```bash
-# Build All bundle(Release Mode)
+# Build the system bundle (Release Mode)
 ./scripts/bundle-actrium-runtime.sh
 
 # Build Only System Apps bundle
 ./scripts/bundle-actrium-runtime.sh --target system
-
-# Build Only Actr Host bundle
-./scripts/bundle-actrium-runtime.sh --target actr
 
 # Build Development bundle(includes source map)
 ./scripts/bundle-actrium-runtime.sh --dev
@@ -30,7 +26,7 @@ Actrium The project contains a stand-alone project React Native bundle. Current 
 
 ### System Apps (`system.jsbundle`)
 
-**Purpose**: By RCTViewService0 Load, render the system to page.
+**Purpose**: Loaded by the system Renderer to render built-in pages.
 
 **Include Applications**:
 - `StartPageApp` - New Tab (`about:blank`)
@@ -40,35 +36,14 @@ Actrium The project contains a stand-alone project React Native bundle. Current 
 
 **Entry files**: `packages/actrium/index-system.tsx`
 
-### Actr Host (`runtime.jsbundle`)
-
-**Purpose**: By RCTViewService1-N Load, render `.actr` Plugin application.
-
-**Include Functions**:
-- `RuntimeApp` - Plugin Host Environment
-- `keel` / `askit` Engine support
-- Guest sandbox Run-time
-
-**Entry files**: `packages/actrium/index-runtime.tsx`
-
 ## Source Structure
 
 ```
 packages/actrium/
 ├── index-system.tsx      # System Apps Entry
-├── index-runtime.tsx        # Actr Host Entry
-├── index.ts              # Legacy Unified entrance (disused)
 └── src/
-    ├── system-apps/      # System application source code
-    │   ├── StartPageApp.tsx
-    │   ├── HistoryApp.tsx
-    │   ├── BookmarksApp.tsx
-    │   └── DebugApp.tsx
-    ├── runtime-host/        # Actr Host Source
-    │   ├── RuntimeApp.tsx
-    │   └── BundleView.tsx
-    ├── TabRouter.tsx     # Router (Log)Legacy)
-    └── logger.ts         # Log Tool
+    └── runtime-host/     # Actr Guest container source
+        └── StandaloneGuestApp.tsx
 ```
 
 ## Development Process

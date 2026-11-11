@@ -15,4 +15,4 @@ npm run verify:macos
 ```
 
 Runtime bundles can be generated independently with
-`npm run bundle:macos:all`.
+`npm run bundle:macos:system`.

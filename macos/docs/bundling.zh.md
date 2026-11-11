@@ -5,19 +5,15 @@ Actrium 项目包含独立的 React Native bundle。现行 Helper 是单一 `Act
 | Bundle | 入口文件 | 输出文件 | 用途 |
 |--------|----------|----------|------|
 | System Apps | `index-system.tsx` | `system.jsbundle` | 系统 Renderer（`system.*`） |
-| Actr Host | `index-runtime.tsx` | `runtime.jsbundle` | 普通应用 Renderer |
 
 ## 快速使用
 
 ```bash
-# 构建所有 bundle（Release 模式）
+# 构建 system bundle（Release 模式）
 ./scripts/bundle-actrium-runtime.sh
 
 # 仅构建 System Apps bundle
 ./scripts/bundle-actrium-runtime.sh --target system
-
-# 仅构建 Actr Host bundle
-./scripts/bundle-actrium-runtime.sh --target actr
 
 # 构建 Development bundle（包含 source map）
 ./scripts/bundle-actrium-runtime.sh --dev
@@ -30,7 +26,7 @@ Actrium 项目包含独立的 React Native bundle。现行 Helper 是单一 `Act
 
 ### System Apps (`system.jsbundle`)
 
-**用途**：由 RCTViewService0 加载，渲染系统内置页面。
+**用途**：由 system Renderer 加载，渲染系统内置页面。
 
 **包含的应用**：
 - `StartPageApp` - 新标签页（`about:blank`）
@@ -40,35 +36,14 @@ Actrium 项目包含独立的 React Native bundle。现行 Helper 是单一 `Act
 
 **入口文件**：`packages/actrium/index-system.tsx`
 
-### Actr Host (`runtime.jsbundle`)
-
-**用途**：由 RCTViewService1-N 加载，渲染 `.actr` 插件应用。
-
-**包含的功能**：
-- `RuntimeApp` - 插件宿主环境
-- `keel` / `askit` 引擎支持
-- Guest sandbox 运行时
-
-**入口文件**：`packages/actrium/index-runtime.tsx`
-
 ## 源码结构
 
 ```
 packages/actrium/
 ├── index-system.tsx      # System Apps 入口
-├── index-runtime.tsx        # Actr Host 入口
-├── index.ts              # Legacy 统一入口（已废弃）
 └── src/
-    ├── system-apps/      # 系统应用源码
-    │   ├── StartPageApp.tsx
-    │   ├── HistoryApp.tsx
-    │   ├── BookmarksApp.tsx
-    │   └── DebugApp.tsx
-    ├── runtime-host/        # Actr 宿主源码
-    │   ├── RuntimeApp.tsx
-    │   └── BundleView.tsx
-    ├── TabRouter.tsx     # 路由器（Legacy）
-    └── logger.ts         # 日志工具
+    └── runtime-host/     # Actr Guest 容器源码
+        └── StandaloneGuestApp.tsx
 ```
 
 ## 开发流程
