@@ -251,6 +251,11 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStr
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACCEPT_AUTHORITY_DESCRIPTOR
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACCEPT_AUTHORITY_DESCRIPTOR
+RustBuffer uniffi_actrium_core_fn_func_accept_authority_descriptor(RustBuffer body, RustBuffer domain, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACTIVE_TAB_FROM_ROW
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACTIVE_TAB_FROM_ROW
 RustBuffer uniffi_actrium_core_fn_func_active_tab_from_row(RustBuffer row, RustCallStatus *_Nonnull out_status
@@ -1912,6 +1917,12 @@ void ffi_actrium_core_rust_future_free_void(uint64_t handle
 #ifndef UNIFFI_FFIDEF_FFI_ACTRIUM_CORE_RUST_FUTURE_COMPLETE_VOID
 #define UNIFFI_FFIDEF_FFI_ACTRIUM_CORE_RUST_FUTURE_COMPLETE_VOID
 void ffi_actrium_core_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACCEPT_AUTHORITY_DESCRIPTOR
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACCEPT_AUTHORITY_DESCRIPTOR
+uint16_t uniffi_actrium_core_checksum_func_accept_authority_descriptor(void
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACTIVE_TAB_FROM_ROW

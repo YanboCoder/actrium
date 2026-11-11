@@ -432,6 +432,22 @@ fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
     typealias FfiType = Int64
     typealias SwiftType = Int64
@@ -2141,6 +2157,99 @@ public func FfiConverterTypeAsrSegmentInfo_lift(_ buf: RustBuffer) throws -> Asr
 #endif
 public func FfiConverterTypeAsrSegmentInfo_lower(_ value: AsrSegmentInfo) -> RustBuffer {
     return FfiConverterTypeAsrSegmentInfo.lower(value)
+}
+
+
+/**
+ * Validated authority descriptor for a Realm domain.
+ */
+public struct AuthorityDiscoveryInfo {
+    /**
+     * Realms service href; Realm Profile GETs append `/<realm_id>`.
+     */
+    public var realmsHref: String
+    /**
+     * Sequence of the accepted `realm_signing_keys` member.
+     */
+    public var keysSequence: UInt64
+    public var signingKeys: [RealmSigningKeyInfo]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Realms service href; Realm Profile GETs append `/<realm_id>`.
+         */realmsHref: String,
+        /**
+         * Sequence of the accepted `realm_signing_keys` member.
+         */keysSequence: UInt64, signingKeys: [RealmSigningKeyInfo]) {
+        self.realmsHref = realmsHref
+        self.keysSequence = keysSequence
+        self.signingKeys = signingKeys
+    }
+}
+
+#if compiler(>=6)
+extension AuthorityDiscoveryInfo: Sendable {}
+#endif
+
+
+extension AuthorityDiscoveryInfo: Equatable, Hashable {
+    public static func ==(lhs: AuthorityDiscoveryInfo, rhs: AuthorityDiscoveryInfo) -> Bool {
+        if lhs.realmsHref != rhs.realmsHref {
+            return false
+        }
+        if lhs.keysSequence != rhs.keysSequence {
+            return false
+        }
+        if lhs.signingKeys != rhs.signingKeys {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(realmsHref)
+        hasher.combine(keysSequence)
+        hasher.combine(signingKeys)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthorityDiscoveryInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthorityDiscoveryInfo {
+        return
+            try AuthorityDiscoveryInfo(
+                realmsHref: FfiConverterString.read(from: &buf),
+                keysSequence: FfiConverterUInt64.read(from: &buf),
+                signingKeys: FfiConverterSequenceTypeRealmSigningKeyInfo.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AuthorityDiscoveryInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.realmsHref, into: &buf)
+        FfiConverterUInt64.write(value.keysSequence, into: &buf)
+        FfiConverterSequenceTypeRealmSigningKeyInfo.write(value.signingKeys, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthorityDiscoveryInfo_lift(_ buf: RustBuffer) throws -> AuthorityDiscoveryInfo {
+    return try FfiConverterTypeAuthorityDiscoveryInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthorityDiscoveryInfo_lower(_ value: AuthorityDiscoveryInfo) -> RustBuffer {
+    return FfiConverterTypeAuthorityDiscoveryInfo.lower(value)
 }
 
 
@@ -4762,6 +4871,99 @@ public func FfiConverterTypePackageIntegrityPlanInfo_lower(_ value: PackageInteg
 }
 
 
+/**
+ * A trusted realm signing key from an accepted authority descriptor.
+ */
+public struct RealmSigningKeyInfo {
+    public var id: String
+    /**
+     * Base64 Ed25519 public key, as listed by the descriptor.
+     */
+    public var publicKeyBase64: String
+    /**
+     * `active` or `retired`.
+     */
+    public var status: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String,
+        /**
+         * Base64 Ed25519 public key, as listed by the descriptor.
+         */publicKeyBase64: String,
+        /**
+         * `active` or `retired`.
+         */status: String) {
+        self.id = id
+        self.publicKeyBase64 = publicKeyBase64
+        self.status = status
+    }
+}
+
+#if compiler(>=6)
+extension RealmSigningKeyInfo: Sendable {}
+#endif
+
+
+extension RealmSigningKeyInfo: Equatable, Hashable {
+    public static func ==(lhs: RealmSigningKeyInfo, rhs: RealmSigningKeyInfo) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.publicKeyBase64 != rhs.publicKeyBase64 {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(publicKeyBase64)
+        hasher.combine(status)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRealmSigningKeyInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RealmSigningKeyInfo {
+        return
+            try RealmSigningKeyInfo(
+                id: FfiConverterString.read(from: &buf),
+                publicKeyBase64: FfiConverterString.read(from: &buf),
+                status: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RealmSigningKeyInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.publicKeyBase64, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRealmSigningKeyInfo_lift(_ buf: RustBuffer) throws -> RealmSigningKeyInfo {
+    return try FfiConverterTypeRealmSigningKeyInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRealmSigningKeyInfo_lower(_ value: RealmSigningKeyInfo) -> RustBuffer {
+    return FfiConverterTypeRealmSigningKeyInfo.lower(value)
+}
+
+
 public struct RuntimeContainerSizeChangeEventInfo {
     public var containerWidth: Int32
     public var containerHeight: Int32
@@ -6153,6 +6355,8 @@ public enum CoreError: Swift.Error {
 
     case InvalidInstallationId(message: String)
 
+    case AuthorityDescriptorInvalid(message: String)
+
 }
 
 
@@ -6221,6 +6425,10 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
 
+        case 14: return .AuthorityDescriptorInvalid(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -6258,6 +6466,8 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(12))
         case .InvalidInstallationId(_ /* message is ignored*/):
             writeInt(&buf, Int32(13))
+        case .AuthorityDescriptorInvalid(_ /* message is ignored*/):
+            writeInt(&buf, Int32(14))
 
 
         }
@@ -6737,6 +6947,31 @@ fileprivate struct FfiConverterSequenceTypePackageIntegrityFilePlanInfo: FfiConv
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRealmSigningKeyInfo: FfiConverterRustBuffer {
+    typealias SwiftType = [RealmSigningKeyInfo]
+
+    public static func write(_ value: [RealmSigningKeyInfo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRealmSigningKeyInfo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RealmSigningKeyInfo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RealmSigningKeyInfo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRealmSigningKeyInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRuntimeTabInfo: FfiConverterRustBuffer {
     typealias SwiftType = [RuntimeTabInfo]
 
@@ -6757,6 +6992,21 @@ fileprivate struct FfiConverterSequenceTypeRuntimeTabInfo: FfiConverterRustBuffe
         }
         return seq
     }
+}
+/**
+ * Validate an authority descriptor response for `domain` and extract
+ * the trusted realm signing keys plus the realms service href.
+ *
+ * `body` is the raw JSON text as received over HTTPS. Key pinning
+ * across visits is not applied yet.
+ */
+public func acceptAuthorityDescriptor(body: String, domain: String)throws  -> AuthorityDiscoveryInfo  {
+    return try  FfiConverterTypeAuthorityDiscoveryInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_actrium_core_fn_func_accept_authority_descriptor(
+        FfiConverterString.lower(body),
+        FfiConverterString.lower(domain),$0
+    )
+})
 }
 /**
  * Convert a persisted active-tab row into the platform active-tab model.
@@ -9231,6 +9481,9 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_actrium_core_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_actrium_core_checksum_func_accept_authority_descriptor() != 22442) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_actrium_core_checksum_func_active_tab_from_row() != 51323) {
         return InitializationResult.apiChecksumMismatch

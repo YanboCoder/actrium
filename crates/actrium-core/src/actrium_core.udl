@@ -24,6 +24,14 @@ namespace actrium_core {
     [Throws=CoreError]
     ActrUriInfo parse_actr_uri(string uri, string installation_id);
 
+    /// Validate an authority descriptor response for `domain` and extract
+    /// the trusted realm signing keys plus the realms service href.
+    ///
+    /// `body` is the raw JSON text as received over HTTPS. Key pinning
+    /// across visits is not applied yet.
+    [Throws=CoreError]
+    AuthorityDiscoveryInfo accept_authority_descriptor(string body, string domain);
+
     /// Evaluate a contract tuple using the current Actrium host compatibility rules.
     ContractGateInfo evaluate_contract(string? name, u32 version);
 
@@ -993,6 +1001,24 @@ dictionary ActrUriInfo {
     string? discovery_url;
 };
 
+/// A trusted realm signing key from an accepted authority descriptor.
+dictionary RealmSigningKeyInfo {
+    string id;
+    /// Base64 Ed25519 public key, as listed by the descriptor.
+    string public_key_base64;
+    /// `active` or `retired`.
+    string status;
+};
+
+/// Validated authority descriptor for a Realm domain.
+dictionary AuthorityDiscoveryInfo {
+    /// Realms service href; Realm Profile GETs append `/<realm_id>`.
+    string realms_href;
+    /// Sequence of the accepted `realm_signing_keys` member.
+    u64 keys_sequence;
+    sequence<RealmSigningKeyInfo> signing_keys;
+};
+
 enum ContractGateStatus {
     "Ok",
     "Compat",
@@ -1501,4 +1527,5 @@ enum CoreError {
     "UriLegacyForm",
     "UriLocalRealmForeign",
     "InvalidInstallationId",
+    "AuthorityDescriptorInvalid",
 };

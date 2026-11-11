@@ -1,4 +1,5 @@
-use actr_protocol::uri::ActrUriError;
+use actr_protocol::authority::{self, AuthorityDescriptor, AuthorityDescriptorError};
+use actr_protocol::uri::{ActrUri, ActrUriError};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -675,6 +676,8 @@ pub enum CoreError {
     UriLocalRealmForeign,
     #[error("invalid installation id, expected 26 lowercase base32 characters")]
     InvalidInstallationId,
+    #[error("authority descriptor is invalid: {0}")]
+    AuthorityDescriptorInvalid(String),
 }
 
 impl From<ManifestError> for CoreError {
@@ -816,6 +819,86 @@ pub fn parse_actr_uri(uri: String, installation_id: String) -> Result<ActrUriInf
             })
         },
     )
+}
+
+impl From<AuthorityDescriptorError> for CoreError {
+    fn from(error: AuthorityDescriptorError) -> Self {
+        Self::AuthorityDescriptorInvalid(error.to_string())
+    }
+}
+
+/// A trusted realm signing key from an accepted authority descriptor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RealmSigningKeyInfo {
+    pub id: String,
+    /// Base64 Ed25519 public key, as listed by the descriptor.
+    pub public_key_base64: String,
+    /// `active` or `retired`.
+    pub status: String,
+}
+
+/// Validated authority descriptor for a Realm domain: the trusted realm
+/// signing keys and the realms service location that feeds Realm Profile
+/// discovery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthorityDiscoveryInfo {
+    pub realms_href: String,
+    /// Sequence of the accepted `realm_signing_keys` member.
+    pub keys_sequence: u64,
+    pub signing_keys: Vec<RealmSigningKeyInfo>,
+}
+
+/// Validate an authority descriptor response for `domain` and extract the
+/// trusted realm signing keys plus the realms service href.
+///
+/// Layer-1 verification-funnel step. `body` must be the raw JSON text as
+/// received over HTTPS (Web PKI is the first-accept trust root). The check
+/// covers the descriptor structure, the `authority` binding to `domain`,
+/// and the `realm_signing_keys` member including its detached Ed25519
+/// signature; key pinning across visits is the caller's concern and is not
+/// applied here yet.
+pub fn accept_authority_descriptor(
+    body: String,
+    domain: String,
+) -> Result<AuthorityDiscoveryInfo, CoreError> {
+    let invalid = CoreError::AuthorityDescriptorInvalid;
+
+    // Keep the raw member value: the signing payload is its JCS form, so it
+    // must not round-trip through a typed struct before verification.
+    let value: serde_json::Value =
+        serde_json::from_str(&body).map_err(|error| invalid(format!("not valid JSON: {error}")))?;
+    let descriptor: AuthorityDescriptor = serde_json::from_value(value.clone())
+        .map_err(|error| invalid(format!("malformed descriptor: {error}")))?;
+
+    let requested = ActrUri::from_domain(&domain)
+        .map_err(|error| invalid(format!("invalid discovery domain: {error}")))?;
+    descriptor.validate_for(&requested)?;
+
+    let realms_href = descriptor
+        .require_service("realms")
+        .map_err(CoreError::from)?
+        .href
+        .clone();
+
+    let member = value.get("realm_signing_keys").ok_or_else(|| {
+        invalid("descriptor carries no realm_signing_keys".to_string())
+    })?;
+    let (keys, _outcome) =
+        authority::RealmSigningKeys::accept(member, None).map_err(CoreError::from)?;
+
+    Ok(AuthorityDiscoveryInfo {
+        realms_href,
+        keys_sequence: keys.sequence,
+        signing_keys: keys
+            .keys
+            .iter()
+            .map(|key| RealmSigningKeyInfo {
+                id: key.id.clone(),
+                public_key_base64: key.public_key.clone(),
+                status: format!("{:?}", key.status).to_lowercase(),
+            })
+            .collect(),
+    })
 }
 
 pub fn validate_actr_package_manifest(source: String) -> Result<(), CoreError> {
@@ -4912,5 +4995,80 @@ mod tests {
         // `0`, `1`, `8`, `9` are outside the base32 `a-z` + `2-7` alphabet.
         assert!(validate_installation_id("qscmfu5tbhyeowlknav3zrij08".to_string()).is_err());
         assert!(validate_installation_id(INSTALLATION_ID.to_string()).is_ok());
+    }
+
+    /// A well-formed descriptor whose `realm_signing_keys` member is vector
+    /// `m1` of `contracts/actr/test-vectors/realm-signing-keys-rotation.json`
+    /// (single active key `rs-a`, real Ed25519 signature over its JCS form).
+    const AUTHORITY_DESCRIPTOR: &str = r#"{
+        "version": 1,
+        "authority": "actr://acme.example",
+        "services": [
+            {"rel": "realms", "href": "https://acme.example/realms", "protocol": "actr-realm-profile/1"}
+        ],
+        "realm_signing_keys": {
+            "sequence": 1,
+            "keys": [
+                {
+                    "id": "rs-a",
+                    "algorithm": "Ed25519",
+                    "public_key": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w=",
+                    "status": "active"
+                }
+            ],
+            "signature": {
+                "key_id": "rs-a",
+                "algorithm": "Ed25519",
+                "value": "srqr147D4MEh4ZaUk2nTH/Gq6PNZt4+UdKQbSEXxRNnAzyzO0EO3L2dRJsICebI3kv64MGsgYICgExy3D67qDw=="
+            }
+        }
+    }"#;
+
+    #[test]
+    fn accept_authority_descriptor_extracts_keys_and_realms_href() {
+        let info =
+            accept_authority_descriptor(AUTHORITY_DESCRIPTOR.to_string(), "acme.example".to_string())
+                .unwrap();
+        assert_eq!(info.realms_href, "https://acme.example/realms");
+        assert_eq!(info.keys_sequence, 1);
+        assert_eq!(info.signing_keys.len(), 1);
+        assert_eq!(info.signing_keys[0].id, "rs-a");
+        assert_eq!(
+            info.signing_keys[0].public_key_base64,
+            "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w="
+        );
+        assert_eq!(info.signing_keys[0].status, "active");
+    }
+
+    #[test]
+    fn accept_authority_descriptor_rejects_authority_mismatch() {
+        let error = accept_authority_descriptor(
+            AUTHORITY_DESCRIPTOR.to_string(),
+            "other.example".to_string(),
+        )
+        .unwrap_err();
+        assert!(matches!(error, CoreError::AuthorityDescriptorInvalid(_)));
+    }
+
+    #[test]
+    fn accept_authority_descriptor_rejects_tampered_key_signature() {
+        // Flip the final base64 character of the member signature.
+        let tampered = AUTHORITY_DESCRIPTOR.replacen("qDw==", "qDx==", 1);
+        let error = accept_authority_descriptor(tampered, "acme.example".to_string()).unwrap_err();
+        assert!(matches!(error, CoreError::AuthorityDescriptorInvalid(_)));
+    }
+
+    #[test]
+    fn accept_authority_descriptor_requires_realm_signing_keys() {
+        let bare = r#"{
+            "version": 1,
+            "authority": "actr://acme.example",
+            "services": [
+                {"rel": "realms", "href": "https://acme.example/realms"}
+            ]
+        }"#;
+        let error =
+            accept_authority_descriptor(bare.to_string(), "acme.example".to_string()).unwrap_err();
+        assert!(matches!(error, CoreError::AuthorityDescriptorInvalid(_)));
     }
 }

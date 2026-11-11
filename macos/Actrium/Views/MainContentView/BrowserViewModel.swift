@@ -942,8 +942,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         logger.notice("🔗 [navigateCurrentTab] Resolved actr:// link: \(realmDisplay), local=\(info.isLocal)")
         if info.isLocal {
             logger.notice("ℹ️ [navigateCurrentTab] Opening a local Realm instance is not wired yet.")
-        } else if let discoveryURL = info.discoveryUrl {
-            logger.notice("ℹ️ [navigateCurrentTab] Realm discovery is not wired yet; next step would fetch \(discoveryURL)")
+        } else if let discoveryURL = info.discoveryUrl, let url = URL(string: discoveryURL) {
+            discoverAuthority(url: url, domain: info.domain)
         }
 
         tabs[tabIndex].title = realmDisplay
@@ -960,10 +960,65 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         persistBrowserPageSession()
     }
 
+    /// Realm discovery (verification-funnel layer 1): fetch the authority
+    /// descriptor over HTTPS and hand it to the core parser for validation.
+    /// The trusted signing keys and realms href it produces feed Realm
+    /// Profile discovery; profile downloads are not wired in this milestone.
+    private func discoverAuthority(url: URL, domain: String) {
+        Task { @MainActor in
+            do {
+                let (data, response) = try await URLSession.shared.data(from: url)
+                guard let http = response as? HTTPURLResponse,
+                      (200 ..< 300).contains(http.statusCode) else {
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: String(
+                            format: NSLocalizedString(
+                                "The authority information for this domain is unavailable (HTTP %ld).",
+                                comment: "Actr authority fetch failure"),
+                            status)])
+                }
+                // Every hop of a redirect chain must stay on HTTPS; the
+                // default session follows redirects, so checking the final
+                // response URL is the minimal enforcement here.
+                guard let finalURL = response.url, finalURL.scheme?.lowercased() == "https" else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The authority information was served over an insecure connection.",
+                            comment: "Actr authority insecure transport error")])
+                }
+                guard let body = String(data: data, encoding: .utf8) else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 3,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The authority information is not valid text.",
+                            comment: "Actr authority encoding error")])
+                }
+
+                let descriptor = try ActriumCore.acceptAuthorityDescriptor(
+                    body: body,
+                    domain: domain
+                )
+                let activeKeys = descriptor.signingKeys.filter { $0.status == "active" }
+                logger.notice("🌐 [navigateCurrentTab] Authority accepted for \(domain): realms=\(descriptor.realmsHref), keys sequence=\(descriptor.keysSequence), active keys=\(activeKeys.count)")
+                logger.notice("ℹ️ [navigateCurrentTab] Realm Profile discovery is not wired yet; next step would fetch \(descriptor.realmsHref)/<realm_id>")
+            } catch {
+                logger.warning("⚠️ [navigateCurrentTab] Authority discovery failed: \(error)")
+                presentRealmLinkError(error)
+            }
+        }
+    }
+
     /// Surface a rejected actr:// link with variant-specific copy.
     private func presentRealmLinkError(_ error: Error) {
         let message: String
         switch error {
+        case CoreError.AuthorityDescriptorInvalid:
+            message = NSLocalizedString(
+                "The authority information for this domain is invalid.",
+                comment: "Actr authority descriptor error")
         case CoreError.UriSchemeInvalid:
             message = NSLocalizedString(
                 "Only actr:// links are supported here.",
