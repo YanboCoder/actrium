@@ -1,6 +1,7 @@
 use actr_protocol::authority::{
     self, AuthorityDescriptor, AuthorityDescriptorError, RealmSigningKeys,
 };
+use actr_protocol::realm_membership::RealmInvite;
 use actr_protocol::realm_profile::{RealmProfile, RealmProfileError, RealmStatus};
 use actr_protocol::uri::{ActrUri, ActrUriError};
 use sha2::{Digest, Sha256};
@@ -941,6 +942,8 @@ pub struct RealmProfileInfo {
     pub package_type: String,
     /// Issuer endpoint that serves Actor credentials.
     pub issuer_url: String,
+    /// Actr Facility Provider ID; a membership client binds to it.
+    pub provider_id: String,
 }
 
 /// Validate a Realm Profile response for `realm_name` and extract the
@@ -978,7 +981,50 @@ pub fn accept_realm_profile(
         package_sha256: package.sha256.clone(),
         package_type: package.r#type.clone(),
         issuer_url: profile.issuer.url.clone(),
+        provider_id: profile.provider.id.clone(),
     })
+}
+
+/// The Realm name carried by a `ri_` invite text.
+///
+/// Decoding happens here so the secret never leaves Rust: the shell only
+/// learns the Realm name to show the confirmation UI and run discovery.
+/// `join` re-decodes the same text internally when it consumes the secret.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActrInviteInfo {
+    pub realm_name: String,
+}
+
+pub fn decode_actr_invite(invite_text: String) -> Result<ActrInviteInfo, CoreError> {
+    let invite = RealmInvite::decode(&invite_text).map_err(|error| {
+        CoreError::AuthorityDescriptorInvalid(format!("invalid invite: {error}"))
+    })?;
+    Ok(ActrInviteInfo {
+        realm_name: invite.realm,
+    })
+}
+
+#[cfg(test)]
+mod invite_tests {
+    use super::*;
+
+    #[test]
+    fn decode_actr_invite_extracts_realm_name() {
+        // 32 secret bytes, base64url without padding (43 characters).
+        let text = RealmInvite::new(
+            "echo@realm.example",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        )
+        .encode();
+        let info = decode_actr_invite(text).unwrap();
+        assert_eq!(info.realm_name, "echo@realm.example");
+    }
+
+    #[test]
+    fn decode_actr_invite_rejects_non_invite_text() {
+        let error = decode_actr_invite("https://acme.example/realm".to_string()).unwrap_err();
+        assert!(matches!(error, CoreError::AuthorityDescriptorInvalid(_)));
+    }
 }
 
 /// A package signing key from a verified Publisher Profile.
@@ -5328,6 +5374,7 @@ mod tests {
             info.issuer_url,
             "https://identity.provider.example/realms/acme.com/k7m2q9xh"
         );
+        assert_eq!(info.provider_id, "provider.example");
     }
 
     #[test]

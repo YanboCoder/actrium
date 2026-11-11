@@ -1543,6 +1543,77 @@ public func FfiConverterTypeActrBridgeContractInfo_lower(_ value: ActrBridgeCont
 }
 
 
+/**
+ * The Realm name carried by a `ri_` invite text.
+ */
+public struct ActrInviteInfo {
+    /**
+     * Canonical Realm name `<realm_id>@<domain>`.
+     */
+    public var realmName: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Canonical Realm name `<realm_id>@<domain>`.
+         */realmName: String) {
+        self.realmName = realmName
+    }
+}
+
+#if compiler(>=6)
+extension ActrInviteInfo: Sendable {}
+#endif
+
+
+extension ActrInviteInfo: Equatable, Hashable {
+    public static func ==(lhs: ActrInviteInfo, rhs: ActrInviteInfo) -> Bool {
+        if lhs.realmName != rhs.realmName {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(realmName)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeActrInviteInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActrInviteInfo {
+        return
+            try ActrInviteInfo(
+                realmName: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ActrInviteInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.realmName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActrInviteInfo_lift(_ buf: RustBuffer) throws -> ActrInviteInfo {
+    return try FfiConverterTypeActrInviteInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActrInviteInfo_lower(_ value: ActrInviteInfo) -> RustBuffer {
+    return FfiConverterTypeActrInviteInfo.lower(value)
+}
+
+
 public struct ActrPackageManifestInfo {
     public var name: String
     public var version: String
@@ -5110,6 +5181,10 @@ public struct RealmProfileInfo {
      * Issuer endpoint that serves Actor credentials.
      */
     public var issuerUrl: String
+    /**
+     * Actr Facility Provider ID; a membership client binds to it.
+     */
+    public var providerId: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5131,7 +5206,10 @@ public struct RealmProfileInfo {
          */packageType: String,
         /**
          * Issuer endpoint that serves Actor credentials.
-         */issuerUrl: String) {
+         */issuerUrl: String,
+        /**
+         * Actr Facility Provider ID; a membership client binds to it.
+         */providerId: String) {
         self.realmName = realmName
         self.displayName = displayName
         self.status = status
@@ -5140,6 +5218,7 @@ public struct RealmProfileInfo {
         self.packageSha256 = packageSha256
         self.packageType = packageType
         self.issuerUrl = issuerUrl
+        self.providerId = providerId
     }
 }
 
@@ -5174,6 +5253,9 @@ extension RealmProfileInfo: Equatable, Hashable {
         if lhs.issuerUrl != rhs.issuerUrl {
             return false
         }
+        if lhs.providerId != rhs.providerId {
+            return false
+        }
         return true
     }
 
@@ -5186,6 +5268,7 @@ extension RealmProfileInfo: Equatable, Hashable {
         hasher.combine(packageSha256)
         hasher.combine(packageType)
         hasher.combine(issuerUrl)
+        hasher.combine(providerId)
     }
 }
 
@@ -5205,7 +5288,8 @@ public struct FfiConverterTypeRealmProfileInfo: FfiConverterRustBuffer {
                 packageHref: FfiConverterString.read(from: &buf),
                 packageSha256: FfiConverterString.read(from: &buf),
                 packageType: FfiConverterString.read(from: &buf),
-                issuerUrl: FfiConverterString.read(from: &buf)
+                issuerUrl: FfiConverterString.read(from: &buf),
+                providerId: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -5218,6 +5302,7 @@ public struct FfiConverterTypeRealmProfileInfo: FfiConverterRustBuffer {
         FfiConverterString.write(value.packageSha256, into: &buf)
         FfiConverterString.write(value.packageType, into: &buf)
         FfiConverterString.write(value.issuerUrl, into: &buf)
+        FfiConverterString.write(value.providerId, into: &buf)
     }
 }
 
@@ -9056,6 +9141,17 @@ public func createActrIntegrityPlan(manifestToml: String)throws  -> PackageInteg
 })
 }
 /**
+ * Decode a `ri_` invite text far enough to name its Realm. The secret
+ * stays inside Rust; `join` re-decodes the same text internally.
+ */
+public func decodeActrInvite(inviteText: String)throws  -> ActrInviteInfo  {
+    return try  FfiConverterTypeActrInviteInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_actrium_core_fn_func_decode_actr_invite(
+        FfiConverterString.lower(inviteText),$0
+    )
+})
+}
+/**
  * Return the default runtime app status.
  */
 public func defaultRuntimeAppStatus() -> String  {
@@ -10397,6 +10493,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_actrium_core_checksum_func_create_actr_integrity_plan() != 9942) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_actrium_core_checksum_func_decode_actr_invite() != 2065) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_actrium_core_checksum_func_default_runtime_app_status() != 1707) {

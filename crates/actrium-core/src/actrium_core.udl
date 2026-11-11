@@ -47,6 +47,11 @@ namespace actrium_core {
     [Throws=CoreError]
     PublisherProfileInfo accept_publisher_profile(string body, string domain);
 
+    /// Decode a `ri_` invite text far enough to name its Realm. The secret
+    /// stays inside Rust; `join` re-decodes the same text internally.
+    [Throws=CoreError]
+    ActrInviteInfo decode_actr_invite(string invite_text);
+
     /// Evaluate a contract tuple using the current Actrium host compatibility rules.
     ContractGateInfo evaluate_contract(string? name, u32 version);
 
@@ -1053,6 +1058,14 @@ dictionary RealmProfileInfo {
     string package_type;
     /// Issuer endpoint that serves Actor credentials.
     string issuer_url;
+    /// Actr Facility Provider ID; a membership client binds to it.
+    string provider_id;
+};
+
+/// The Realm name carried by a `ri_` invite text.
+dictionary ActrInviteInfo {
+    /// Canonical Realm name `<realm_id>@<domain>`.
+    string realm_name;
 };
 
 /// A package signing key from a verified Publisher Profile.
