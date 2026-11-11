@@ -20,6 +20,10 @@ DerivedData/
 *.profdata
 vcpkg_installed/
 
+# Tooling and local build state
+.gradle/
+.swiftpm/
+
 # Local configuration and secrets
 .env
 .env.*

@@ -1139,7 +1139,13 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         }
 
         if let discoveryURL = info.discoveryUrl, let url = URL(string: discoveryURL) {
-            discoverAuthority(url: url, domain: info.domain, realmId: realmId)
+            discoverAuthority(
+                url: url,
+                domain: info.domain,
+                realmId: realmId,
+                // Same-tab replace: the package/instance replaces this tab.
+                replacingTabId: tabs[tabIndex].id
+            )
         }
 
         tabs[tabIndex].title = realmDisplay
@@ -1159,9 +1165,15 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
     /// Realm discovery (verification-funnel layer 1) followed by Realm
     /// Profile discovery (layer 2): fetch the authority descriptor, validate
     /// it, then fetch and verify the Realm Profile it points to. The package
-    /// target that comes out feeds package acquisition; downloads are not
-    /// wired in this milestone.
-    private func discoverAuthority(url: URL, domain: String, realmId: String) {
+    /// target that comes out feeds package acquisition; the package is cached
+    /// and handed to the import pipeline in the originating tab (same-tab
+    /// replace). Publisher-key signature verification still hooks in here (B3).
+    private func discoverAuthority(
+        url: URL,
+        domain: String,
+        realmId: String,
+        replacingTabId: UUID? = nil
+    ) {
         Task { @MainActor in
             do {
                 let (data, response) = try await URLSession.shared.data(from: url)
@@ -1293,12 +1305,34 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                             "The package location is invalid.",
                             comment: "Actr package URL error")])
                 }
-                let packageURL_ = try await Self.downloadPackage(
+                let downloadedURL = try await Self.downloadPackage(
                     from: packageURL,
                     expectedSha256: profile.packageSha256
                 )
-                logger.notice("📦 [navigateCurrentTab] Package downloaded to \(packageURL_.path)")
-                logger.notice("ℹ️ [navigateCurrentTab] Package verification is not wired yet; next step would check sha256=\(profile.packageSha256.prefix(12))… and the Ed25519 signature with \(activePackageKeys.count) publisher key(s).")
+                logger.notice("📦 [navigateCurrentTab] Package downloaded to \(downloadedURL.path)")
+
+                // 15-B B3 verification (SHA-256 against the Realm Profile digest
+                // plus the publisher Ed25519 signature) is intentionally skipped
+                // for now. Continue straight to the digest cache and import
+                // pipeline (B2/B4/B6); the verification step will hook in here.
+                logger.notice("ℹ️ [navigateCurrentTab] Package verification skipped (expected sha256=\(profile.packageSha256.prefix(12))…, \(activePackageKeys.count) publisher key(s))")
+                let digest = try await ActrPackageDownloadService.sha256Digest(of: downloadedURL)
+                let cachedArchiveURL = try ActrPackageCache.installArchive(
+                    at: downloadedURL,
+                    digest: digest
+                )
+                try? FileManager.default.removeItem(at: downloadedURL)
+                ActrPackageCache.rememberDownloadURL(packageURL, digest: digest)
+
+                // Hand over to the import pipeline: digest cache → manifest →
+                // render Guest → offer instance creation (URI replace to the
+                // instance address, 15-B B6).
+                importACTRPackage(
+                    from: cachedArchiveURL,
+                    knownDigest: digest,
+                    requireSignature: false,
+                    replacingTabId: replacingTabId
+                )
             } catch {
                 logger.warning("⚠️ [navigateCurrentTab] Realm discovery failed: \(error)")
                 presentRealmLinkError(error)
@@ -1646,12 +1680,18 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
     /// - Parameter presentInstanceCreation: archive imports present the instance
     ///   creation confirm sheet after rendering (15-B B6); restart restore passes
     ///   false — the instance already exists.
+    /// - Parameter requireSignature: verify manifest.sig before importing an
+    ///   archive (15-B B3). Pass false only for the download funnel while the
+    ///   publisher-key verification step is still unwired; payload integrity is
+    ///   still checked by the manifest reader.
     /// - Returns: the newly created runtime tab, or nil when the import failed.
     @discardableResult
     func importACTRPackage(
         from fileURL: URL,
         knownDigest: String? = nil,
-        presentInstanceCreation: Bool = true
+        presentInstanceCreation: Bool = true,
+        requireSignature: Bool = true,
+        replacingTabId: UUID? = nil
     ) -> Tab? {
         let resolvedURL = fileURL.standardizedFileURL
         guard FileManager.default.fileExists(atPath: resolvedURL.path) else {
@@ -1678,7 +1718,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 let digest = try knownDigest ?? ActrPackageDownloadService.sha256FileSync(at: resolvedURL)
                 let archiveURL = try ActrPackageCache.installArchive(at: resolvedURL, digest: digest)
                 rootDir = try ActrPackageCache.extractArchiveIfNeeded(archiveURL, digest: digest) {
-                    try self.validateExtractedPackage(at: $0)
+                    try self.validateExtractedPackage(at: $0, requireSignature: requireSignature)
                 }
                 packageDigest = digest
                 cachedArchiveURL = archiveURL
@@ -1689,7 +1729,10 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         }
 
         do {
-            let manifestInfo = try readPackageManifest(fromRoot: rootDir, requireSignature: !isDirectory.boolValue)
+            let manifestInfo = try readPackageManifest(
+                fromRoot: rootDir,
+                requireSignature: !isDirectory.boolValue && requireSignature
+            )
             let tabTitle = manifestInfo.name ?? resolvedURL.deletingPathExtension().lastPathComponent
 
             // Register as downloaded app if appId is provided.
@@ -1750,7 +1793,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     themeColor: manifestInfo.themeColor,
                     // Archive imports: history records only the final instance
                     // address after creation (04 §4, 15-B B6).
-                    recordHistoryVisit: isDirectory.boolValue
+                    recordHistoryVisit: isDirectory.boolValue,
+                    replacingTabId: replacingTabId
                 )
                 // 15-B B6: after rendering a package archive, offer instance
                 // creation (confirm page → serviceCreate → URI replace).
@@ -1781,7 +1825,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     permissions: manifestInfo.permissions,
                     leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
                     rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
-                    themeColor: manifestInfo.themeColor
+                    themeColor: manifestInfo.themeColor,
+                    replacingTabId: replacingTabId
                 )
             } else if let script = guestScript {
                 // Old architecture: one compatible guest.js
@@ -1794,7 +1839,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     contractName: manifestInfo.contractName,
                     contractVersion: manifestInfo.contractVersion,
                     permissions: manifestInfo.permissions,
-                    themeColor: manifestInfo.themeColor
+                    themeColor: manifestInfo.themeColor,
+                    replacingTabId: replacingTabId
                 )
             } else {
                 // No script, display application information page
@@ -1808,7 +1854,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     title: tabTitle,
                     sourceURL: resolvedURL,
                     appId: manifestInfo.appId,
-                    htmlContent: html
+                    htmlContent: html,
+                    replacingTabId: replacingTabId
                 )
             }
         } catch {
@@ -1820,7 +1867,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 return appendRuntimeTab(
                     title: resolvedURL.deletingPathExtension().lastPathComponent,
                     sourceURL: resolvedURL,
-                    htmlContent: errorHTML
+                    htmlContent: errorHTML,
+                    replacingTabId: replacingTabId
                 )
             }
             logger.error(" .actr Loading failed:\(error.localizedDescription)")
@@ -1833,7 +1881,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             return appendRuntimeTab(
                 title: resolvedURL.deletingPathExtension().lastPathComponent,
                 sourceURL: resolvedURL,
-                htmlContent: fallbackHTML
+                htmlContent: fallbackHTML,
+                replacingTabId: replacingTabId
             )
         }
     }
@@ -2218,10 +2267,48 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         leftPanelDefaultVisible: Bool = true,
         rightPanelDefaultVisible: Bool = false,
         themeColor: String? = nil,
-        recordHistoryVisit: Bool = true
+        recordHistoryVisit: Bool = true,
+        replacingTabId: UUID? = nil
     ) -> Tab {
         // Use actro:// URL for History and address bar
         let appURL = ActriumAppURLScheme.appURL(filePath: sourceURL.path) ?? sourceURL
+
+        // Same-tab replace (actr:// discovery funnel, 15-B B6): update the
+        // originating tab in place so the address bar replaces instead of a
+        // second tab appearing. Falls through to append when the tab is gone.
+        if let replacingTabId,
+           let index = tabs.firstIndex(where: { $0.id == replacingTabId }) {
+            tabs[index].title = title
+            tabs[index].url = appURL
+            tabs[index].appId = appId
+            tabs[index].htmlContent = htmlContent
+            tabs[index].systemTabType = nil
+            tabs[index].guestScript = guestScript
+            tabs[index].leftPanelScript = leftPanelScript
+            tabs[index].rightPanelScript = rightPanelScript
+            tabs[index].unifiedScript = unifiedScript
+            tabs[index].guestExtractedPath = guestExtractedPath
+            tabs[index].guestEntry = guestEntry
+            tabs[index].contractName = contractName
+            tabs[index].contractVersion = contractVersion
+            tabs[index].permissions = permissions
+            tabs[index].leftPanelDefaultVisible = leftPanelDefaultVisible
+            tabs[index].rightPanelDefaultVisible = rightPanelDefaultVisible
+            if let themeColor { tabs[index].backgroundColor = themeColor }
+            leftPanelVisibility[tabs[index].id] = leftPanelDefaultVisible
+            // Force the renderer to pick up the replaced content.
+            tabs[index].reloadNonce &+= 1
+            currentTabId = tabs[index].id
+
+            logger.notice(" Loaded .actr (replaced tab): \(title)")
+            if recordHistoryVisit {
+                historyVM?.recordVisit(tab: tabs[index])
+            }
+            objectWillChange.send()
+            persistBrowserPageSession()
+            return tabs[index]
+        }
+
         let newTab = Tab(
             title: title,
             url: appURL,
@@ -2291,8 +2378,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
     /// Validates a staging extraction before it enters the digest cache
     /// (05 §15): manifest signature (actr-package/2) plus per-file SHA-256
     /// integrity. Throws on failure so the cache never keeps unverified bytes.
-    private func validateExtractedPackage(at root: URL) throws {
-        _ = try readPackageManifest(fromRoot: root, requireSignature: true)
+    private func validateExtractedPackage(at root: URL, requireSignature: Bool = true) throws {
+        _ = try readPackageManifest(fromRoot: root, requireSignature: requireSignature)
     }
 
     /// Universal script reading method
