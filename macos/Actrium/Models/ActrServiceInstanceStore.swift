@@ -1,12 +1,13 @@
 import Foundation
-import Actr
 
-/// Link-time proof that the ActrBindings runtime chain (actr-ffi → ActrBindings)
-/// is wired into the macOS app target alongside ActriumCore (15-B B5, two FFI chains).
-@MainActor
-enum ActrBindingsAvailability {
-    static var actrNodeType: ActrNode.Type { ActrNode.self }
-}
+// NOTE (15-B B5, link-time proof parked): the previous `ActrBindingsAvailability`
+// enum referenced `ActrNode.self` to prove at link time that the ActrBindings
+// runtime chain is wired into the app alongside ActriumCore. Since main's
+// PR 417/418 refactor, linking BOTH Rust static libraries (libactr.a from
+// dist/ActrFFI.xcframework and libactrium_core.a) into one binary trips 544
+// duplicate Rust std/core symbols — two rustc-built staticlibs cannot coexist
+// in one Mach-O until the FFI chains are merged or one becomes dynamic
+// (IF-1 decision, 15 号计划 §FFI 链路红线). Restore the proof once that lands.
 
 // MARK: - Installation identity (local realm address prefix, 04 §2)
 
