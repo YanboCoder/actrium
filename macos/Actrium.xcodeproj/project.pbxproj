@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1A2B3C4D5E6F7890ABCD0001 /* ActriumIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 1A2B3C4D5E6F7890ABCD0002 /* ActriumIPC */; };
 		1A2B3C4D5E6F7890ABCD0003 /* ActriumIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 1A2B3C4D5E6F7890ABCD0002 /* ActriumIPC */; };
+		5C0B1A2D3E4F506172830001 /* Actr in Frameworks */ = {isa = PBXBuildFile; productRef = 5C0B1A2D3E4F506172830002 /* Actr */; };
 		36ED6B68B2DE67F2DB1523A7 /* libPods-ActriumRenderer.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1394BEA9FE9BE0BE89646222 /* libPods-ActriumRenderer.a */; };
 		457EEA1F5D65241F37B32E2D /* libPods-Actrium.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 68501CEF0142AD9A599B85C8 /* libPods-Actrium.a */; };
 		A90D97D7984E951158B896D0 /* libPods-ActriumTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DACA28DED8E4818311DAAB4D /* libPods-ActriumTests.a */; };
@@ -146,6 +147,7 @@
 				AB00110022003300AA00BB02 /* ActriumCore in Frameworks */,
 				AA00110022003300AA00BB02 /* ActriumVault in Frameworks */,
 				1A2B3C4D5E6F7890ABCD0001 /* ActriumIPC in Frameworks */,
+				5C0B1A2D3E4F506172830001 /* Actr in Frameworks */,
 				B3E78A292F02AFD7001F9589 /* Highlightr in Frameworks */,
 				457EEA1F5D65241F37B32E2D /* libPods-Actrium.a in Frameworks */,
 			);
@@ -1083,6 +1085,10 @@
 		1A2B3C4D5E6F7890ABCD0002 /* ActriumIPC */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ActriumIPC;
+		};
+		5C0B1A2D3E4F506172830002 /* Actr */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Actr;
 		};
 		AA00110022003300AA00BB03 /* ActriumVault */ = {
 			isa = XCSwiftPackageProductDependency;
