@@ -943,7 +943,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         if info.isLocal {
             logger.notice("ℹ️ [navigateCurrentTab] Opening a local Realm instance is not wired yet.")
         } else if let discoveryURL = info.discoveryUrl, let url = URL(string: discoveryURL) {
-            discoverAuthority(url: url, domain: info.domain)
+            discoverAuthority(url: url, domain: info.domain, realmId: realmId)
         }
 
         tabs[tabIndex].title = realmDisplay
@@ -960,11 +960,12 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         persistBrowserPageSession()
     }
 
-    /// Realm discovery (verification-funnel layer 1): fetch the authority
-    /// descriptor over HTTPS and hand it to the core parser for validation.
-    /// The trusted signing keys and realms href it produces feed Realm
-    /// Profile discovery; profile downloads are not wired in this milestone.
-    private func discoverAuthority(url: URL, domain: String) {
+    /// Realm discovery (verification-funnel layer 1) followed by Realm
+    /// Profile discovery (layer 2): fetch the authority descriptor, validate
+    /// it, then fetch and verify the Realm Profile it points to. The package
+    /// target that comes out feeds package acquisition; downloads are not
+    /// wired in this milestone.
+    private func discoverAuthority(url: URL, domain: String, realmId: String) {
         Task { @MainActor in
             do {
                 let (data, response) = try await URLSession.shared.data(from: url)
@@ -1003,9 +1004,58 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 )
                 let activeKeys = descriptor.signingKeys.filter { $0.status == "active" }
                 logger.notice("🌐 [navigateCurrentTab] Authority accepted for \(domain): realms=\(descriptor.realmsHref), keys sequence=\(descriptor.keysSequence), active keys=\(activeKeys.count)")
-                logger.notice("ℹ️ [navigateCurrentTab] Realm Profile discovery is not wired yet; next step would fetch \(descriptor.realmsHref)/<realm_id>")
+
+                // Realm Profile discovery: GET <realms_href>/<realm_id>.
+                var profilePath = descriptor.realmsHref
+                if profilePath.hasSuffix("/") { profilePath.removeLast() }
+                profilePath += "/\(realmId)"
+                guard let profileURL = URL(string: profilePath) else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 4,
+                        userInfo: [NSLocalizedDescriptionKey: String(
+                            format: NSLocalizedString(
+                                "The Realm Profile location '%@' is invalid.",
+                                comment: "Actr realm profile URL error"),
+                            profilePath)])
+                }
+                let (profileData, profileResponse) =
+                    try await URLSession.shared.data(from: profileURL)
+                guard let profileHTTP = profileResponse as? HTTPURLResponse,
+                      (200 ..< 300).contains(profileHTTP.statusCode) else {
+                    let status = (profileResponse as? HTTPURLResponse)?.statusCode ?? -1
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 5,
+                        userInfo: [NSLocalizedDescriptionKey: String(
+                            format: NSLocalizedString(
+                                "The Realm Profile for this instance is unavailable (HTTP %ld).",
+                                comment: "Actr realm profile fetch failure"),
+                            status)])
+                }
+                guard let profileFinal = profileResponse.url,
+                      profileFinal.scheme?.lowercased() == "https" else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 6,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The Realm Profile was served over an insecure connection.",
+                            comment: "Actr realm profile insecure transport error")])
+                }
+                guard let profileBody = String(data: profileData, encoding: .utf8) else {
+                    throw NSError(
+                        domain: "ActrDiscovery", code: 7,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                            "The Realm Profile is not valid text.",
+                            comment: "Actr realm profile encoding error")])
+                }
+
+                let profile = try ActriumCore.acceptRealmProfile(
+                    body: profileBody,
+                    realmName: "\(realmId)@\(domain)",
+                    signingKeysJson: descriptor.signingKeysJson
+                )
+                logger.notice("📄 [navigateCurrentTab] Realm Profile accepted: \(profile.displayName) (\(profile.realmName)), sequence=\(profile.sequence), package=\(profile.packageHref)")
+                logger.notice("ℹ️ [navigateCurrentTab] Package download is not wired yet; next step would fetch \(profile.packageHref) and verify sha256=\(profile.packageSha256.prefix(12))…")
             } catch {
-                logger.warning("⚠️ [navigateCurrentTab] Authority discovery failed: \(error)")
+                logger.warning("⚠️ [navigateCurrentTab] Realm discovery failed: \(error)")
                 presentRealmLinkError(error)
             }
         }
@@ -1019,6 +1069,14 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             message = NSLocalizedString(
                 "The authority information for this domain is invalid.",
                 comment: "Actr authority descriptor error")
+        case CoreError.RealmProfileInvalid:
+            message = NSLocalizedString(
+                "The Realm Profile for this instance is invalid.",
+                comment: "Actr realm profile error")
+        case CoreError.RealmRetired:
+            message = NSLocalizedString(
+                "This Realm instance has been retired.",
+                comment: "Actr realm retired error")
         case CoreError.UriSchemeInvalid:
             message = NSLocalizedString(
                 "Only actr:// links are supported here.",

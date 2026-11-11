@@ -2173,6 +2173,10 @@ public struct AuthorityDiscoveryInfo {
      */
     public var keysSequence: UInt64
     public var signingKeys: [RealmSigningKeyInfo]
+    /**
+     * The accepted member serialized; pass back to `accept_realm_profile`.
+     */
+    public var signingKeysJson: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2182,10 +2186,14 @@ public struct AuthorityDiscoveryInfo {
          */realmsHref: String,
         /**
          * Sequence of the accepted `realm_signing_keys` member.
-         */keysSequence: UInt64, signingKeys: [RealmSigningKeyInfo]) {
+         */keysSequence: UInt64, signingKeys: [RealmSigningKeyInfo],
+        /**
+         * The accepted member serialized; pass back to `accept_realm_profile`.
+         */signingKeysJson: String) {
         self.realmsHref = realmsHref
         self.keysSequence = keysSequence
         self.signingKeys = signingKeys
+        self.signingKeysJson = signingKeysJson
     }
 }
 
@@ -2205,6 +2213,9 @@ extension AuthorityDiscoveryInfo: Equatable, Hashable {
         if lhs.signingKeys != rhs.signingKeys {
             return false
         }
+        if lhs.signingKeysJson != rhs.signingKeysJson {
+            return false
+        }
         return true
     }
 
@@ -2212,6 +2223,7 @@ extension AuthorityDiscoveryInfo: Equatable, Hashable {
         hasher.combine(realmsHref)
         hasher.combine(keysSequence)
         hasher.combine(signingKeys)
+        hasher.combine(signingKeysJson)
     }
 }
 
@@ -2226,7 +2238,8 @@ public struct FfiConverterTypeAuthorityDiscoveryInfo: FfiConverterRustBuffer {
             try AuthorityDiscoveryInfo(
                 realmsHref: FfiConverterString.read(from: &buf),
                 keysSequence: FfiConverterUInt64.read(from: &buf),
-                signingKeys: FfiConverterSequenceTypeRealmSigningKeyInfo.read(from: &buf)
+                signingKeys: FfiConverterSequenceTypeRealmSigningKeyInfo.read(from: &buf),
+                signingKeysJson: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -2234,6 +2247,7 @@ public struct FfiConverterTypeAuthorityDiscoveryInfo: FfiConverterRustBuffer {
         FfiConverterString.write(value.realmsHref, into: &buf)
         FfiConverterUInt64.write(value.keysSequence, into: &buf)
         FfiConverterSequenceTypeRealmSigningKeyInfo.write(value.signingKeys, into: &buf)
+        FfiConverterString.write(value.signingKeysJson, into: &buf)
     }
 }
 
@@ -4872,6 +4886,164 @@ public func FfiConverterTypePackageIntegrityPlanInfo_lower(_ value: PackageInteg
 
 
 /**
+ * A verified Realm Profile: the package target and endpoints that feed
+ * package acquisition.
+ */
+public struct RealmProfileInfo {
+    /**
+     * Canonical Realm name `<realm_id>@<domain>`.
+     */
+    public var realmName: String
+    public var displayName: String
+    /**
+     * Always `active`; retired Realms are rejected.
+     */
+    public var status: String
+    public var sequence: UInt64
+    /**
+     * HTTPS download URL of the signed `.actr` package.
+     */
+    public var packageHref: String
+    /**
+     * Lowercase hex SHA-256 the package must match.
+     */
+    public var packageSha256: String
+    /**
+     * Actor type `publisher/program@version`.
+     */
+    public var packageType: String
+    /**
+     * Issuer endpoint that serves Actor credentials.
+     */
+    public var issuerUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Canonical Realm name `<realm_id>@<domain>`.
+         */realmName: String, displayName: String,
+        /**
+         * Always `active`; retired Realms are rejected.
+         */status: String, sequence: UInt64,
+        /**
+         * HTTPS download URL of the signed `.actr` package.
+         */packageHref: String,
+        /**
+         * Lowercase hex SHA-256 the package must match.
+         */packageSha256: String,
+        /**
+         * Actor type `publisher/program@version`.
+         */packageType: String,
+        /**
+         * Issuer endpoint that serves Actor credentials.
+         */issuerUrl: String) {
+        self.realmName = realmName
+        self.displayName = displayName
+        self.status = status
+        self.sequence = sequence
+        self.packageHref = packageHref
+        self.packageSha256 = packageSha256
+        self.packageType = packageType
+        self.issuerUrl = issuerUrl
+    }
+}
+
+#if compiler(>=6)
+extension RealmProfileInfo: Sendable {}
+#endif
+
+
+extension RealmProfileInfo: Equatable, Hashable {
+    public static func ==(lhs: RealmProfileInfo, rhs: RealmProfileInfo) -> Bool {
+        if lhs.realmName != rhs.realmName {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        if lhs.sequence != rhs.sequence {
+            return false
+        }
+        if lhs.packageHref != rhs.packageHref {
+            return false
+        }
+        if lhs.packageSha256 != rhs.packageSha256 {
+            return false
+        }
+        if lhs.packageType != rhs.packageType {
+            return false
+        }
+        if lhs.issuerUrl != rhs.issuerUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(realmName)
+        hasher.combine(displayName)
+        hasher.combine(status)
+        hasher.combine(sequence)
+        hasher.combine(packageHref)
+        hasher.combine(packageSha256)
+        hasher.combine(packageType)
+        hasher.combine(issuerUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRealmProfileInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RealmProfileInfo {
+        return
+            try RealmProfileInfo(
+                realmName: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                status: FfiConverterString.read(from: &buf),
+                sequence: FfiConverterUInt64.read(from: &buf),
+                packageHref: FfiConverterString.read(from: &buf),
+                packageSha256: FfiConverterString.read(from: &buf),
+                packageType: FfiConverterString.read(from: &buf),
+                issuerUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RealmProfileInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.realmName, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterUInt64.write(value.sequence, into: &buf)
+        FfiConverterString.write(value.packageHref, into: &buf)
+        FfiConverterString.write(value.packageSha256, into: &buf)
+        FfiConverterString.write(value.packageType, into: &buf)
+        FfiConverterString.write(value.issuerUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRealmProfileInfo_lift(_ buf: RustBuffer) throws -> RealmProfileInfo {
+    return try FfiConverterTypeRealmProfileInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRealmProfileInfo_lower(_ value: RealmProfileInfo) -> RustBuffer {
+    return FfiConverterTypeRealmProfileInfo.lower(value)
+}
+
+
+/**
  * A trusted realm signing key from an accepted authority descriptor.
  */
 public struct RealmSigningKeyInfo {
@@ -6357,6 +6529,10 @@ public enum CoreError: Swift.Error {
 
     case AuthorityDescriptorInvalid(message: String)
 
+    case RealmProfileInvalid(message: String)
+
+    case RealmRetired(message: String)
+
 }
 
 
@@ -6429,6 +6605,14 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
 
+        case 15: return .RealmProfileInvalid(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 16: return .RealmRetired(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -6468,6 +6652,10 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(13))
         case .AuthorityDescriptorInvalid(_ /* message is ignored*/):
             writeInt(&buf, Int32(14))
+        case .RealmProfileInvalid(_ /* message is ignored*/):
+            writeInt(&buf, Int32(15))
+        case .RealmRetired(_ /* message is ignored*/):
+            writeInt(&buf, Int32(16))
 
 
         }
@@ -7005,6 +7193,23 @@ public func acceptAuthorityDescriptor(body: String, domain: String)throws  -> Au
     uniffi_actrium_core_fn_func_accept_authority_descriptor(
         FfiConverterString.lower(body),
         FfiConverterString.lower(domain),$0
+    )
+})
+}
+/**
+ * Validate a Realm Profile response for `realm_name` and extract the
+ * package target.
+ *
+ * `body` is the raw JSON text as received; `signing_keys_json` is the
+ * `signingKeysJson` output of `accept_authority_descriptor`. Retired
+ * Realms are rejected.
+ */
+public func acceptRealmProfile(body: String, realmName: String, signingKeysJson: String)throws  -> RealmProfileInfo  {
+    return try  FfiConverterTypeRealmProfileInfo_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_actrium_core_fn_func_accept_realm_profile(
+        FfiConverterString.lower(body),
+        FfiConverterString.lower(realmName),
+        FfiConverterString.lower(signingKeysJson),$0
     )
 })
 }
@@ -9483,6 +9688,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if (uniffi_actrium_core_checksum_func_accept_authority_descriptor() != 22442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_actrium_core_checksum_func_accept_realm_profile() != 6481) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_actrium_core_checksum_func_active_tab_from_row() != 51323) {

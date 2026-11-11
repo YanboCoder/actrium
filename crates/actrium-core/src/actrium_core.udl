@@ -32,6 +32,15 @@ namespace actrium_core {
     [Throws=CoreError]
     AuthorityDiscoveryInfo accept_authority_descriptor(string body, string domain);
 
+    /// Validate a Realm Profile response for `realm_name` and extract the
+    /// package target.
+    ///
+    /// `body` is the raw JSON text as received; `signing_keys_json` is the
+    /// `signingKeysJson` output of `accept_authority_descriptor`. Retired
+    /// Realms are rejected.
+    [Throws=CoreError]
+    RealmProfileInfo accept_realm_profile(string body, string realm_name, string signing_keys_json);
+
     /// Evaluate a contract tuple using the current Actrium host compatibility rules.
     ContractGateInfo evaluate_contract(string? name, u32 version);
 
@@ -1017,6 +1026,27 @@ dictionary AuthorityDiscoveryInfo {
     /// Sequence of the accepted `realm_signing_keys` member.
     u64 keys_sequence;
     sequence<RealmSigningKeyInfo> signing_keys;
+    /// The accepted member serialized; pass back to `accept_realm_profile`.
+    string signing_keys_json;
+};
+
+/// A verified Realm Profile: the package target and endpoints that feed
+/// package acquisition.
+dictionary RealmProfileInfo {
+    /// Canonical Realm name `<realm_id>@<domain>`.
+    string realm_name;
+    string display_name;
+    /// Always `active`; retired Realms are rejected.
+    string status;
+    u64 sequence;
+    /// HTTPS download URL of the signed `.actr` package.
+    string package_href;
+    /// Lowercase hex SHA-256 the package must match.
+    string package_sha256;
+    /// Actor type `publisher/program@version`.
+    string package_type;
+    /// Issuer endpoint that serves Actor credentials.
+    string issuer_url;
 };
 
 enum ContractGateStatus {
@@ -1528,4 +1558,6 @@ enum CoreError {
     "UriLocalRealmForeign",
     "InvalidInstallationId",
     "AuthorityDescriptorInvalid",
+    "RealmProfileInvalid",
+    "RealmRetired",
 };
