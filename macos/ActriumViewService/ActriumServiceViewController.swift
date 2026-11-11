@@ -1415,7 +1415,7 @@ final class ServiceReactNativeHost {
         }
 
         // Scripts
-        if let s = config["unifiedScript"] as? String { tabDict["unifiedScript"] = s }
+        if let s = resolvedGuestScript(fromConfig: config) { tabDict["unifiedScript"] = s }
         if let s = config["leftPanelScript"] as? String { tabDict["leftPanelScript"] = s }
         if let s = config["rightPanelScript"] as? String { tabDict["rightPanelScript"] = s }
         if let s = config["guestScript"] as? String { tabDict["guestScript"] = s }
@@ -1839,6 +1839,37 @@ private func setupReactNativeContent(for entry: TabViewControllerEntry) {
 }
 
 /// Create root view with the received config (called when tab config arrives)
+/// 15-B B4 (05 §8.2): prefer reading the verified guest bytes from the
+/// digest-addressed extraction directory delivered with the config; fall
+/// back to the inline unifiedScript text when the cache read fails.
+private func resolvedGuestScript(fromConfig config: [String: Any]) -> String? {
+    guard let extractedPath = config["guestExtractedPath"] as? String else {
+        return config["unifiedScript"] as? String
+    }
+    let fm = FileManager.default
+    let rootPath = URL(fileURLWithPath: extractedPath).standardizedFileURL.path
+    // The manifest entry is relative data: never let it escape the verified
+    // extraction root via `..` (05 §8.2 controlled byte source).
+    func isInsideRoot(_ candidate: String) -> Bool {
+        // Resolve symlinks as well as `..` so an entry cannot point outside the
+        // extraction root through a link.
+        let path = URL(fileURLWithPath: candidate).resolvingSymlinksInPath().standardizedFileURL.path
+        let root = URL(fileURLWithPath: rootPath).resolvingSymlinksInPath().standardizedFileURL.path
+        return path == root || path.hasPrefix(root + "/")
+    }
+    var candidates: [String] = []
+    if let entryName = config["guestEntry"] as? String, !entryName.isEmpty {
+        candidates.append((extractedPath as NSString).appendingPathComponent(entryName))
+    }
+    candidates.append((extractedPath as NSString).appendingPathComponent("unified-app.js"))
+    for candidate in candidates where isInsideRoot(candidate) && fm.fileExists(atPath: candidate) {
+        if let text = try? String(contentsOfFile: candidate, encoding: .utf8), !text.isEmpty {
+            return text
+        }
+    }
+    return config["unifiedScript"] as? String
+}
+
 private func createRootViewWithConfig(for entry: TabViewControllerEntry, config: [String: Any]) {
     let logTabId = config["tabId"] as? String ?? entry.internalId
     let logSystemAppType = config["systemAppType"] as? String ?? "nil"
@@ -1886,7 +1917,7 @@ private func createRootViewWithConfig(for entry: TabViewControllerEntry, config:
     if let systemAppType = systemAppType {
         tabDict["systemAppType"] = systemAppType
     }
-    if let unifiedScript = config["unifiedScript"] as? String {
+    if let unifiedScript = resolvedGuestScript(fromConfig: config) {
         tabDict["unifiedScript"] = unifiedScript
     }
     if let permissions = config["permissions"] as? [String] {

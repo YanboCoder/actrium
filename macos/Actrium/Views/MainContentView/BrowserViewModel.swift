@@ -1,7 +1,7 @@
 import Foundation
 import AppKit // Import AppKit for NSImage
 import Combine
-import ActriumCore
+import ActriumCore  // AppleActrPackageSignatureError (15-B B8 error pages)
 
 private let logger = AppLogger.viewModel
 
@@ -52,6 +52,32 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
 
     /// Current tab loading progress (0.0 to 1.0)
     @Published var loadingProgress: Double = 0
+
+    // MARK: - Package Direct-Link Download (15-B B1)
+    // Confirm-before-connect flow: confirm → download (size cap) → SHA-256 → import.
+
+    /// Package link awaiting user confirmation (confirm sheet is presented).
+    @Published var pendingPackageDownload: PendingPackageDownload?
+
+    /// In-flight or failed package download (progress sheet is presented).
+    @Published var activePackageDownload: ActivePackageDownload?
+
+    /// Notice for formal actr:// addresses (realm resolution pending in prototype).
+    @Published var actrUriNotice: ActrUriNotice?
+
+    /// Current download task handle, kept for cancellation.
+    private var packageDownloadTask: Task<Void, Never>?
+
+    // MARK: - Instance Creation (15-B B6)
+    // Confirm → serviceCreate → URI replace (非 push; history keeps only the
+    // final instance address; on failure the package URL stays unchanged).
+
+    /// Package import awaiting instance-creation confirmation (confirm sheet).
+    @Published var pendingInstanceCreation: PendingInstanceCreation?
+
+    /// Prototype instance store (15 号 §5:模拟 ActorId 骨架,接口与真 ID 一致;
+    /// A 的 actr-ffi 骨架交付后切换真实后端,壳层调用点不变)。
+    private let serviceInstanceStore: ActrServiceInstanceProviding = MockActrServiceInstanceStore()
 
     // MARK: - Grid Slot Position Management
 
@@ -434,32 +460,26 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         FileManager.default.fileExists(atPath: resolvedURL.path, isDirectory: &isDirectory)
 
         let rootDir: URL
-        var tempDir: URL? = nil
 
         if isDirectory.boolValue {
             // Directory mode - use directly
             rootDir = resolvedURL
-            tempDir = nil
         } else {
-            // Package archive mode - extract to temp
-            let temp = FileManager.default.temporaryDirectory
-                .appendingPathComponent("actr-\(UUID().uuidString)", isDirectory: true)
+            // Package archive mode — digest-addressed cache (15-B B2, 05 §15).
             do {
-                try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
-                try unzipActrPackage(archive: resolvedURL, to: temp)
+                let digest = try ActrPackageDownloadService.sha256FileSync(at: resolvedURL)
+                let archiveURL = try ActrPackageCache.installArchive(at: resolvedURL, digest: digest)
+                rootDir = try ActrPackageCache.extractArchiveIfNeeded(archiveURL, digest: digest) {
+                    try self.validateExtractedPackage(at: $0)
+                }
             } catch {
                 logger.error(" [restoreGroup] .actr Loading failed:\(error.localizedDescription)")
                 return
             }
-            rootDir = temp
-            tempDir = temp
         }
 
-        // Mark as read to silence "written to, but never read" warnings.
-        if tempDir != nil { }
-
         do {
-            let manifestInfo = try readPackageManifest(fromRoot: rootDir)
+            let manifestInfo = try readPackageManifest(fromRoot: rootDir, requireSignature: !isDirectory.boolValue)
             let tabTitle = manifestInfo.name ?? resolvedURL.deletingPathExtension().lastPathComponent
 
             let guestScript = readGuestScript(fromRoot: rootDir)
@@ -773,6 +793,24 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 return
             }
 
+            // 3. Package direct link (https URL pointing at an .actr archive):
+            // enter the confirm-before-connect download flow instead of loading
+            // it as a web page (15-B B1).
+            if ActrPackageLinkPolicy.isPackageDownloadURL(url) {
+                logger.notice("📦 [navigateCurrentTab] Package direct link: \(url.absoluteString)")
+                // Cache hit for a previously downloaded link (15-B B2): the same
+                // package reopens without downloading or re-extracting.
+                if let digest = ActrPackageCache.cachedDigest(forDownloadURL: url) {
+                    logger.notice("📦 [navigateCurrentTab] Cache hit, sha256=\(digest)")
+                    importACTRPackage(
+                        from: ActrPackageCache.archiveURL(forDigest: digest),
+                        knownDigest: digest)
+                } else {
+                    pendingPackageDownload = PendingPackageDownload(url: url)
+                }
+                return
+            }
+
             logger.notice("🌐 [navigateCurrentTab] Navigator to URL: \(url.absoluteString)")
             // Update Tab Yes Web Contents
             tabs[index].url = url
@@ -799,6 +837,144 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         }
     }
 
+    // MARK: - Package Direct-Link Download (15-B B1)
+    // confirm → download (size cap) → SHA-256 digest → hand over to the import pipeline.
+
+    func confirmPendingPackageDownload() {
+        guard let pending = pendingPackageDownload else { return }
+        pendingPackageDownload = nil
+        beginPackageDownload(pending)
+    }
+
+    func cancelPendingPackageDownload() {
+        pendingPackageDownload = nil
+    }
+
+    func cancelActivePackageDownload() {
+        packageDownloadTask?.cancel()
+        packageDownloadTask = nil
+        activePackageDownload = nil
+    }
+
+    func retryActivePackageDownload() {
+        guard let active = activePackageDownload else { return }
+        let pending = active.pending
+        activePackageDownload = nil
+        beginPackageDownload(pending)
+    }
+
+    private func beginPackageDownload(_ pending: PendingPackageDownload) {
+        let active = ActivePackageDownload(pending: pending)
+        activePackageDownload = active
+        packageDownloadTask = Task { [weak self] in
+            await self?.performPackageDownload(active)
+        }
+    }
+
+    // MARK: - Instance Creation (15-B B6)
+
+    private func offerInstanceCreation(
+        for tab: Tab,
+        packageTitle: String,
+        packagePath: String,
+        packageDigest: String,
+        displayName: String?,
+        permissions: [String]
+    ) {
+        guard pendingInstanceCreation == nil else { return }
+        pendingInstanceCreation = PendingInstanceCreation(
+            tabId: tab.id,
+            packageTitle: packageTitle,
+            packagePath: packagePath,
+            packageDigest: packageDigest,
+            displayName: displayName,
+            permissions: permissions
+        )
+    }
+
+    func cancelInstanceCreation() {
+        pendingInstanceCreation = nil
+    }
+
+    func confirmInstanceCreation() {
+        guard let pending = pendingInstanceCreation else { return }
+        pendingInstanceCreation = nil
+        // The idempotency key covers retries within this single create; pressing
+        // 「创建」 again later means a new instance = a new key (15 号计划 §5).
+        let idempotencyKey = UUID().uuidString
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let handle = try await self.serviceInstanceStore.serviceCreate(
+                    packagePath: pending.packagePath,
+                    packageDigest: pending.packageDigest,
+                    displayName: pending.displayName,
+                    idempotencyKey: idempotencyKey
+                )
+                self.applyInstanceAddress(pending: pending, handle: handle)
+            } catch {
+                // Red line (15-B): on failure the URI stays the package address —
+                // no silent degradation, the tab keeps rendering the package.
+                logger.error("❌ [InstanceCreation] failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// URI replace (非 push,04 §4): the address bar swaps to the instance
+    /// address; back does not return to the confirm page (the shell address is
+    /// state, not a navigation stack); history records only the final address.
+    private func applyInstanceAddress(pending: PendingInstanceCreation, handle: ActrServiceHandle) {
+        guard let index = tabs.firstIndex(where: { $0.id == pending.tabId }),
+              let instanceURL = ActrInstanceAddress.instanceURL(actorId: handle.actorId)
+        else { return }
+        let oldURL = tabs[index].url?.absoluteString ?? "nil"
+        tabs[index].url = instanceURL
+        if let displayName = pending.displayName, !displayName.isEmpty {
+            tabs[index].title = displayName
+        }
+        logger.notice(
+            "🔁 [InstanceCreation] URI replace: \(oldURL) → \(instanceURL.absoluteString), actorId=\(handle.actorId)"
+        )
+        historyVM?.recordVisit(tab: tabs[index])
+        objectWillChange.send()
+        persistBrowserPageSession()
+    }
+
+    private func performPackageDownload(_ active: ActivePackageDownload) async {
+        do {
+            let localURL = try await ActrPackageDownloadService.download(from: active.pending.url)
+            if activePackageDownload?.id == active.id {
+                activePackageDownload?.phase = .verifying
+            }
+            let digest = try await ActrPackageDownloadService.sha256Digest(of: localURL)
+            // User cancelled while verifying — keep the cancelled state.
+            guard activePackageDownload?.id == active.id else { return }
+            logger.notice("✅ [PackageDownload] \(active.pending.filename) downloaded, sha256=\(digest)")
+
+            // Keep the archive in the digest-addressed cache (15-B B2, 05 §15) and
+            // remember the link → digest mapping so re-opening the same link skips
+            // the download; the import pipeline reuses the cached extraction.
+            let cachedArchiveURL = try ActrPackageCache.installArchive(at: localURL, digest: digest)
+            // installArchive copies into the cache; the download scratch file
+            // is no longer needed.
+            try? FileManager.default.removeItem(at: localURL)
+            ActrPackageCache.rememberDownloadURL(active.pending.url, digest: digest)
+
+            // Hand over to the existing import pipeline (manifest → runtime tab).
+            // ed25519 verification (15-B B3) hooks into this chain next.
+            activePackageDownload = nil
+            importACTRPackage(from: cachedArchiveURL, knownDigest: digest)
+        } catch {
+            // Download already cancelled/replaced by the user — keep the new state.
+            guard activePackageDownload?.id == active.id else { return }
+            let message = (error as? ActrPackageDownloadError)?.errorDescription
+                ?? error.localizedDescription
+            logger.error("❌ [PackageDownload] failed: \(message)")
+            activePackageDownload?.phase = .failed
+            activePackageDownload?.errorMessage = message
+        }
+    }
+
     /// Load ACTR app into the current tab (in-place update, not creating new tab)
     /// Used by actro:// URL navigation to update current tab content
     private func loadActrPackageIntoCurrentTab(from fileURL: URL, tabIndex: Int) {
@@ -814,21 +990,21 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         if isDirectory.boolValue {
             rootDir = resolvedURL
         } else {
-            // Package archive mode - extract to temp
-            let tempDir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("actr-\(UUID().uuidString)", isDirectory: true)
+            // Package archive mode — digest-addressed cache (15-B B2, 05 §15).
             do {
-                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-                try unzipActrPackage(archive: resolvedURL, to: tempDir)
+                let digest = try ActrPackageDownloadService.sha256FileSync(at: resolvedURL)
+                let archiveURL = try ActrPackageCache.installArchive(at: resolvedURL, digest: digest)
+                rootDir = try ActrPackageCache.extractArchiveIfNeeded(archiveURL, digest: digest) {
+                    try self.validateExtractedPackage(at: $0)
+                }
             } catch {
                 logger.error("❌ [loadActrPackageIntoCurrentTab] Unpressure failed: \(error.localizedDescription)")
                 return
             }
-            rootDir = tempDir
         }
 
         do {
-            let manifestInfo = try readPackageManifest(fromRoot: rootDir)
+            let manifestInfo = try readPackageManifest(fromRoot: rootDir, requireSignature: !isDirectory.boolValue)
             let tabTitle = manifestInfo.name ?? resolvedURL.deletingPathExtension().lastPathComponent
 
             // Register app if appId is provided.
@@ -940,9 +1116,29 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             realmDisplay = "\(realmId)@\(info.domain)"
         }
         logger.notice("🔗 [navigateCurrentTab] Resolved actr:// link: \(realmDisplay), local=\(info.isLocal)")
+
+        // 04 §3: a local instance address opens the same instance — focus it
+        // when already open, otherwise recover it through the instance store.
         if info.isLocal {
-            logger.notice("ℹ️ [navigateCurrentTab] Opening a local Realm instance is not wired yet.")
-        } else if let discoveryURL = info.discoveryUrl {
+            if let existing = tabs.first(where: { $0.url?.absoluteString == input }) {
+                switchToTab(id: existing.id)
+                return
+            }
+            guard let address = URL(string: input) else { return }
+            if serviceInstanceStore.resolveActorId(byAddressLabel: realmId) != nil {
+                restoreInstanceTab(address: address, title: realmDisplay, isActiveTab: true)
+            } else {
+                logger.error("❌ [navigateCurrentTab] local instance not found: \(input)")
+                actrUriNotice = ActrUriNotice(
+                    uri: input,
+                    domain: info.domain,
+                    detail: "本机实例未找到或已被清除（SERVICE_NOT_FOUND），无法打开该地址。"
+                )
+            }
+            return
+        }
+
+        if let discoveryURL = info.discoveryUrl {
             logger.notice("ℹ️ [navigateCurrentTab] Realm discovery is not wired yet; next step would fetch \(discoveryURL)")
         }
 
@@ -1003,6 +1199,10 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         // actro://... may itself point at an .actr archive. It must be parsed as
         // an application URL instead of being treated as a literal filesystem path.
         if ActriumAppURLScheme.hasSupportedPrefix(input) {
+            return false
+        }
+        // Same for actr:// realm addresses — they are URIs, not filesystem paths.
+        if input.hasPrefix("actr://") {
             return false
         }
         // Here. / The first is the absolute path.
@@ -1119,21 +1319,21 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             // Directory mode - use directly
             rootDir = resolvedURL
         } else {
-            // Package archive mode - extract to temp
-            let tempDir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("actr-\(UUID().uuidString)", isDirectory: true)
+            // Package archive mode — digest-addressed cache (15-B B2, 05 §15).
             do {
-                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-                try unzipActrPackage(archive: resolvedURL, to: tempDir)
+                let digest = try ActrPackageDownloadService.sha256FileSync(at: resolvedURL)
+                let archiveURL = try ActrPackageCache.installArchive(at: resolvedURL, digest: digest)
+                rootDir = try ActrPackageCache.extractArchiveIfNeeded(archiveURL, digest: digest) {
+                    try self.validateExtractedPackage(at: $0)
+                }
             } catch {
                 logger.error(" [reloadCurrentTab] Depression failed:\(error.localizedDescription)")
                 return
             }
-            rootDir = tempDir
         }
 
         do {
-            let manifestInfo = try readPackageManifest(fromRoot: rootDir)
+            let manifestInfo = try readPackageManifest(fromRoot: rootDir, requireSignature: !isDirectory.boolValue)
 
             // Read scripts
             var unifiedScript: String? = nil
@@ -1218,12 +1418,21 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
 
     // MARK: - .actr Apply Load
 
-    /// From Local .actr Package to create a new tab and load basic information
-    func importACTRPackage(from fileURL: URL) {
+    /// From Local .actr Package to create a new tab and load basic information.
+    /// - Parameter presentInstanceCreation: archive imports present the instance
+    ///   creation confirm sheet after rendering (15-B B6); restart restore passes
+    ///   false — the instance already exists.
+    /// - Returns: the newly created runtime tab, or nil when the import failed.
+    @discardableResult
+    func importACTRPackage(
+        from fileURL: URL,
+        knownDigest: String? = nil,
+        presentInstanceCreation: Bool = true
+    ) -> Tab? {
         let resolvedURL = fileURL.standardizedFileURL
         guard FileManager.default.fileExists(atPath: resolvedURL.path) else {
             logger.error(" Not found .actr Documents:\(resolvedURL.path)")
-            return
+            return nil
         }
 
         // Check if it's a directory (dev mode) or archive
@@ -1231,26 +1440,32 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         FileManager.default.fileExists(atPath: resolvedURL.path, isDirectory: &isDirectory)
 
         let rootDir: URL
+        var packageDigest: String?
+        var cachedArchiveURL: URL?
 
         if isDirectory.boolValue {
             // Directory mode - use directly
             rootDir = resolvedURL
         } else {
-            // Package archive mode - extract to temp
-            let tempDir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("actr-\(UUID().uuidString)", isDirectory: true)
+            // Package archive mode — digest-addressed cache (15-B B2, 05 §15):
+            // archive kept at cache/packages/sha256/<digest>/package.actr,
+            // extraction at cache/extracted/sha256/<digest>/ (reused on reopen).
             do {
-                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-                try unzipActrPackage(archive: resolvedURL, to: tempDir)
+                let digest = try knownDigest ?? ActrPackageDownloadService.sha256FileSync(at: resolvedURL)
+                let archiveURL = try ActrPackageCache.installArchive(at: resolvedURL, digest: digest)
+                rootDir = try ActrPackageCache.extractArchiveIfNeeded(archiveURL, digest: digest) {
+                    try self.validateExtractedPackage(at: $0)
+                }
+                packageDigest = digest
+                cachedArchiveURL = archiveURL
             } catch {
                 logger.error(" .actr Loading failed:\(error.localizedDescription)")
-                return
+                return nil
             }
-            rootDir = tempDir
         }
 
         do {
-            let manifestInfo = try readPackageManifest(fromRoot: rootDir)
+            let manifestInfo = try readPackageManifest(fromRoot: rootDir, requireSignature: !isDirectory.boolValue)
             let tabTitle = manifestInfo.name ?? resolvedURL.deletingPathExtension().lastPathComponent
 
             // Register as downloaded app if appId is provided.
@@ -1293,23 +1508,45 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             // v2.0: Use Priority Single Engine Structure
             if let unified = unifiedScript {
                 logger.debug("🚀 [BrowserViewModel] Use Single Engine Structure (unified bundle)")
-                appendRuntimeTab(
+                let newTab = appendRuntimeTab(
                     title: tabTitle,
                     sourceURL: resolvedURL,
                     appId: manifestInfo.appId,
                     unifiedScript: unified,
+                    // 15-B B4: for package archives, hand the renderer the
+                    // digest-addressed extraction dir + entry so it can read the
+                    // verified bytes directly (inline text above stays as fallback).
+                    guestExtractedPath: isDirectory.boolValue ? nil : rootDir.path,
+                    guestEntry: manifestInfo.unifiedScript,
                     contractName: manifestInfo.contractName,
                     contractVersion: manifestInfo.contractVersion,
                     permissions: manifestInfo.permissions,
                     leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
                     rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
-                    themeColor: manifestInfo.themeColor
+                    themeColor: manifestInfo.themeColor,
+                    // Archive imports: history records only the final instance
+                    // address after creation (04 §4, 15-B B6).
+                    recordHistoryVisit: isDirectory.boolValue
                 )
+                // 15-B B6: after rendering a package archive, offer instance
+                // creation (confirm page → serviceCreate → URI replace).
+                if presentInstanceCreation, !isDirectory.boolValue,
+                   let packageDigest, let cachedArchiveURL {
+                    offerInstanceCreation(
+                        for: newTab,
+                        packageTitle: tabTitle,
+                        packagePath: cachedArchiveURL.path,
+                        packageDigest: packageDigest,
+                        displayName: manifestInfo.name,
+                        permissions: manifestInfo.permissions
+                    )
+                }
+                return newTab
             }
             // Legacy: Double Engine Structure
             else if leftPanelScript != nil || rightPanelScript != nil {
                 logger.debug("🔄 [BrowserViewModel] Use Legacy Double Engine Structure")
-                appendRuntimeTab(
+                return appendRuntimeTab(
                     title: tabTitle,
                     sourceURL: resolvedURL,
                     appId: manifestInfo.appId,
@@ -1325,7 +1562,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             } else if let script = guestScript {
                 // Old architecture: one compatible guest.js
                 logger.debug("🔄 [BrowserViewModel] Use compatible mode (guestScript)")
-                appendRuntimeTab(
+                return appendRuntimeTab(
                     title: tabTitle,
                     sourceURL: resolvedURL,
                     appId: manifestInfo.appId,
@@ -1343,7 +1580,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     description: manifestInfo.description ?? "No description provided.",
                     sourcePath: resolvedURL.path
                 )
-                appendRuntimeTab(
+                return appendRuntimeTab(
                     title: tabTitle,
                     sourceURL: resolvedURL,
                     appId: manifestInfo.appId,
@@ -1351,6 +1588,17 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 )
             }
         } catch {
+            // 15-B B8: signature failures get a dedicated, actionable error page
+            // (04 §7 PACKAGE_SIGNATURE_INVALID) — never a generic "cannot connect".
+            if let signatureError = error as? AppleActrPackageSignatureError {
+                logger.error("🔒 [importACTRPackage] \(signatureError.stableCode): \(signatureError.localizedDescription)")
+                let errorHTML = renderSignatureErrorHTML(signatureError, sourcePath: resolvedURL.path)
+                return appendRuntimeTab(
+                    title: resolvedURL.deletingPathExtension().lastPathComponent,
+                    sourceURL: resolvedURL,
+                    htmlContent: errorHTML
+                )
+            }
             logger.error(" .actr Loading failed:\(error.localizedDescription)")
             let fallbackHTML = renderACTRInfoHTML(
                 name: resolvedURL.deletingPathExtension().lastPathComponent,
@@ -1358,7 +1606,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 description: "Loading failed:\(error.localizedDescription)",
                 sourcePath: resolvedURL.path
             )
-            appendRuntimeTab(
+            return appendRuntimeTab(
                 title: resolvedURL.deletingPathExtension().lastPathComponent,
                 sourceURL: resolvedURL,
                 htmlContent: fallbackHTML
@@ -1366,127 +1614,202 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         }
     }
 
-    /// Async version of importACTRPackage - runs file I/O on background thread
-    /// Call this from background thread, it will dispatch UI updates to main thread
-    private func importACTRPackageAsync(from fileURL: URL) {
-        let resolvedURL = fileURL.standardizedFileURL
-        guard FileManager.default.fileExists(atPath: resolvedURL.path) else {
-            logger.error(" Not found .actr Documents:\(resolvedURL.path)")
+    /// Dedicated signature-verification error page (15-B B8, 04 §7): shows the
+    /// stable code and an actionable suggestion per failure mode.
+    private func renderSignatureErrorHTML(_ error: AppleActrPackageSignatureError, sourcePath: String) -> String {
+        let suggestion: String
+        switch error {
+        case .signatureMissing:
+            suggestion = "程序包缺少 manifest.sig 签名。请重新下载；若为本地包，请使用 actr pkg pack 重新打包。"
+        case .noTrustedKeys:
+            suggestion = "没有可用的可信公钥。请运行 actr pkg keygen 生成密钥，或在 Actrium/trusted-keys.json 中配置可信公钥后重试。"
+        case .signatureInvalid:
+            suggestion = "签名验证失败：包可能被篡改，或由其他密钥签名。请重新下载或联系发布者。"
+        }
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                    padding: 48px; margin: 0; min-height: 100vh;
+                    color: #e6e8ee;
+                    background: linear-gradient(135deg, #1b0f0f 0%, #111827 60%, #0b1220 100%);
+                }
+                .card {
+                    max-width: 640px; margin: 0 auto; padding: 32px;
+                    background: rgba(255, 255, 255, 0.04);
+                    border: 1px solid rgba(239, 108, 96, 0.35);
+                    border-radius: 16px;
+                }
+                .code {
+                    display: inline-block; padding: 6px 10px; margin-bottom: 14px;
+                    border-radius: 10px; background: rgba(239, 108, 96, 0.14);
+                    color: #f8b4ae; font-family: monospace; font-size: 12px;
+                }
+                h1 { margin: 0 0 10px 0; font-size: 24px; }
+                .message { color: #d1d5db; line-height: 1.6; margin-bottom: 18px; }
+                .suggestion {
+                    line-height: 1.6; color: #e5e7eb;
+                    background: rgba(255,255,255,0.05); padding: 14px 16px;
+                    border-radius: 10px; margin-bottom: 16px;
+                }
+                .path {
+                    font-family: 'Menlo', ui-monospace, monospace; font-size: 11px;
+                    color: #9ca3af; word-break: break-all;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="code">PACKAGE_SIGNATURE_INVALID</div>
+                <h1>无法验证程序包签名</h1>
+                <div class="message">\(error.localizedDescription)</div>
+                <div class="suggestion">\(suggestion)</div>
+                <div class="path">\(escapeHTML(sourcePath))</div>
+            </div>
+        </body>
+        </html>
+        """
+    }
+
+    // MARK: - Restart Restore (15-B B7)
+    // Session tabs (http/https + actr:// instance + actro:// package) are
+    // persisted by BrowserDataRepository.saveSession; on launch the session is
+    // rebuilt, actr:// addresses rebind via serviceRecover with the same ActorId.
+
+    private var didRestoreSession = false
+
+    /// One-shot launch restore; called from AppDelegate after startup.
+    func restoreSessionIfNeeded() {
+        guard !didRestoreSession else { return }
+        didRestoreSession = true
+        guard let session = browserDataRepository.restoreSession(), !session.tabs.isEmpty else { return }
+        logger.notice("🔄 [RestoreSession] restoring \(session.tabs.count) session tab(s)")
+
+        // The persisted session is the source of truth on launch: drop the
+        // placeholder Start Page created in init() so restoring does not leave
+        // an extra blank tab next to the restored ones.
+        if tabs.count == 1, let only = tabs.first,
+           only.systemTabType == .startPage, only.url == nil {
+            tabs.removeAll()
+            tabSlotPositions.removeAll()
+            currentTabId = nil
+        }
+
+        var restoredTabIds: [UUID] = []
+        var activeTabId: UUID?
+
+        for (index, sessionTab) in session.tabs.enumerated() {
+            guard let url = URL(string: sessionTab.address) else { continue }
+            let tabId: UUID?
+            switch url.scheme?.lowercased() {
+            case "http", "https":
+                // Web tab: plain URL restore.
+                let tab = Tab(title: sessionTab.title, url: url)
+                tabs.append(tab)
+                tabSlotPositions[tab.id] = tabs.count - 1
+                restoredTabIds.append(tab.id)
+                tabId = tab.id
+            case "actr":
+                // Instance address: async serviceRecover, then re-render from
+                // the digest-addressed package cache (offerInstanceCreation off —
+                // the instance already exists).
+                tabId = nil
+                restoreInstanceTab(address: url, title: sessionTab.title, isActiveTab: index == session.activeTabIndex)
+            case "actro":
+                // Package address: reuse the existing package load chain.
+                let path = actroSourcePath(for: url)
+                if let path, FileManager.default.fileExists(atPath: path) {
+                    let tab = importACTRPackage(
+                        from: URL(fileURLWithPath: path),
+                        presentInstanceCreation: false
+                    )
+                    if let tab {
+                        restoredTabIds.append(tab.id)
+                        tabId = tab.id
+                    } else {
+                        tabId = nil
+                    }
+                } else {
+                    tabId = nil
+                }
+            default:
+                tabId = nil
+            }
+            if index == session.activeTabIndex {
+                activeTabId = tabId
+            }
+        }
+
+        // Focus the persisted active tab (fall back to the last restored tab).
+        if activeTabId == nil {
+            activeTabId = restoredTabIds.last
+        }
+        if let activeTabId {
+            currentTabId = activeTabId
+            actriumMode = .focus(tabId: activeTabId)
+        }
+        if !restoredTabIds.isEmpty {
+            persistBrowserPageSession()
+        }
+        objectWillChange.send()
+    }
+
+    /// actro://<bundleId> resolves via AppRepository; actro:///path is a direct path.
+    private func actroSourcePath(for url: URL) -> String? {
+        if let host = url.host, !host.isEmpty {
+            return AppRepository().getByBundleId(host)?.sourcePath
+        }
+        return url.path
+    }
+
+    /// Recovers one actr:// instance tab: serviceRecover (same ActorId) →
+    /// re-render from the digest cache → restore the instance address.
+    private func restoreInstanceTab(address: URL, title: String, isActiveTab: Bool) {
+        // `URL.pathComponents` starts with "/" for a hierarchical URL, so the
+        // address label is the last path component (04 §2).
+        let label = address.lastPathComponent
+        guard !label.isEmpty,
+              let actorId = serviceInstanceStore.resolveActorId(byAddressLabel: label),
+              let expectedDigest = serviceInstanceStore.knownDigest(actorId: actorId)
+        else {
+            logger.error("❌ [RestoreSession] instance record missing for \(address.absoluteString) (SERVICE_NOT_FOUND)")
             return
         }
-
-        // Check if it's a directory (dev mode) or archive
-        var isDirectory: ObjCBool = false
-        FileManager.default.fileExists(atPath: resolvedURL.path, isDirectory: &isDirectory)
-
-        let rootDir: URL
-
-        if isDirectory.boolValue {
-            // Directory mode - use directly
-            rootDir = resolvedURL
-        } else {
-            // Package archive mode - extract to temp
-            let tempDir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("actr-\(UUID().uuidString)", isDirectory: true)
+        Task { [weak self] in
+            guard let self else { return }
             do {
-                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-                try unzipActrPackage(archive: resolvedURL, to: tempDir)
-            } catch {
-                logger.error(" .actr Loading failed:\(error.localizedDescription)")
-                return
-            }
-            rootDir = tempDir
-        }
-
-        do {
-            let manifestInfo = try readPackageManifest(fromRoot: rootDir)
-            let tabTitle = manifestInfo.name ?? resolvedURL.deletingPathExtension().lastPathComponent
-
-            let guestScript = readGuestScript(fromRoot: rootDir)
-
-            var unifiedScript: String? = nil
-            if let unifiedFileName = manifestInfo.unifiedScript {
-                unifiedScript = readScript(fromRoot: rootDir, fileName: unifiedFileName)
-            }
-
-            var leftPanelScript: String? = nil
-            var rightPanelScript: String? = nil
-            if let leftFileName = manifestInfo.leftPanelScript {
-                leftPanelScript = readScript(fromRoot: rootDir, fileName: leftFileName)
-            }
-            if let rightFileName = manifestInfo.rightPanelScript {
-                rightPanelScript = readScript(fromRoot: rootDir, fileName: rightFileName)
-            }
-
-            // Update UI on main thread
-            DispatchQueue.main.async { [weak self] in
-                if let unified = unifiedScript {
-                    self?.appendRuntimeTab(
-                        title: tabTitle,
-                        sourceURL: resolvedURL,
-                        appId: manifestInfo.appId,
-                        unifiedScript: unified,
-                        contractName: manifestInfo.contractName,
-                        contractVersion: manifestInfo.contractVersion,
-                        permissions: manifestInfo.permissions,
-                        leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
-                        rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
-                        themeColor: manifestInfo.themeColor
-                    )
-                } else if leftPanelScript != nil || rightPanelScript != nil {
-                    self?.appendRuntimeTab(
-                        title: tabTitle,
-                        sourceURL: resolvedURL,
-                        appId: manifestInfo.appId,
-                        leftPanelScript: leftPanelScript,
-                        rightPanelScript: rightPanelScript,
-                        contractName: manifestInfo.contractName,
-                        contractVersion: manifestInfo.contractVersion,
-                        permissions: manifestInfo.permissions,
-                        leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
-                        rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
-                        themeColor: manifestInfo.themeColor
-                    )
-                } else if let script = guestScript {
-                    self?.appendRuntimeTab(
-                        title: tabTitle,
-                        sourceURL: resolvedURL,
-                        appId: manifestInfo.appId,
-                        guestScript: script,
-                        contractName: manifestInfo.contractName,
-                        contractVersion: manifestInfo.contractVersion,
-                        permissions: manifestInfo.permissions,
-                        themeColor: manifestInfo.themeColor
-                    )
-                } else {
-                    let html = self?.renderACTRInfoHTML(
-                        name: manifestInfo.name ?? "Unknown App",
-                        version: manifestInfo.version ?? "0.0.0",
-                        description: manifestInfo.description ?? "No description provided.",
-                        sourcePath: resolvedURL.path
-                    ) ?? ""
-                    self?.appendRuntimeTab(
-                        title: tabTitle,
-                        sourceURL: resolvedURL,
-                        appId: manifestInfo.appId,
-                        htmlContent: html
-                    )
-                }
-            }
-        } catch {
-            logger.error(" .actr Loading failed:\(error.localizedDescription)")
-            DispatchQueue.main.async { [weak self] in
-                let fallbackHTML = self?.renderACTRInfoHTML(
-                    name: resolvedURL.deletingPathExtension().lastPathComponent,
-                    version: "unknown",
-                    description: "Loading failed:\(error.localizedDescription)",
-                    sourcePath: resolvedURL.path
-                ) ?? ""
-                self?.appendRuntimeTab(
-                    title: resolvedURL.deletingPathExtension().lastPathComponent,
-                    sourceURL: resolvedURL,
-                    htmlContent: fallbackHTML
+                let handle = try await self.serviceInstanceStore.serviceRecover(
+                    actorId: actorId,
+                    expectedPackageDigest: expectedDigest
                 )
+                let archiveURL = ActrPackageCache.archiveURL(forDigest: handle.packageDigest)
+                guard FileManager.default.fileExists(atPath: archiveURL.path) else {
+                    logger.error("❌ [RestoreSession] package cache miss (digest \(handle.packageDigest.prefix(12))…)")
+                    return
+                }
+                guard let tab = self.importACTRPackage(
+                    from: archiveURL,
+                    knownDigest: handle.packageDigest,
+                    presentInstanceCreation: false
+                ) else { return }
+                // Restore the instance address (not the actro:// package address).
+                if let index = self.tabs.firstIndex(where: { $0.id == tab.id }) {
+                    self.tabs[index].url = address
+                    self.tabs[index].title = title
+                }
+                if isActiveTab {
+                    self.currentTabId = tab.id
+                    self.actriumMode = .focus(tabId: tab.id)
+                }
+                logger.notice("✅ [RestoreSession] recovered instance \(actorId) (sha256=\(handle.packageDigest.prefix(12))…)")
+                self.persistBrowserPageSession()
+                self.objectWillChange.send()
+            } catch {
+                logger.error("❌ [RestoreSession] recover failed: \(error.localizedDescription)")
             }
         }
     }
@@ -1653,6 +1976,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         persistBrowserPageSession()
     }
 
+    @discardableResult
     private func appendRuntimeTab(
         title: String,
         sourceURL: URL,
@@ -1662,13 +1986,16 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         leftPanelScript: String? = nil,
         rightPanelScript: String? = nil,
         unifiedScript: String? = nil,
+        guestExtractedPath: String? = nil,
+        guestEntry: String? = nil,
         contractName: String? = nil,
         contractVersion: Int? = nil,
         permissions: [String] = [],
         leftPanelDefaultVisible: Bool = true,
         rightPanelDefaultVisible: Bool = false,
-        themeColor: String? = nil
-    ) {
+        themeColor: String? = nil,
+        recordHistoryVisit: Bool = true
+    ) -> Tab {
         // Use actro:// URL for History and address bar
         let appURL = ActriumAppURLScheme.appURL(filePath: sourceURL.path) ?? sourceURL
         let newTab = Tab(
@@ -1680,6 +2007,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             leftPanelScript: leftPanelScript,
             rightPanelScript: rightPanelScript,
             unifiedScript: unifiedScript,
+            guestExtractedPath: guestExtractedPath,
+            guestEntry: guestEntry,
             contractName: contractName,
             contractVersion: contractVersion,
             permissions: permissions,
@@ -1707,37 +2036,39 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             }
         }
 
-        // Record History visit for ACTR app
-        historyVM?.recordVisit(tab: newTab)
-        persistBrowserPageSession()
-    }
-
-    private func unzipActrPackage(archive: URL, to destination: URL) throws {
-        // Use /usr/bin/ditto for more reliable unzipping on macOS
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        process.arguments = ["-xk", archive.path, destination.path]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus != 0 {
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            throw NSError(
-                domain: "ACTRUnzipError",
-                code: Int(process.terminationStatus),
-                userInfo: [NSLocalizedDescriptionKey: "Unpressure failed: \(output)"]
-            )
+        // Record History visit for ACTR app. Package-archive imports pass
+        // false here: after instance creation the URI is replaced with the
+        // instance address and only that final address is recorded (04 §4,
+        // 15-B B6) — history keeps only the final address.
+        if recordHistoryVisit {
+            historyVM?.recordVisit(tab: newTab)
         }
+        persistBrowserPageSession()
+        return newTab
     }
 
-    private func readPackageManifest(fromRoot root: URL) throws -> ActrPackageManifestInfo {
-        try ActrPackageManifestReader.read(fromRoot: root)
+    private func readPackageManifest(
+        fromRoot root: URL,
+        requireSignature: Bool = false
+    ) throws -> ActrPackageManifestInfo {
+        try ActrPackageManifestReader.read(fromRoot: root, requireSignature: requireSignature)
+    }
+
+    /// Escapes text interpolated into the static HTML error/info pages.
+    private func escapeHTML(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
+    }
+
+    /// Validates a staging extraction before it enters the digest cache
+    /// (05 §15): manifest signature (actr-package/2) plus per-file SHA-256
+    /// integrity. Throws on failure so the cache never keeps unverified bytes.
+    private func validateExtractedPackage(at root: URL) throws {
+        _ = try readPackageManifest(fromRoot: root, requireSignature: true)
     }
 
     /// Universal script reading method
@@ -1818,13 +2149,13 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         </head>
         <body>
             <div class="card">
-                <h1>🧩 \(name)</h1>
+                <h1>🧩 \(escapeHTML(name))</h1>
                 <div class="meta">
-                    <span class="pill">version \(version)</span>
+                    <span class="pill">version \(escapeHTML(version))</span>
                     <span class="pill">ACTR package</span>
                 </div>
-                <div class="desc">\(description)</div>
-                <div class="path">\(sourcePath)</div>
+                <div class="desc">\(escapeHTML(description))</div>
+                <div class="path">\(escapeHTML(sourcePath))</div>
             </div>
         </body>
         </html>

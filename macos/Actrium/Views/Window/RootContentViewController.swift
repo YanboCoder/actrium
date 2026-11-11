@@ -767,13 +767,41 @@ private struct SelfDrawnAddressInputField: NSViewRepresentable {
         textField.stringValue = text
         context.coordinator.textField = textField
 
-        DispatchQueue.main.async {
-            textField.window?.makeFirstResponder(textField)
-            textField.currentEditor()?.selectAll(nil)
-            context.coordinator.startObservingFirstResponder()
-        }
+        // SwiftUI mounts the NSView into the window during layout, which can
+        // happen after this runloop tick — a single async focus attempt loses
+        // the race (window == nil → makeFirstResponder silently skipped) and
+        // the field never gains focus. Retry until attached.
+        SelfDrawnAddressInputField.focusWhenAttached(
+            textField: textField,
+            coordinator: context.coordinator,
+            attempt: 0
+        )
 
         return textField
+    }
+
+    private static func focusWhenAttached(
+        textField: NSTextField,
+        coordinator: Coordinator,
+        attempt: Int
+    ) {
+        DispatchQueue.main.async {
+            guard let window = textField.window else {
+                if attempt < 30 {  // ~0.5s of runloop ticks, well within mount time
+                    SelfDrawnAddressInputField.focusWhenAttached(
+                        textField: textField,
+                        coordinator: coordinator,
+                        attempt: attempt + 1
+                    )
+                }
+                return
+            }
+            let ok = window.makeFirstResponder(textField)
+            NSLog("🩺 [SelfDrawnAddressInputField] focus after \(attempt) retry(ies): makeFR=%@",
+                  ok ? "ok" : "FAIL")
+            textField.currentEditor()?.selectAll(nil)
+            coordinator.startObservingFirstResponder()
+        }
     }
 
     func updateNSView(_ nsView: NSTextField, context: Context) {}
@@ -816,6 +844,8 @@ private struct SelfDrawnAddressInputField: NSViewRepresentable {
             let isFieldEditor = (firstResponder as? NSTextView)?.delegate === textField
 
             if !isOurTextField && !isFieldEditor {
+                NSLog("🩺 [SelfDrawnAddressInputField] KVO blur: firstResponder=%@",
+                      String(describing: firstResponder))
                 DispatchQueue.main.async {
                     self.parent.onBlur()
                 }
@@ -828,6 +858,7 @@ private struct SelfDrawnAddressInputField: NSViewRepresentable {
         }
 
         func controlTextDidBeginEditing(_ obj: Notification) {
+            NSLog("🩺 [SelfDrawnAddressInputField] beginEditing: keyboard input reached field editor")
             startObservingFirstResponder()
             parent.onInputActivity?()
         }

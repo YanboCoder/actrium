@@ -2342,6 +2342,15 @@ struct UnifiedReactNativeLayer: View {
         if let unifiedScript = tab.unifiedScript {
             config["unifiedScript"] = unifiedScript
         }
+        // 15-B B4: verified-bytes source (digest-addressed extraction dir + entry).
+        // The renderer prefers reading the guest bytes from this cache directory
+        // and falls back to the inline unifiedScript text above.
+        if let extractedPath = tab.guestExtractedPath {
+            config["guestExtractedPath"] = extractedPath
+            if let entry = tab.guestEntry {
+                config["guestEntry"] = entry
+            }
+        }
         if let leftPanelScript = tab.leftPanelScript {
             config["leftPanelScript"] = leftPanelScript
         }
@@ -2528,6 +2537,13 @@ struct UnifiedReactNativeLayer: View {
         // Add optional scripts
         if let unifiedScript = tab.unifiedScript {
             tabConfig["unifiedScript"] = unifiedScript
+        }
+        // 15-B B4: verified-bytes source (digest-addressed extraction dir + entry).
+        if let extractedPath = tab.guestExtractedPath {
+            tabConfig["guestExtractedPath"] = extractedPath
+            if let entry = tab.guestEntry {
+                tabConfig["guestEntry"] = entry
+            }
         }
         if let systemTabType = tab.systemTabType {
             tabConfig[RuntimeBridgeContract.systemAppType] = systemTabType.rawValue

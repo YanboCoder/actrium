@@ -22,7 +22,29 @@ struct ActrPackageManifestInfo {
 }
 
 enum ActrPackageManifestReader {
-    static func read(fromRoot root: URL) throws -> ActrPackageManifestInfo {
+    /// - Parameter requireSignature: verify manifest.sig (Ed25519) before reading.
+    ///   Set for package archives (15-B B3); local dev directories are explicitly
+    ///   trusted and pass false.
+    static func read(fromRoot root: URL, requireSignature: Bool = false) throws -> ActrPackageManifestInfo {
+        if requireSignature {
+            let trustedKeys = ActrPackageTrustStore.trustedKeys().map(\.publicKey)
+            if !trustedKeys.isEmpty {
+                actrManifestLogger.notice(
+                    "[ActrPackageManifestReader] verifying signature with \(trustedKeys.count) trusted key(s)"
+                )
+            }
+            do {
+                try AppleActrPackageManifestReader.verifyManifestSignature(
+                    fromRoot: root,
+                    trustedKeys: trustedKeys
+                )
+            } catch let error as AppleActrPackageSignatureError {
+                actrManifestLogger.error(
+                    "[ActrPackageManifestReader] \(error.stableCode): \(error.localizedDescription)"
+                )
+                throw error
+            }
+        }
         let manifest = try AppleActrPackageManifestReader.read(fromRoot: root)
         logManifest(manifest)
         return ActrPackageManifestInfo(

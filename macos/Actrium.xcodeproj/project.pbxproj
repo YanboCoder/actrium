@@ -14,6 +14,7 @@
 		A90D97D7984E951158B896D0 /* libPods-ActriumTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DACA28DED8E4818311DAAB4D /* libPods-ActriumTests.a */; };
 		AA00110022003300AA00BB02 /* ActriumVault in Frameworks */ = {isa = PBXBuildFile; productRef = AA00110022003300AA00BB03 /* ActriumVault */; };
 		AB00110022003300AA00BB02 /* ActriumCore in Frameworks */ = {isa = PBXBuildFile; productRef = AB00110022003300AA00BB03 /* ActriumCore */; };
+		5C0B1A2D3E4F506172830001 /* Actr in Frameworks */ = {isa = PBXBuildFile; productRef = 5C0B1A2D3E4F506172830002 /* Actr */; };
 		B3312B262F066DB70018A0B4 /* ActriumRenderer.app in Embed Helper Apps */ = {isa = PBXBuildFile; fileRef = B3312B1B2F066DB70018A0B4 /* ActriumRenderer.app */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B3E78A292F02AFD7001F9589 /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = B3E78A282F02AFD7001F9589 /* Highlightr */; };
 		BD0800F6A3159CF15D812A33 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5C60CD013DB3755AB58CD701 /* PrivacyInfo.xcprivacy */; };
@@ -150,6 +151,7 @@
 				AB00110022003300AA00BB02 /* ActriumCore in Frameworks */,
 				AA00110022003300AA00BB02 /* ActriumVault in Frameworks */,
 				1A2B3C4D5E6F7890ABCD0001 /* ActriumIPC in Frameworks */,
+				5C0B1A2D3E4F506172830001 /* Actr in Frameworks */,
 				B3E78A292F02AFD7001F9589 /* Highlightr in Frameworks */,
 				457EEA1F5D65241F37B32E2D /* libPods-Actrium.a in Frameworks */,
 			);
@@ -367,6 +369,7 @@
 				1A2B3C4D5E6F7890ABCD0005 /* XCLocalSwiftPackageReference "ActriumIPC" */,
 				AB00110022003300AA00BB05 /* XCLocalSwiftPackageReference "ActriumCore" */,
 				AA00110022003300AA00BB05 /* XCLocalSwiftPackageReference "ActriumVault" */,
+				5C0B1A2D3E4F506172830003 /* XCLocalSwiftPackageReference "Actr" */,
 				B3E78A272F02AF3B001F9589 /* XCRemoteSwiftPackageReference "Highlightr" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -1064,6 +1067,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../packages/actrium-platform/apple/ActriumCore;
 		};
+		5C0B1A2D3E4F506172830003 /* XCLocalSwiftPackageReference "Actr" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../packages/actr-swift;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1089,6 +1096,10 @@
 		AB00110022003300AA00BB03 /* ActriumCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ActriumCore;
+		};
+		5C0B1A2D3E4F506172830002 /* Actr */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Actr;
 		};
 		B3E78A282F02AFD7001F9589 /* Highlightr */ = {
 			isa = XCSwiftPackageProductDependency;

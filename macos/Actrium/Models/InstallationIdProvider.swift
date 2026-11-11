@@ -1,4 +1,5 @@
 import Foundation
+import ActriumCore
 
 /// Supplies this installation's local Realm id (`installation_id`).
 ///

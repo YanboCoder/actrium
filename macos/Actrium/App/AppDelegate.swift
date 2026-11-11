@@ -127,6 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         windowController.showWindow()
         refreshFocusedViewModel()
 
+        // Restart restore (15-B B7): rebuild the persisted session into the
+        // first window; actr:// instance addresses rebind with the same ActorId.
+        viewModel.restoreSessionIfNeeded()
+
         // Register with DevTools
         DevToolsManager.shared.activeBrowserViewModel = viewModel
     }
