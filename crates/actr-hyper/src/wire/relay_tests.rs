@@ -11,6 +11,49 @@ use uuid::Uuid;
 
 struct EmptyMailbox;
 
+#[tokio::test]
+async fn unavailable_platform_signer_never_sends_relay_identity_request() {
+    struct UnavailableSigner;
+    impl crate::RealmKeySigner for UnavailableSigner {
+        fn public_key(&self) -> [u8; 32] {
+            SigningKey::from_bytes(&[7; 32]).verifying_key().to_bytes()
+        }
+        fn sign_payload(&self, _: &[u8]) -> Result<[u8; 64], crate::HyperError> {
+            Err(crate::HyperError::Config(
+                "sensitive platform reason".into(),
+            ))
+        }
+    }
+    let mut server = mockito::Server::new_async().await;
+    let no_request = server
+        .mock("POST", "/relay-identity")
+        .expect(0)
+        .create_async()
+        .await;
+    let fixture = Fixture::new().await;
+    let key = crate::RealmClientKey::from_signer(
+        fixture.local.realm.clone(),
+        "provider.example".into(),
+        Arc::new(UnavailableSigner),
+    );
+    let client = RelayClient::new(
+        "ws://unused".into(),
+        server.url(),
+        Some(key),
+        fixture.client.session.clone(),
+        fixture.client.gate.clone(),
+        fixture.shutdown.clone(),
+    );
+    let error = client
+        .certified_identity(&fixture.local.to_string_repr(), b"fixture renewal proof")
+        .await
+        .err()
+        .expect("an unavailable signer must fail closed");
+    assert!(matches!(error, NetworkError::ConnectionError(message)
+        if message == "Realm client signer unavailable"));
+    no_request.assert_async().await;
+}
+
 #[async_trait]
 impl Mailbox for EmptyMailbox {
     async fn enqueue(

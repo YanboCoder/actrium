@@ -91,11 +91,11 @@ Realm 所有者即应用实例的创建者，管理该实例 Realm 的成员身�
 
 ### 4.4 安装和验证
 
-> 作为用户，我安装 `publisher/program@version` 时，可以确认 Publisher 域名、精确版本、包 digest、权限和市场风险状态；已安装的同一版本不会在后台变成另一组字节。
+> 作为用户，我安装 `publisher/program@version` 时，可以确认 Publisher 域名、精确版本、Service 和 Front 包摘要、权限和市场风险状态。已安装的版本固定到这两个归档。
 
 ### 4.5 本地开发
 
-> 作为开发者，我可以从本地 `.actr` 文件或开发 HTTPS Origin 加载未发布程序，但 Actrium 必须清楚标记「开发来源」，并禁止它冒充已验证域名 Publisher。
+> 作为开发者，我可以从配套的本地 `.actr` 文件或开发 HTTPS Origin 加载未发布程序。Actrium 标记「开发来源」并使用开发身份。
 
 ### 4.6 Realm 与网络
 
@@ -127,7 +127,7 @@ UI-only 程序也使用平台提供的最小 Service，而不是再创造第二�
 ### G-03：让地址可读、可复制、可恢复
 
 - Realm 链接 `actr://<Realm 域名>/<realm_id>` 回答「哪个实例」，也就是去哪里验证和寻址；
-- 运行什么由该实例的 Realm Profile 所指的包决定，不写在地址里；
+- Realm Profile 固定 Service 包，匹配的签名 Program Release 记录固定 Front 包。
 - 地址不携带秘密。
 
 ### G-04：复用 Web 的成熟安全基础设施
@@ -178,7 +178,7 @@ Tab、Front Actor、Guest 都可以重建；Workspace 绑定、业务状态与�
 
 ### 7.4 精确版本不可变
 
-`publisher/program@version` 一旦被 Actrium 接受，就必须永久对应同一 package digest。
+`publisher/program@version` 一旦被 Actrium 接受，该发布版本的 Service 与 Front 包摘要即固定。
 
 ### 7.5 默认最小能力
 

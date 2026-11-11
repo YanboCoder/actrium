@@ -21,7 +21,7 @@ Answers "What can I run?":
 - Marketplace favorites or recommendations;
 - Direct Publisher sources;
 - Local imports and development programs;
-- Each program's known version, digest, source and update status.
+- Each program's known version, Service and Front package digests, source, and update status.
 
 ### 1.2 Service Inventory
 
@@ -53,7 +53,7 @@ The security control on the left of the address bar must show:
 
 - Current application assurance: green / yellow / red, or re-validating;
 - Publisher domain and verified/development/revoked status;
-- Short fingerprint of the current package digest;
+- Short fingerprints labeled with the Service and Front package roles.
 - Realm name and its Realm domain; when the Realm domain equals or belongs to the Actr Facility Provider ID, state that the trust root is that Actr Facility Provider, otherwise the trust root is the Realm domain;
 - Service connection status: local, P2P, TURN relayed, offline;
 - Whether the current permissions include a high-risk grant.
@@ -87,9 +87,9 @@ First launch creates no Realm; each local instance gets its own local Realm when
 ### 4.1 From Marketplace
 
 1. The user opens the program's detail page;
-2. Actrium shows the Publisher, version, digest, permissions, Workspace mode and marketplace review status;
-3. Actrium downloads the `.actr` from the package address given by the Marketplace or Publisher;
-4. Verifies HTTPS, the Publisher key, the package signature, the digest, compatibility and archive limits;
+2. Actrium shows the Publisher, version, both package digests, permissions, Workspace requirements, and Marketplace review status.
+3. Actrium obtains and verifies the Publisher-signed Program Release record.
+4. It verifies both packages against the record, including identities, signatures, digests, compatibility, and archive limits.
 5. Records the Program Release;
 6. Only caches the program; it does not automatically create a Service unless the user clicks "Create instance".
 
@@ -97,13 +97,13 @@ The download address is not the trust source; Actrium relies on the package sign
 
 ### 4.2 When opening a link
 
-If the package is not yet installed, handle it per [04 §3](04-uri-and-resolution.md): confirm first, then download and verify; canceling produces no Service or Front Actor.
+For an uninstalled release, follow [04 §3](04-uri-and-resolution.md). After confirmation, verify the matching release record and both packages. Canceling ends installation before either Actor is created.
 
 ### 4.3 Local import
 
-For a local `.actr` package:
+Local import accepts the Service and Front `.actr` files as a pair. Match them to the verified release record when importing a published release.
 
-- It must still pass structure, hash and signature checks;
+- Each archive must pass structure, hash, and signature checks.
 - If the signing key does not belong to a verified domain, mark it "local development identity";
 - It must not occupy the trusted record of a verified Publisher with the same name;
 - It is not automatically synced to other devices;
@@ -122,21 +122,21 @@ sequenceDiagram
     participant S as Service
     participant F as Front Actor
 
-    U->>A: Click "Create instance" in Program Catalog (or import a package, or enter a package address)
-    A->>P: Download and verify the package
-    P-->>A: package digest + manifest
+    U->>A: Select a release or import a Service and Front package pair
+    A->>P: Verify the release record and both packages
+    P-->>A: Verified release record and both verified manifests
     A->>U: Confirm permissions, Realm domain and RealmId, and Workspace
     U-->>A: Confirm creation
-    A->>M: Create(idempotency_key, package, workspace, domain, realm_id, display_name)
+    A->>M: Create(idempotency_key, verified_release, workspace, domain, realm_id, display_name)
     M->>M: Obtain authorization from the Realm signing key holder
     M->>M: Actr Facility Provider creates a pending Realm
-    M->>M: Sign the Realm Profile (including package) and submit it for activation; Realm becomes active
+    M->>M: Sign and activate the Realm Profile that pins the verified Service package
     M->>M: Redeem the owner invite and become the Realm's owner (obtain Realm membership)
     M->>S: Persist identity within the new Realm and start the Service
     S-->>M: stable ActorId
     M-->>A: Service record + ActorId
     A->>A: Replace the address bar with the new instance's Realm link
-    A->>F: Start the fixed Native Front workload
+    A->>F: Create the Front Actor from its verified manifest
     F->>S: Attach handshake
     S-->>F: session lease + contract
     F->>F: Load the verified Keel Guest
@@ -159,13 +159,17 @@ The RealmId cannot be changed after creation; a RealmId already used within the 
 
 ### 5.3 Workspace selection
 
-The manifest must declare three dimensions separately; they cannot be squeezed into one enum:
+The verified Service manifest declares the application's static requirements in `[workspace]`.
 
-- requirement: `none`, `optional` or `required`;
-- provisioning: `managed` or `user-selected`;
-- access: `read-only` or `read-write`.
+- `requirement` selects `none`, `optional`, or `required`.
+- `access` requests `read-only` or `read-write`.
+- `providers` lists the supported Workspace Provider types.
 
-It may also restrict the allowed Workspace Providers, e.g. `managed-store`, `local-folder`, `cloud-drive` or `remote-repository`. `managed` is a configuration method, not "whether a Workspace is needed"; `read-only` is an access mode, not a lifecycle mode.
+Actrium intersects `providers` with platform support and user or organization policy.
+The deployment or creation flow selects `provisioning`, either `managed` or `user-selected`.
+The Host stores the selected Provider and location, granted access, and lease with the instance.
+For `requirement = "required"`, the binding must satisfy the declared access before the Service enters Ready.
+Node deployment settings are described in [05 §6](05-program-package-and-distribution.md#6-package-manifest-fields).
 
 The selector shows:
 
@@ -198,8 +202,8 @@ Creation proceeds in the order "holder authorization → pending Realm → sign 
 
 1. Resolve the Realm link to get the Realm name;
 2. Fetch that domain's Realm signing key and Realm Profile and verify the signature;
-3. Per the Realm Profile's `package`, ensure the package is installed and the digest matches;
-4. Via the Actr Facility Provider specified by the Realm Profile, find within that Realm the Service whose Actor type matches the package;
+3. Verify the Service package pinned by the Realm Profile and the Front package pinned by the matching release record.
+4. Via the Actr Facility Provider in the Realm Profile, find the Service in that Realm whose Actor type matches the Service package.
 5. Complete mutual identity and challenge verification;
 6. Negotiate the Front–Service contract;
 7. Obtain the exclusive lease;
@@ -313,7 +317,7 @@ Each program shows:
 - Publisher domain;
 - Program name and description;
 - Installed version;
-- package digest;
+- Service and Front package digests.
 - Marketplace source and review marker;
 - Permission summary;
 - Workspace mode;
@@ -321,9 +325,10 @@ Each program shows:
 - Update, revocation and compatibility status;
 - "Create instance", "View instances", "Remove cache".
 
-If a Service still uses that digest, "Remove cache" should either be refused or retain the copy needed to keep it running.
+While a Service instance references the release, "Remove cache" must retain both packages.
 
-Program Catalog can only show Release assurance (signature, digest, revocation, review); it must not claim in advance that some future running instance or the whole application graph will be green.
+Program Catalog shows Release assurance, including signature status, both package digests, revocation, and review.
+Actrium determines application assurance for each running instance.
 
 ## 10. Service Inventory experience
 
@@ -391,9 +396,9 @@ The error page must not hide security differences behind a generic "could not co
 
 Developer mode provides:
 
-- Import a local `.actr`;
-- Use a package address on localhost or a private CA (marked as a development source);
-- View the manifest, digest, contract and capabilities;
+- Import a local Service and Front `.actr` pair.
+- Use two package addresses on localhost or a private CA, marked as development sources.
+- View each package's manifest, digest, contract, and capabilities.
 - Hot-reload the Guest, but each change uses a new development digest;
 - Start a local Realm and Service;
 - Inspect Front–Service RPC;
@@ -490,10 +495,10 @@ actrium init
 → write the Keel Guest, Service Component and contract
 → build
 → validate (schema, capability, hash, sandbox compatibility)
-→ sign
+→ sign the Front and Service packages
 → generate/update the Publisher Profile
-→ upload the package
-→ read it back from the package address and check the digest and signature
+→ publish both packages and the signed release record that binds their digests
+→ read both packages back and check their digests and signatures
 → optionally submit for Marketplace review
 ```
 

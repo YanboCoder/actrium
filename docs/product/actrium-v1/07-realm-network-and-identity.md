@@ -44,7 +44,7 @@ In v1, multiple signaling endpoints must belong to the same logical control plan
 
 ### 2.1 A Realm is an instance concept
 
-A Realm is the logical trust and governance domain of one application instance. In Actrium, creating a new instance means creating a new Realm under the chosen domain; the instance's Service, the other Actors it orchestrates, and the Fronts that Attach to it all belong to this Realm. The Realm Profile's `package` states the package this instance runs.
+A Realm is the logical trust and governance domain of one application instance. In Actrium, creating a new instance means creating a new Realm under the chosen domain. The instance's Service, the other Actors it orchestrates, and the Fronts that Attach to it all belong to this Realm. The Realm Profile's `package` pins the Service package.
 
 A Realm does not follow the program: the same `notes.example/team-notes` created once by organization A and once by organization B yields two Realms. Nor is a Realm an organization-level membership domain: an organization runs as many Realms as it runs application instances.
 
@@ -140,7 +140,7 @@ A Realm Profile contains at least:
 - schema (`actr.realm/v1`);
 - `realm.name` (the full Realm name) and a display name;
 - `status`: `active` or `retired`;
-- `package`: the package this instance runs (download address, SHA-256 and Actor type), required when `active`;
+- An `active` Realm must declare `package` with the Service archive's download address, SHA-256, and Actor type.
 - a monotonic `sequence` and issue time `issued_at` (a Realm Profile does not expire);
 - the issuer URL and Realm issuer keys/key ids (the Actor credential's issuer is the Realm name);
 - the Actr Facility Provider ID, signaling endpoints, STUN/TURN endpoints;

@@ -3371,11 +3371,13 @@ dependencies = [
  "android_logger",
  "async-trait",
  "bytes",
+ "ed25519-dalek",
  "futures-util",
  "log",
  "opus",
  "opusic-sys",
  "parking_lot",
+ "rand 0.8.6",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -3385,6 +3387,7 @@ dependencies = [
  "tracing-subscriber",
  "uniffi 0.31.2",
  "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -3494,6 +3497,8 @@ dependencies = [
 name = "loran-issuer"
 version = "0.10.7"
 dependencies = [
+ "actr-hyper",
+ "actr-mock-loran",
  "actr-protocol",
  "actr-relay-security",
  "aes-gcm",

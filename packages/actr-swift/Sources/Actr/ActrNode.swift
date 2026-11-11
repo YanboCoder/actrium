@@ -31,11 +31,15 @@ public final class ActrNode: Sendable {
         packageConfig configPath: String,
         packagePath: String,
         observers: RuntimeObservers?,
-        mobileLifecycleObservers: [any MobileLifecycleObserver]
+        mobileLifecycleObservers: [any MobileLifecycleObserver],
+        membership: ActrBindings.RealmMembership? = nil
     ) async throws -> ActrNode {
         do {
             let wrapper: ActrBindings.ActrNode
-            if let observers {
+            if let membership {
+                wrapper = try await ActrBindings.ActrNode.newFromPackageFileWithMembership(
+                    configPath: configPath, packagePath: packagePath, membership: membership, observers: observers?.bridge)
+            } else if let observers {
                 wrapper = try await ActrBindings.ActrNode.newFromPackageFileWithObservers(
                     configPath: configPath,
                     packagePath: packagePath,
@@ -118,14 +122,18 @@ public final class ActrNode: Sendable {
         config configPath: String,
         type actorType: ActrType,
         workload: DynamicWorkload,
-        mobileLifecycleObservers: [any MobileLifecycleObserver]
+        mobileLifecycleObservers: [any MobileLifecycleObserver],
+        membership: ActrBindings.RealmMembership? = nil
     ) async throws -> ActrNode {
         do {
-            let wrapper = try await ActrBindings.ActrNode.newFromLinkedWorkload(
-                configPath: configPath,
-                actorType: actorType.bridge,
-                workload: workload.bridge
-            )
+            let wrapper: ActrBindings.ActrNode
+            if let membership {
+                wrapper = try await ActrBindings.ActrNode.newFromLinkedWorkloadWithMembership(
+                    configPath: configPath, actorType: actorType.bridge, workload: workload.bridge, membership: membership)
+            } else {
+                wrapper = try await ActrBindings.ActrNode.newFromLinkedWorkload(
+                    configPath: configPath, actorType: actorType.bridge, workload: workload.bridge)
+            }
             let handle = try wrapper.createNetworkEventHandle()
             let eventEmitter = MobileLifecycleEventEmitter(observers: mobileLifecycleObservers)
             let monitor = NetworkEventMonitor(handle: handle, emitter: eventEmitter)

@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 
 source "$SCRIPT_DIR/../package-runtime-echo/lib/common.sh"
+source "$SCRIPT_DIR/../mobile-enrollment.sh"
 source "$SCRIPT_DIR/lib/readiness.sh"
 
 HTTP_PORT=8081
@@ -598,8 +599,7 @@ render_swift_ts_workload_app_config() {
         "__HTTP_PORT__=$HTTP_PORT" \
         "__ICE_PORT__=$ICE_PORT" \
         "__PUBLISHER__=$PUBLISHER" \
-        "__REALM__=$REALM" \
-        "__REALM_CLIENT_KEY__=$REALM_CLIENT_KEY"
+        "__REALM__=$REALM"
     success "SwiftTsWorkloadApp actr.toml rendered"
 }
 
@@ -944,7 +944,9 @@ check_service_ready() {
 
 install_and_launch_app() {
     section "📲 Installing and launching SwiftTsWorkloadApp"
+    python3 "$REPO_ROOT/scripts/actr/check-mobile-assets.py" "$APP_PATH"
     xcrun simctl install "$DEVICE_UDID" "$APP_PATH"
+    install_ios_mobile_invitation
 
     local launch_args=(
         --terminate-running-process

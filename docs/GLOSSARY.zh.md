@@ -37,15 +37,15 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | 术语 | 定义 |
 | --- | --- |
 | Publisher | 程序发布者，以规范化 DNS 域名（Publisher 域名）为 ID。Publisher 域名给「程序」命名，Realm 域名给「实例」命名，两种角色不同。 |
-| Publisher Profile（`actr.publisher/v1`） | authority descriptor 中带签名的可选成员 `publisher`，由 active 的 Publisher Profile 签名 key 签署，携带包签名 key，用来验证包确实出自该 Publisher。 |
+| Publisher Profile（`actr.publisher/v1`） | authority descriptor 中带签名的可选成员 `publisher`，由 active 的 Publisher Profile 签名 key 签署。其包签名公钥用于验证该 Publisher 的包与 Program Release 记录。 |
 | Program | Publisher 发布的程序。 |
-| Program Release | `publisher/program@version` 对应的不可变发布，对应一个固定的 Package digest（整个 `.actr` 的 SHA-256）。 |
+| Program Release | `publisher/program@version` 对应的不可变发布。Actrium Product v1 使用 Publisher 签名的发布记录固定 Service 与 Front 两个包的摘要。 |
 | Actor 类型（程序身份） | 唯一文本形式 `publisher/program@version`，表示不可变的程序版本，不表示某个 Actor 实例；由注册请求声明、写入 Actor credential 与 Actor Registry，供连接 ACL 与发现使用，不在 ActorId 中。linked/local workload 可使用 Actr Host 管理的非 DNS publisher 值，不能借此进入 Publisher Registry。代码类型名为 `ActrType`。 |
-| Actor Package（`.actr`） | Actr 签名 workload 包，格式 `actr-package/2`，manifest `[actor]` 以 `publisher`、`name`、`version` 标识 Actor 类型，按 manifest 签名与 digest 验证；在 Actrium 中同时携带 Service 与 Keel Guest 资源。 |
-| Package digest | 精确 Program Release 的不可变内容指纹。 |
+| Actor Package（`.actr`） | Actr 签名 Workload 包，格式为 `actr-package/2`。清单 `[actor]` 以 `publisher`、`name`、`version` 标识 Actor 类型。Product v1 的 Service Workload 和 Keel Guest Workload 分别装在各自的包中。 |
+| Package digest | 一个完整 `.actr` 归档的 SHA-256。 |
 | Workload | Actor 内的业务计算：处理 Actor message、生命周期事件和允许的 Actr Host 调用。 |
 | Workload Profile | 带版本的执行约定（如 `keel.guest/1`），规定 Actr Host 如何解释 Workload entry、建立 ABI、映射 message 与生命周期，以及允许哪些 profile 专有 manifest 字段。 |
-| linked workload / Native workload | 由 Actr Host 平台原生提供、与宿主一起构建和签名的 workload（Front Actor 即此形态），不经 Publisher 包分发；不表示 Guest 可以提供 native code。 |
+| linked workload / Native workload | 由 Actr Host 平台原生提供并与宿主一起构建和签名的 Workload。Actrium 提供原生 Front Host，Publisher 的 Front 包提供由该 Host 装载的 Keel Guest Workload。 |
 | Manifest | Publisher 对包的静态描述；在安全模型中只是有效能力声明的输入。 |
 
 ## 3. Actor、界面与运行时
@@ -53,12 +53,12 @@ credential、Workspace Provider credential）。正文用规范名，代码类�
 | 术语 | 定义 |
 | --- | --- |
 | Actor | 运行中的程序实体，由 ActorId 标识；安全模型中唯一的规范节点和宏观通信、执行边界。 |
-| Service | 实例的 Service：每个 Realm 恰好一个，随 Realm 创建；有持久 ActorId，固定运行 Realm Profile 所指的包，持有实例状态与 Workspace，生命周期独立于 Tab，可本地或远端运行。Front 只连它；它是本 Realm 内唯一与包同类型的 Actor，Front 按类型找到它。同一 Realm 内的其他 Actor 由它编排，不另设类别名。 |
-| Front Actor | 每个 resident app Tab 的短生命周期、Actrium 固定的 Native workload Actor。 |
+| Service | 实例的 Service：每个 Realm 恰好一个，随 Realm 创建；有持久 ActorId，固定运行 Realm Profile 所指的 Service 包，持有实例状态与 Workspace，生命周期独立于 Tab，可本地或远端运行。Front 只连它；它是本 Realm 内唯一与包同类型的 Actor，Front 按类型找到它。同一 Realm 内的其他 Actor 由它编排，不另设类别名。 |
+| Front Actor | 每个 resident app Tab 的短生命周期 Actor，类型和 Keel Guest Workload 来自已验证的 Front 包，由 Actrium 的原生 Front Host 装载。 |
 | Front Host | Front Actor 的受信原生宿主部分：随 Actrium 发布，Publisher 不可替换或扩展；负责 Actor 注册、身份、连接、会话、Keel Engine 与 Host capability，Keel Guest 运行其上。 |
 | Keel Guest | Publisher 唯一可定制的前台代码，运行于 Keel。 |
 | Tab | Actrium Shell 中的用户交互容器；Tab record 可在 Front Actor 回收后继续存在（dormant Tab）。 |
-| Attach | Front 连接本实例 Service 的握手：核对对方 Actor 类型与包一致，取得 Attachment lease。 |
+| Attach | Front 连接本实例 Service 的握手。双方按已验证的发布记录核对 Actor 类型与契约，Front 取得 Attachment lease。 |
 | Attachment lease | Front 使用 Service 的短期会话租约（v1 默认 `exclusive`）。 |
 | capability | Actr Host 在本机明确授予 Guest/Service 的最小受控能力或句柄（如 `host:*` capability、Workspace capability、session capability），由 Actr Host 执行，不跨边界签名；与安全模型的 Actor Grant 不同。 |
 | Workspace | Service 的持久数据边界：由 Actr Host 托管、经 Workspace Provider 存储的 capability，不是简单文件路径。一个 Service 至多绑定一个 Workspace；同一 Workspace 可按写入并发策略（默认 `exclusive-writer`，另有 `shared-readers` 等）被多个 Service 使用。Workspace 不自动是 Actor，同一 Principal 也不自动获得授权。删除 Service 默认不删除 Workspace。Workspace 不属于 Loran 的 Realm 基础设施；其存储方 Workspace Provider 与 Actr Facility Provider 不是同一概念。 |

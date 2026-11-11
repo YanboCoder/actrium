@@ -112,7 +112,8 @@ Actr Host 可以为 Guest 提供证据或作为验证者签发 `ActorAssurance`�
 
 ## 6. 声明是输入
 
-`.actr` Manifest 的 `[actrium.privacy]` 与 Native Capsule profile 仍是待验证输入，不是结论。Actr Host 必须对照 imports、实际能力、实际边。发现未声明且可能行使的出口：确认则可红，无法确认则黄。
+Program Privacy Contract 与 Native Capsule profile 提供验证输入。Actr Host 对照 imports、实际能力和实际边。
+未声明且可能使用的出口在确认时判红，无法确认时判黄。
 
 ## 7. 谁签发结论
 

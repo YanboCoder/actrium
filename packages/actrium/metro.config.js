@@ -48,7 +48,6 @@ const customConfig = {
     extraNodeModules: {
       react: path.resolve(projectNodeModules, 'react'),
       'react-native': path.resolve(projectNodeModules, 'react-native'),
-      'react-native-webview': path.resolve(projectNodeModules, 'react-native-webview'),
       'react-reconciler': path.resolve(projectNodeModules, 'react-reconciler'),
     },
     resolveRequest: (context, moduleName, platform) => {
@@ -83,16 +82,6 @@ const customConfig = {
         };
       }
 
-      if (platform === 'macos' && moduleName === 'react-native-safe-area-context') {
-        return {
-          type: 'sourceFile',
-          filePath: path.resolve(
-            projectRoot,
-            'src/runtime-host/shims/react-native-safe-area-context.js',
-          ),
-        };
-      }
-
       const localModules = {
         keel: path.resolve(keelRoot, 'src/host/index.ts'),
         'keel/host': path.resolve(keelRoot, 'src/host/index.ts'),
@@ -115,13 +104,6 @@ const customConfig = {
         return {
           type: 'sourceFile',
           filePath: path.resolve(projectNodeModules, singletonModules[moduleName]),
-        };
-      }
-
-      if (moduleName === 'react-native-webview') {
-        return {
-          type: 'sourceFile',
-          filePath: path.resolve(projectNodeModules, 'react-native-webview/src/index.ts'),
         };
       }
 

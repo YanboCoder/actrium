@@ -8,6 +8,11 @@ struct ContentView: View {
     @State private var isSending = false
     @State private var observedBackground = false
     @State private var foregroundCycle = 0
+    @State private var showMembership = false
+    @State private var providerId = ""
+    @State private var realmInvite = ""
+    @State private var revokeKeyId = ""
+    @State private var confirmReset = false
 
     private let lifecycleE2EEnabled =
         ProcessInfo.processInfo.environment["ACTR_ECHOAPP_LIFECYCLE_E2E"] == "1"
@@ -20,6 +25,8 @@ struct ContentView: View {
             Text(actrService.status)
                 .font(.footnote)
                 .foregroundStyle(actrService.isReady ? Color.green : Color.secondary)
+
+            Button("Realm membership") { showMembership = true }
 
             TextField("Message", text: $input)
                 .textFieldStyle(.roundedBorder)
@@ -52,6 +59,39 @@ struct ContentView: View {
             Spacer()
         }
         .padding(24)
+        .sheet(isPresented: $showMembership, onDismiss: {
+            realmInvite = ""
+            actrService.invitationForDevice = ""
+            Task { await actrService.startIfNeeded() }
+        }) {
+            Form {
+                TextField("Trusted provider ID", text: $providerId)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                SecureField("One-time invitation", text: $realmInvite)
+                    .privacySensitive()
+                Button("Join / retry") {
+                    Task {
+                        await actrService.manageMembership("join", invite: realmInvite, provider: providerId, target: "")
+                        if actrService.membershipStatus.hasPrefix("Joined.") { realmInvite = "" }
+                    }
+                }
+                Button("Restore / list devices") { membershipAction("list") }
+                Button("Invite another device") { membershipAction("invite") }
+                if !actrService.invitationForDevice.isEmpty {
+                    Text(actrService.invitationForDevice).privacySensitive().textSelection(.enabled)
+                }
+                TextField("Client key ID (empty = this device)", text: $revokeKeyId)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                Button("Revoke client", role: .destructive) { membershipAction("revoke") }
+                Button("New identity after revocation", role: .destructive) { confirmReset = true }
+                Text(actrService.membershipStatus).font(.footnote)
+                Button("Done") { showMembership = false }
+            }
+            .disabled(actrService.membershipBusy)
+            .confirmationDialog("Discard this device's identity? A new invitation is required.", isPresented: $confirmReset) {
+                Button("Reset identity", role: .destructive) { membershipAction("reset") }
+            }
+        }
         .task {
             await actrService.startIfNeeded()
             if actrService.shouldAutoSend() && !input.isEmpty {
@@ -59,6 +99,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background { realmInvite = ""; actrService.invitationForDevice = "" }
             guard lifecycleE2EEnabled else { return }
 
             switch phase {
@@ -77,6 +118,10 @@ struct ContentView: View {
                 break
             }
         }
+    }
+
+    private func membershipAction(_ operation: String) {
+        Task { await actrService.manageMembership(operation, invite: "", provider: providerId, target: revokeKeyId) }
     }
 
     private func sendEcho(_ message: String? = nil) async {

@@ -37,6 +37,9 @@ url = "2.5"
 async-trait = "0.1"
 parking_lot = "0.12"
 futures-util = "0.3.31"
+ed25519-dalek.workspace = true
+rand.workspace = true
+zeroize = "1.8"
 opus = "0.4.0"
 opusic-sys = { version = "0.7.3", features = ["bundled"] }
 

@@ -1,7 +1,18 @@
-/**
- * Unified App - usePanels Hook Mode
- * with CounterMacOS Same mode, direct export usePanels hook
- *
- * @version 4.0.0 - Export usePanels hook directly (same as CounterMacOS)
- */
-export { usePanels } from './panels';
+import { Text, View } from 'keel/guest';
+
+export default function CounterApp() {
+  return (
+    <View
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#ffffff',
+      }}
+    >
+      <Text style={{ fontSize: 32, fontWeight: '600', color: '#1a1a1a' }}>
+        Counter
+      </Text>
+    </View>
+  );
+}

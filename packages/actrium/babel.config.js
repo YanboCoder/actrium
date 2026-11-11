@@ -6,7 +6,6 @@ module.exports = function(api) {
     plugins: [
       // Source location only in non-production settings
       !isProd && './babel-plugin-function-source-location.js',
-      'react-native-reanimated/plugin',
     ].filter(Boolean),
   };
 };

@@ -629,6 +629,12 @@ internal interface UniffiCallbackInterfaceMediaTrackCallbackMethod0 : com.sun.jn
 internal interface UniffiCallbackInterfaceLogCallbackMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`level`: RustBuffer.ByValue,`target`: RustBuffer.ByValue,`message`: RustBuffer.ByValue,`timestampMs`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceRealmClientSignerMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceRealmClientSignerMethod1 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`payload`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceRtcPeerStateListenerMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`state`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
@@ -740,6 +746,28 @@ internal open class UniffiVTableCallbackInterfaceLogCallback(
         `uniffiFree` = other.`uniffiFree`
         `uniffiClone` = other.`uniffiClone`
         `onLog` = other.`onLog`
+    }
+
+}
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "publicKey", "sign")
+internal open class UniffiVTableCallbackInterfaceRealmClientSigner(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `publicKey`: UniffiCallbackInterfaceRealmClientSignerMethod0? = null,
+    @JvmField internal var `sign`: UniffiCallbackInterfaceRealmClientSignerMethod1? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `publicKey`: UniffiCallbackInterfaceRealmClientSignerMethod0? = null,
+        `sign`: UniffiCallbackInterfaceRealmClientSignerMethod1? = null,
+    ): UniffiVTableCallbackInterfaceRealmClientSigner(`uniffiFree`,`uniffiClone`,`publicKey`,`sign`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceRealmClientSigner) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `publicKey` = other.`publicKey`
+        `sign` = other.`sign`
     }
 
 }
@@ -947,6 +975,14 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_actr_checksum_func_set_log_callback(
     ): Short
+    external fun uniffi_actr_checksum_func_read_realm_runtime_configuration(
+    ): Short
+    external fun uniffi_actr_checksum_func_realm_key_generate_seed(
+    ): Short
+    external fun uniffi_actr_checksum_func_realm_key_public(
+    ): Short
+    external fun uniffi_actr_checksum_func_realm_key_sign(
+    ): Short
     external fun uniffi_actr_checksum_func_resolve_manifest_dependency(
     ): Short
     external fun uniffi_actr_checksum_func_resolve_manifest_dependency_alias_list(
@@ -995,6 +1031,18 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_actr_checksum_method_opusencoder_frame_size(
     ): Short
+    external fun uniffi_actr_checksum_method_realmmembership_invite_client(
+    ): Short
+    external fun uniffi_actr_checksum_method_realmmembership_join(
+    ): Short
+    external fun uniffi_actr_checksum_method_realmmembership_key_id(
+    ): Short
+    external fun uniffi_actr_checksum_method_realmmembership_members(
+    ): Short
+    external fun uniffi_actr_checksum_method_realmmembership_revoke_client(
+    ): Short
+    external fun uniffi_actr_checksum_method_realmmembership_revoke_invite(
+    ): Short
     external fun uniffi_actr_checksum_method_actrnode_create_network_event_handle(
     ): Short
     external fun uniffi_actr_checksum_method_actrnode_start(
@@ -1031,9 +1079,15 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_actr_checksum_constructor_opusencoder_new(
     ): Short
+    external fun uniffi_actr_checksum_constructor_realmmembership_new(
+    ): Short
     external fun uniffi_actr_checksum_constructor_actrnode_new_from_linked_workload(
     ): Short
+    external fun uniffi_actr_checksum_constructor_actrnode_new_from_linked_workload_with_membership(
+    ): Short
     external fun uniffi_actr_checksum_constructor_actrnode_new_from_package_file(
+    ): Short
+    external fun uniffi_actr_checksum_constructor_actrnode_new_from_package_file_with_membership(
     ): Short
     external fun uniffi_actr_checksum_constructor_actrnode_new_from_package_file_with_observers(
     ): Short
@@ -1046,6 +1100,10 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_actr_checksum_method_mediatrackcallback_on_sample(
     ): Short
     external fun uniffi_actr_checksum_method_logcallback_on_log(
+    ): Short
+    external fun uniffi_actr_checksum_method_realmclientsigner_public_key(
+    ): Short
+    external fun uniffi_actr_checksum_method_realmclientsigner_sign(
     ): Short
     external fun uniffi_actr_checksum_method_rtcpeerstatelistener_on_state(
     ): Short
@@ -1106,6 +1164,7 @@ internal object UniffiLib {
         uniffiCallbackInterfaceLogCallback.register(this)
         uniffiCallbackInterfaceMailboxObserverBridge.register(this)
         uniffiCallbackInterfaceMediaTrackCallback.register(this)
+        uniffiCallbackInterfaceRealmClientSigner.register(this)
         uniffiCallbackInterfaceRtcPeerStateListener.register(this)
         uniffiCallbackInterfaceSignalingObserverBridge.register(this)
         uniffiCallbackInterfaceWebRtcObserverBridge.register(this)
@@ -1165,13 +1224,35 @@ external fun uniffi_actr_fn_method_opusencoder_encode(`ptr`: Long,`pcm`: RustBuf
 ): RustBuffer.ByValue
 external fun uniffi_actr_fn_method_opusencoder_frame_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
+external fun uniffi_actr_fn_clone_realmmembership(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_actr_fn_free_realmmembership(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_actr_fn_constructor_realmmembership_new(`realm`: RustBuffer.ByValue,`providerId`: RustBuffer.ByValue,`issuer`: RustBuffer.ByValue,`signer`: Long,`allowInsecureDevelopment`: Byte,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_actr_fn_method_realmmembership_invite_client(`ptr`: Long,`memberId`: RustBuffer.ByValue,`expiresAt`: RustBuffer.ByValue,
+): Long
+external fun uniffi_actr_fn_method_realmmembership_join(`ptr`: Long,`invite`: RustBuffer.ByValue,`label`: RustBuffer.ByValue,
+): Long
+external fun uniffi_actr_fn_method_realmmembership_key_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_actr_fn_method_realmmembership_members(`ptr`: Long,
+): Long
+external fun uniffi_actr_fn_method_realmmembership_revoke_client(`ptr`: Long,`keyId`: RustBuffer.ByValue,
+): Long
+external fun uniffi_actr_fn_method_realmmembership_revoke_invite(`ptr`: Long,`inviteId`: RustBuffer.ByValue,
+): Long
 external fun uniffi_actr_fn_clone_actrnode(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_actr_fn_free_actrnode(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_actr_fn_constructor_actrnode_new_from_linked_workload(`configPath`: RustBuffer.ByValue,`actorType`: RustBuffer.ByValue,`workload`: Long,
 ): Long
+external fun uniffi_actr_fn_constructor_actrnode_new_from_linked_workload_with_membership(`configPath`: RustBuffer.ByValue,`actorType`: RustBuffer.ByValue,`workload`: Long,`membership`: Long,
+): Long
 external fun uniffi_actr_fn_constructor_actrnode_new_from_package_file(`configPath`: RustBuffer.ByValue,`packagePath`: RustBuffer.ByValue,
+): Long
+external fun uniffi_actr_fn_constructor_actrnode_new_from_package_file_with_membership(`configPath`: RustBuffer.ByValue,`packagePath`: RustBuffer.ByValue,`membership`: Long,`observers`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_actr_fn_constructor_actrnode_new_from_package_file_with_observers(`configPath`: RustBuffer.ByValue,`packagePath`: RustBuffer.ByValue,`observers`: Long,
 ): Long
@@ -1239,6 +1320,8 @@ external fun uniffi_actr_fn_init_callback_vtable_mediatrackcallback(`vtable`: Un
 ): Unit
 external fun uniffi_actr_fn_init_callback_vtable_logcallback(`vtable`: UniffiVTableCallbackInterfaceLogCallback,
 ): Unit
+external fun uniffi_actr_fn_init_callback_vtable_realmclientsigner(`vtable`: UniffiVTableCallbackInterfaceRealmClientSigner,
+): Unit
 external fun uniffi_actr_fn_init_callback_vtable_rtcpeerstatelistener(`vtable`: UniffiVTableCallbackInterfaceRtcPeerStateListener,
 ): Unit
 external fun uniffi_actr_fn_init_callback_vtable_credentialobserverbridge(`vtable`: UniffiVTableCallbackInterfaceCredentialObserverBridge,
@@ -1265,6 +1348,14 @@ external fun uniffi_actr_fn_func_actr_error_throw_for_test(`err`: RustBuffer.ByV
 ): Unit
 external fun uniffi_actr_fn_func_set_log_callback(`callback`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
+external fun uniffi_actr_fn_func_read_realm_runtime_configuration(`configPath`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_actr_fn_func_realm_key_generate_seed(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_actr_fn_func_realm_key_public(`seed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_actr_fn_func_realm_key_sign(`seed`: RustBuffer.ByValue,`payload`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_actr_fn_func_resolve_manifest_dependency(`manifestPath`: RustBuffer.ByValue,`dependencyAlias`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_actr_fn_func_resolve_manifest_dependency_alias_list(`manifestPath`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1408,6 +1499,18 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_actr_checksum_func_set_log_callback() != 22627.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_actr_checksum_func_read_realm_runtime_configuration() != 20932.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_func_realm_key_generate_seed() != 2624.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_func_realm_key_public() != 7272.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_func_realm_key_sign() != 45437.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_actr_checksum_func_resolve_manifest_dependency() != 47641.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1480,6 +1583,24 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_actr_checksum_method_opusencoder_frame_size() != 18284.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_actr_checksum_method_realmmembership_invite_client() != 11104.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_method_realmmembership_join() != 21424.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_method_realmmembership_key_id() != 15245.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_method_realmmembership_members() != 26733.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_method_realmmembership_revoke_client() != 20506.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_method_realmmembership_revoke_invite() != 17822.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_actr_checksum_method_actrnode_create_network_event_handle() != 40057.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1534,10 +1655,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_actr_checksum_constructor_opusencoder_new() != 34824.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_actr_checksum_constructor_realmmembership_new() != 44088.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_actr_checksum_constructor_actrnode_new_from_linked_workload() != 10568.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_actr_checksum_constructor_actrnode_new_from_linked_workload_with_membership() != 32680.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_actr_checksum_constructor_actrnode_new_from_package_file() != 59585.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_constructor_actrnode_new_from_package_file_with_membership() != 42690.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_actr_checksum_constructor_actrnode_new_from_package_file_with_observers() != 60905.toShort()) {
@@ -1556,6 +1686,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_actr_checksum_method_logcallback_on_log() != 3599.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_method_realmclientsigner_public_key() != 48657.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_actr_checksum_method_realmclientsigner_sign() != 48648.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_actr_checksum_method_rtcpeerstatelistener_on_state() != 27684.toShort()) {
@@ -2459,6 +2595,25 @@ open class ActrNode: Disposable, AutoCloseable, ActrNodeInterface
 
         
     /**
+     * Linked workloads use the same platform signer for their full credential lifecycle.
+     */
+    @Throws(ActrException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `newFromLinkedWorkloadWithMembership`(`configPath`: kotlin.String, `actorType`: ActrType, `workload`: DynamicWorkload, `membership`: RealmMembership) : ActrNode {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_actr_fn_constructor_actrnode_new_from_linked_workload_with_membership(FfiConverterString.lower(`configPath`),FfiConverterTypeActrType.lower(`actorType`),FfiConverterTypeDynamicWorkload.lower(`workload`),FfiConverterTypeRealmMembership.lower(`membership`),),
+        { future, callback, continuation -> UniffiLib.ffi_actr_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_actr_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_actr_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeActrNode.lift(it) },
+        // Error FFI converter
+        ActrException.ErrorHandler,
+    )
+    }
+
+
+    /**
      * Create a new runtime wrapper from config and a verified `.actr` package file.
      */
     @Throws(ActrException::class)
@@ -2477,6 +2632,25 @@ open class ActrNode: Disposable, AutoCloseable, ActrNodeInterface
     }
 
         
+    /**
+     * Create a package-backed runtime using an OS-managed Realm identity.
+     */
+    @Throws(ActrException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `newFromPackageFileWithMembership`(`configPath`: kotlin.String, `packagePath`: kotlin.String, `membership`: RealmMembership, `observers`: RuntimeObservers?) : ActrNode {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_actr_fn_constructor_actrnode_new_from_package_file_with_membership(FfiConverterString.lower(`configPath`),FfiConverterString.lower(`packagePath`),FfiConverterTypeRealmMembership.lower(`membership`),FfiConverterOptionalTypeRuntimeObservers.lower(`observers`),),
+        { future, callback, continuation -> UniffiLib.ffi_actr_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_actr_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_actr_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeActrNode.lift(it) },
+        // Error FFI converter
+        ActrException.ErrorHandler,
+    )
+    }
+
+
     /**
      * Create a package-backed runtime and install host-side observers.
      */
@@ -4921,12 +5095,397 @@ public object FfiConverterTypeOpusEncoder: FfiConverter<OpusEncoder, Long> {
 //
 
 
+public interface RealmMembershipInterface {
+
+    suspend fun `inviteClient`(`memberId`: kotlin.String, `expiresAt`: kotlin.String): kotlin.String
+
+    /**
+     * JSON uses the existing membership wire format. Errors retain its
+     * stable codes without exposing a server/gateway response body.
+     */
+    suspend fun `join`(`invite`: kotlin.String, `label`: kotlin.String): kotlin.String
+
+    fun `keyId`(): kotlin.String
+
+    suspend fun `members`(): kotlin.String
+
+    suspend fun `revokeClient`(`keyId`: kotlin.String): kotlin.String
+
+    suspend fun `revokeInvite`(`inviteId`: kotlin.String): kotlin.String
+    
+    companion object
+}
+
+open class RealmMembership: Disposable, AutoCloseable, RealmMembershipInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    /**
+     * Supply endpoints from an accepted Realm Profile, or explicitly chosen
+     * development configuration. This constructor does not establish domain trust.
+     */
+    constructor(`realm`: kotlin.String, `providerId`: kotlin.String, `issuer`: kotlin.String, `signer`: RealmClientSigner, `allowInsecureDevelopment`: kotlin.Boolean) :
+        this(UniffiWithHandle,
+    uniffiRustCallWithError(RealmMembershipException) { _status ->
+    UniffiLib.uniffi_actr_fn_constructor_realmmembership_new(
+
+        FfiConverterString.lower(`realm`),FfiConverterString.lower(`providerId`),FfiConverterString.lower(`issuer`),FfiConverterTypeRealmClientSigner.lower(`signer`),FfiConverterBoolean.lower(`allowInsecureDevelopment`),_status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_actr_fn_free_realmmembership(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_actr_fn_clone_realmmembership(handle, status)
+        }
+    }
+
+    
+    @Throws(RealmMembershipException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `inviteClient`(`memberId`: kotlin.String, `expiresAt`: kotlin.String) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_actr_fn_method_realmmembership_invite_client(
+                uniffiHandle,
+                FfiConverterString.lower(`memberId`),FfiConverterString.lower(`expiresAt`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_actr_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_actr_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_actr_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        RealmMembershipException.ErrorHandler,
+    )
+    }
+
+
+    /**
+     * JSON uses the existing membership wire format. Errors retain its
+     * stable codes without exposing a server/gateway response body.
+     */
+    @Throws(RealmMembershipException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `join`(`invite`: kotlin.String, `label`: kotlin.String) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_actr_fn_method_realmmembership_join(
+                uniffiHandle,
+                FfiConverterString.lower(`invite`),FfiConverterString.lower(`label`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_actr_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_actr_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_actr_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        RealmMembershipException.ErrorHandler,
+    )
+    }
+
+    override fun `keyId`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_actr_fn_method_realmmembership_key_id(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(RealmMembershipException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `members`() : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_actr_fn_method_realmmembership_members(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_actr_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_actr_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_actr_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        RealmMembershipException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(RealmMembershipException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `revokeClient`(`keyId`: kotlin.String) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_actr_fn_method_realmmembership_revoke_client(
+                uniffiHandle,
+                FfiConverterString.lower(`keyId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_actr_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_actr_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_actr_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        RealmMembershipException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(RealmMembershipException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `revokeInvite`(`inviteId`: kotlin.String) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_actr_fn_method_realmmembership_revoke_invite(
+                uniffiHandle,
+                FfiConverterString.lower(`inviteId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_actr_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_actr_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_actr_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        RealmMembershipException.ErrorHandler,
+    )
+    }
+
+
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRealmMembership: FfiConverter<RealmMembership, Long> {
+    override fun lower(value: RealmMembership): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): RealmMembership {
+        return RealmMembership(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): RealmMembership {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: RealmMembership) = 8UL
+
+    override fun write(value: RealmMembership, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 /**
  * A live WebRTC peer-status subscription. Dropping
  * it aborts the delivery task.
  */
 public interface RtcPeerStateSubscriptionInterface {
-    
+
     companion object
 }
 
@@ -5030,18 +5589,18 @@ open class RtcPeerStateSubscription: Disposable, AutoCloseable, RtcPeerStateSubs
         }
     }
 
-    
-
-    
 
 
-    
-    
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -5173,7 +5732,7 @@ public object FfiConverterTypeRtcPeerStateSubscription: FfiConverter<RtcPeerStat
  * while the package guest continues to own actor dispatch.
  */
 public interface RuntimeObserversInterface {
-    
+
     companion object
 }
 
@@ -5213,7 +5772,7 @@ open class RuntimeObservers: Disposable, AutoCloseable, RuntimeObserversInterfac
      * Construct host-side observers for a package-backed runtime.
      */
     constructor(`signaling`: SignalingObserverBridge?, `websocket`: WebSocketObserverBridge?, `webrtc`: WebRtcObserverBridge?, `credential`: CredentialObserverBridge?, `mailbox`: MailboxObserverBridge?) :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_actr_fn_constructor_runtimeobservers_new(
     
@@ -5982,6 +6541,44 @@ public object FfiConverterTypePeerEventBridge: FfiConverterRustBuffer<PeerEventB
             FfiConverterTypeActrId.write(value.`peer`, buf)
             FfiConverterOptionalBoolean.write(value.`relayed`, buf)
             FfiConverterOptionalTypeWebRtcPeerStatusBridge.write(value.`status`, buf)
+    }
+}
+
+
+
+data class RealmRuntimeConfiguration (
+    var `realm`: kotlin.String
+    ,
+    var `issuer`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRealmRuntimeConfiguration: FfiConverterRustBuffer<RealmRuntimeConfiguration> {
+    override fun read(buf: ByteBuffer): RealmRuntimeConfiguration {
+        return RealmRuntimeConfiguration(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RealmRuntimeConfiguration) = (
+            FfiConverterString.allocationSize(value.`realm`) +
+            FfiConverterString.allocationSize(value.`issuer`)
+    )
+
+    override fun write(value: RealmRuntimeConfiguration, buf: ByteBuffer) {
+            FfiConverterString.write(value.`realm`, buf)
+            FfiConverterString.write(value.`issuer`, buf)
     }
 }
 
@@ -7021,6 +7618,124 @@ public object FfiConverterTypePayloadType: FfiConverterRustBuffer<PayloadType> {
 
 
 
+
+sealed class RealmMembershipException: kotlin.Exception() {
+
+    class InvalidInput(
+
+        val `reason`: kotlin.String
+        ) : RealmMembershipException() {
+        override val message
+            get() = "reason=${ `reason` }"
+    }
+
+    class Rejected(
+
+        val `status`: kotlin.UShort,
+
+        val `code`: kotlin.String
+        ) : RealmMembershipException() {
+        override val message
+            get() = "status=${ `status` }, code=${ `code` }"
+    }
+
+    class Uncertain(
+        ) : RealmMembershipException() {
+        override val message
+            get() = ""
+    }
+
+    class KeyUnavailable(
+        ) : RealmMembershipException() {
+        override val message
+            get() = ""
+    }
+
+
+
+
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<RealmMembershipException> {
+        override fun lift(error_buf: RustBuffer.ByValue): RealmMembershipException = FfiConverterTypeRealmMembershipError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRealmMembershipError : FfiConverterRustBuffer<RealmMembershipException> {
+    override fun read(buf: ByteBuffer): RealmMembershipException {
+
+
+        return when(buf.getInt()) {
+            1 -> RealmMembershipException.InvalidInput(
+                FfiConverterString.read(buf),
+                )
+            2 -> RealmMembershipException.Rejected(
+                FfiConverterUShort.read(buf),
+                FfiConverterString.read(buf),
+                )
+            3 -> RealmMembershipException.Uncertain()
+            4 -> RealmMembershipException.KeyUnavailable()
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: RealmMembershipException): ULong {
+        return when(value) {
+            is RealmMembershipException.InvalidInput -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`reason`)
+            )
+            is RealmMembershipException.Rejected -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterUShort.allocationSize(value.`status`)
+                + FfiConverterString.allocationSize(value.`code`)
+            )
+            is RealmMembershipException.Uncertain -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is RealmMembershipException.KeyUnavailable -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: RealmMembershipException, buf: ByteBuffer) {
+        when(value) {
+            is RealmMembershipException.InvalidInput -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`reason`, buf)
+                Unit
+            }
+            is RealmMembershipException.Rejected -> {
+                buf.putInt(2)
+                FfiConverterUShort.write(value.`status`, buf)
+                FfiConverterString.write(value.`code`, buf)
+                Unit
+            }
+            is RealmMembershipException.Uncertain -> {
+                buf.putInt(3)
+                Unit
+            }
+            is RealmMembershipException.KeyUnavailable -> {
+                buf.putInt(4)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+
 enum class ReconnectReason {
     
     NETWORK_PATH_CHANGED,
@@ -7649,6 +8364,94 @@ internal object uniffiCallbackInterfaceMediaTrackCallback {
  * @suppress
  */
 public object FfiConverterTypeMediaTrackCallback: FfiConverterCallbackInterface<MediaTrackCallback>()
+
+
+
+
+
+/**
+ * Retain the private key in platform storage. The platform implementation
+ * signs JCS payloads and returns a raw Ed25519 signature (64 bytes).
+ */
+public interface RealmClientSigner {
+
+    fun `publicKey`(): kotlin.ByteArray
+
+    fun `sign`(`payload`: kotlin.ByteArray): kotlin.ByteArray
+
+    companion object
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceRealmClientSigner {
+    internal object `publicKey`: UniffiCallbackInterfaceRealmClientSignerMethod0 {
+        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeRealmClientSigner.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`publicKey`(
+                )
+            }
+            val writeReturn = { value: kotlin.ByteArray -> uniffiOutReturn.setValue(FfiConverterByteArray.lower(value)) }
+            uniffiTraitInterfaceCallWithError(
+                uniffiCallStatus,
+                makeCall,
+                writeReturn,
+                { e: RealmMembershipException -> FfiConverterTypeRealmMembershipError.lower(e) }
+            )
+        }
+    }
+    internal object `sign`: UniffiCallbackInterfaceRealmClientSignerMethod1 {
+        override fun callback(`uniffiHandle`: Long,`payload`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeRealmClientSigner.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`sign`(
+                    FfiConverterByteArray.lift(`payload`),
+                )
+            }
+            val writeReturn = { value: kotlin.ByteArray -> uniffiOutReturn.setValue(FfiConverterByteArray.lower(value)) }
+            uniffiTraitInterfaceCallWithError(
+                uniffiCallStatus,
+                makeCall,
+                writeReturn,
+                { e: RealmMembershipException -> FfiConverterTypeRealmMembershipError.lower(e) }
+            )
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeRealmClientSigner.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeRealmClientSigner.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceRealmClientSigner.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `publicKey`,
+        `sign`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_actr_fn_init_callback_vtable_realmclientsigner(vtable)
+    }
+}
+
+/**
+ * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
+ *
+ * @suppress
+ */
+public object FfiConverterTypeRealmClientSigner: FfiConverterCallbackInterface<RealmClientSigner>()
 
 
 
@@ -8676,6 +9479,38 @@ public object FfiConverterOptionalTypeRtcPeerStateSubscription: FfiConverterRust
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeRuntimeObservers: FfiConverterRustBuffer<RuntimeObservers?> {
+    override fun read(buf: ByteBuffer): RuntimeObservers? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeRuntimeObservers.read(buf)
+    }
+
+    override fun allocationSize(value: RuntimeObservers?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeRuntimeObservers.allocationSize(value)
+        }
+    }
+
+    override fun write(value: RuntimeObservers?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeRuntimeObservers.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeActrId: FfiConverterRustBuffer<ActrId?> {
     override fun read(buf: ByteBuffer): ActrId? {
         if (buf.get().toInt() == 0) {
@@ -9226,6 +10061,57 @@ public object FfiConverterSequenceTypeWebRtcPeerStateBridge: FfiConverterRustBuf
     
 
         /**
+         * Read public endpoint settings for an existing Host config. This does not
+         * discover or establish trust in a Realm or its provider.
+         */
+    @Throws(RealmMembershipException::class) fun `readRealmRuntimeConfiguration`(`configPath`: kotlin.String): RealmRuntimeConfiguration {
+            return FfiConverterTypeRealmRuntimeConfiguration.lift(
+    uniffiRustCallWithError(RealmMembershipException) { _status ->
+    UniffiLib.uniffi_actr_fn_func_read_realm_runtime_configuration(
+
+        FfiConverterString.lower(`configPath`),_status)
+}
+    )
+    }
+
+
+        /**
+         * Software Ed25519 fallback for platforms whose secure hardware only
+         * supports other curves. Callers must wrap this seed before persisting it.
+         */ fun `realmKeyGenerateSeed`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_actr_fn_func_realm_key_generate_seed(
+
+        _status)
+}
+    )
+    }
+
+
+    @Throws(RealmMembershipException::class) fun `realmKeyPublic`(`seed`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(RealmMembershipException) { _status ->
+    UniffiLib.uniffi_actr_fn_func_realm_key_public(
+
+        FfiConverterByteArray.lower(`seed`),_status)
+}
+    )
+    }
+
+
+    @Throws(RealmMembershipException::class) fun `realmKeySign`(`seed`: kotlin.ByteArray, `payload`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(RealmMembershipException) { _status ->
+    UniffiLib.uniffi_actr_fn_func_realm_key_sign(
+
+        FfiConverterByteArray.lower(`seed`),FfiConverterByteArray.lower(`payload`),_status)
+}
+    )
+    }
+
+
+        /**
          * Resolve a dependency's ActrType from a manifest.toml file.
          *
          * Parses the manifest, looks up the dependency by alias, and returns its
@@ -9280,4 +10166,3 @@ public object FfiConverterSequenceTypeWebRtcPeerStateBridge: FfiConverterRustBuf
 }
     )
     }
-    

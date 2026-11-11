@@ -56,6 +56,8 @@ signer = { path = "../loran-signer", package = "loran-signer", version = "0.10.7
 loran-publisher-registry = { path = "../loran-publisher-registry", version = "0.10.7" }
 
 [dev-dependencies]
+actr-hyper = { workspace = true }
+actr-mock-loran = { workspace = true }
 turn = { path = "../loran-turn", package = "loran-turn", version = "0.10.7" }
 turn_crate = { workspace = true }
 tempfile = { workspace = true }

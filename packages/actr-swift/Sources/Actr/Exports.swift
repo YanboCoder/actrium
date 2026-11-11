@@ -69,3 +69,8 @@ public func runtimeObservers(
         mailbox: mailbox
     )
 }
+
+/// Public endpoint settings only; domain trust is established by the caller.
+public func readRealmRuntimeConfiguration(configPath: String) throws -> RealmRuntimeConfiguration {
+    try ActrBindings.readRealmRuntimeConfiguration(configPath: configPath)
+}

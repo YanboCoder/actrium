@@ -192,8 +192,8 @@ export const StandaloneGuestApp: React.FC<Props> = ({
       engine.destroy();
     };
   }, [
-    containerHeight,
-    containerWidth,
+    // Do not recreate the engine on window resize. The first layout size is
+    // enough for the guest bundle, and RN handles later size changes.
     guestScript,
     hasActorCallPermission,
     tab.id,
@@ -210,17 +210,19 @@ export const StandaloneGuestApp: React.FC<Props> = ({
   }
 
   return (
-    content ?? (
-      <NativeView
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#101827',
-        }}
-      >
-        <NativeActivityIndicator color='#60a5fa' />
-      </NativeView>
-    )
+    <NativeView style={{ flex: 1 }}>
+      {content ?? (
+        <NativeView
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#101827',
+          }}
+        >
+          <NativeActivityIndicator color='#60a5fa' />
+        </NativeView>
+      )}
+    </NativeView>
   );
 };

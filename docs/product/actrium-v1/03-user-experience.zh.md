@@ -21,7 +21,7 @@ Actrium Shell
 - Marketplace 收藏或推荐；
 - Publisher 直接来源；
 - 本地导入和开发程序；
-- 每个程序已知版本、digest、来源与更新状态。
+- 每个程序的已知版本、Service 和 Front 包摘要、来源与更新状态。
 
 ### 1.2 Service Inventory
 
@@ -53,7 +53,7 @@ Program 与 Service 必须在 UI 和数据模型中分开。安装一个程序�
 
 - 当前应用保障：绿 / 黄 / 红，或正在重新验证；
 - Publisher 域名及 verified/development/revoked 状态；
-- 当前 package digest 的短指纹；
+- 分别标明 Service 和 Front 角色的包摘要短指纹。
 - Realm 名及其 Realm 域名；Realm 域名等于或属于 Actr Facility Provider ID 时标明信任根是该 Actr Facility Provider，否则信任根是该 Realm 域名；
 - Service 连接状态：local、P2P、TURN relayed、offline；
 - 当前权限是否有高风险授权。
@@ -87,9 +87,9 @@ Actrium 首次启动完成以下配置：
 ### 4.1 从 Marketplace
 
 1. 用户打开程序详情；
-2. Actrium 显示 Publisher、版本、digest、权限、Workspace 模式和市场审核状态；
-3. Actrium 按 Marketplace 或 Publisher 给出的包地址下载 `.actr`；
-4. 校验 HTTPS、Publisher key、包签名、digest、兼容性和压缩包限制；
+2. Actrium 显示 Publisher、版本、两个包的摘要、权限、Workspace 要求和市场审核状态。
+3. Actrium 取得并验证 Publisher 签名的 Program Release 记录。
+4. 按发布记录验证两个包的身份、签名、摘要、兼容性和压缩包限制。
 5. 记录 Program Release；
 6. 只缓存程序，不自动创建 Service，除非用户点击「创建实例」。
 
@@ -97,13 +97,13 @@ Actrium 首次启动完成以下配置：
 
 ### 4.2 打开链接时
 
-包尚未安装时按 [04 §3](04-uri-and-resolution.zh.md) 处理：先确认、再下载验证；取消则不产生 Service 或 Front Actor。
+发布版本尚未安装时按 [04 §3](04-uri-and-resolution.zh.md) 处理。用户确认后，验证匹配的发布记录和两个包。用户取消时，在创建 Actor 前结束安装。
 
 ### 4.3 本地导入
 
-本地 `.actr` 包：
+本地导入接受配套的 Service 与 Front `.actr` 文件。导入已发布的版本时，两个包必须匹配已验证的发布记录。
 
-- 仍必须通过结构、hash 和签名检查；
+- 每个归档都必须通过结构、哈希和签名检查。
 - 签名 key 不属于已验证域名时标记为「本地开发身份」；
 - 不得占用同名 verified Publisher 的可信记录；
 - 不自动同步到其他设备；
@@ -122,21 +122,21 @@ sequenceDiagram
     participant S as Service
     participant F as Front Actor
 
-    U->>A: 在 Program Catalog 点「创建实例」（或导入包、输入包地址）
-    A->>P: 下载并验证包
-    P-->>A: package digest + manifest
+    U->>A: 选择发布版本或导入配套的 Service 和 Front 包
+    A->>P: 验证发布记录和两个包
+    P-->>A: 已验证的发布记录和两份清单
     A->>U: 权限、Realm 域名与 RealmId、Workspace 确认
     U-->>A: 确认创建
-    A->>M: Create(idempotency_key, package, workspace, domain, realm_id, display_name)
+    A->>M: Create(idempotency_key, verified_release, workspace, domain, realm_id, display_name)
     M->>M: 取得 Realm 签名 key 持有方授权
     M->>M: Actr Facility Provider 创建 pending Realm
-    M->>M: 签名 Realm Profile（含 package）并提交激活，Realm 变为 active
+    M->>M: 在 package 中写入已验证的 Service 包，签名并激活 Realm Profile
     M->>M: 兑换 owner 邀请，成为该 Realm 的 owner（取得 Realm membership）
     M->>S: 在新 Realm 内持久化身份并启动 Service
     S-->>M: stable ActorId
     M-->>A: Service record + ActorId
     A->>A: 地址栏换成新实例的 Realm 链接（replace）
-    A->>F: 启动固定 Native Front workload
+    A->>F: 按已验证清单创建 Front Actor
     F->>S: Attach handshake
     S-->>F: session lease + contract
     F->>F: 加载已验证 Keel Guest
@@ -159,13 +159,17 @@ RealmId 创建后不可修改；同一 Realm 域名内已用过的 RealmId 不�
 
 ### 5.3 Workspace 选择
 
-Manifest 必须分别声明三个维度，不能把它们压进一个枚举：
+已验证的 Service manifest 通过 `[workspace]` 声明应用的静态要求。
 
-- requirement：`none`、`optional` 或 `required`；
-- provisioning：`managed` 或 `user-selected`；
-- access：`read-only` 或 `read-write`。
+- `requirement` 取 `none`、`optional` 或 `required`。
+- `access` 申请 `read-only` 或 `read-write`。
+- `providers` 列出支持的 Workspace Provider 类型。
 
-它还可以限制允许的 Workspace Provider，例如 `managed-store`、`local-folder`、`cloud-drive` 或 `remote-repository`。`managed` 是配置方式，不是「是否需要 Workspace」；`read-only` 是访问模式，也不是生命周期模式。
+Actrium 将 `providers` 与平台支持范围、用户和组织策略取交集。
+部署或创建流程选择 `provisioning`，取值为 `managed` 或 `user-selected`。
+Host 按实例保存选定的 Provider、位置、实际授权和租约。
+`requirement = "required"` 时，绑定必须满足声明的访问要求，Service 才能进入 Ready。
+节点部署参数见[第 05 章 §6](05-program-package-and-distribution.zh.md#6-包清单字段)。
 
 选择器显示：
 
@@ -198,8 +202,8 @@ Manifest 必须分别声明三个维度，不能把它们压进一个枚举：
 
 1. 解析 Realm 链接，得到 Realm 名；
 2. 获取该域名的 Realm 签名 key 与 Realm Profile 并验证签名；
-3. 按 Realm Profile 的 `package` 确保包已安装且 digest 一致；
-4. 经 Realm Profile 指定的 Actr Facility Provider，在该 Realm 内找到 Actor 类型与包相同的 Service；
+3. 验证 Realm Profile 固定的 Service 包，以及匹配的发布记录固定的 Front 包。
+4. 经 Realm Profile 指定的 Actr Facility Provider，在该 Realm 内找到 Actor 类型与 Service 包匹配的 Service。
 5. 完成双方身份和 challenge 验证；
 6. 协商 Front–Service contract；
 7. 获取独占 lease；
@@ -313,7 +317,7 @@ Guest 崩溃不得自动重启 Service。Service 崩溃则显示单独状态，�
 - Publisher 域名；
 - 程序名和说明；
 - 已安装版本；
-- package digest；
+- Service 和 Front 包摘要。
 - Marketplace 来源和审核标记；
 - 权限摘要；
 - Workspace 模式；
@@ -321,9 +325,10 @@ Guest 崩溃不得自动重启 Service。Service 崩溃则显示单独状态，�
 - 更新、撤销、兼容性状态；
 - 「创建实例」「查看实例」「移除缓存」。
 
-「移除缓存」若仍有 Service 使用该 digest，应拒绝或保留运行所需副本。
+只要还有 Service 实例引用该发布版本，「移除缓存」就必须保留两个包。
 
-Program Catalog 只能显示 Release assurance（签名、digest、撤销、审核），不能预先宣称某个未来运行实例或整张应用图为绿。
+Program Catalog 显示 Release assurance，包括签名状态、两个包的摘要、撤销和审核信息。
+Actrium 在实例运行时评定 Application assurance。
 
 ## 10. Service Inventory 体验
 
@@ -391,9 +396,9 @@ Service Inventory 可以显示最后一次观察到的应用结论与时间，�
 
 开发者模式提供：
 
-- 导入本地 `.actr`；
-- 使用 localhost 或私有 CA 上的包地址（标记为开发来源）；
-- 查看 manifest、digest、contract 与 capability；
+- 导入配套的本地 Service 和 Front `.actr` 文件。
+- 使用 localhost 或私有 CA 上的两个包地址，标记为开发来源。
+- 查看各包的清单、摘要、契约和能力。
 - 热更新 Guest，但每次变更使用新的开发 digest；
 - 启动本机 Realm 与 Service；
 - 检查 Front–Service RPC；
@@ -490,10 +495,10 @@ actrium init
 → 编写 Keel Guest、Service Component 与 contract
 → build
 → validate（schema、capability、hash、沙箱兼容性）
-→ sign
+→ 分别签名 Front 包和 Service 包
 → 生成/更新 Publisher Profile
-→ 上传 package
-→ 按包地址回读，核对 digest 与签名
+→ 发布两个包及绑定其摘要的签名发布记录
+→ 回读两个包并核对 digest 与签名
 → 可选提交 Marketplace 审核
 ```
 

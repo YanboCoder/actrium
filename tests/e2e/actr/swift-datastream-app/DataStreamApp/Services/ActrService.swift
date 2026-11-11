@@ -98,6 +98,7 @@ final class ActrService: ObservableObject {
 
         do {
             let manifestURL = try materializeRuntimeConfig()
+            let membership = try await RealmEnrollment.membership(config: manifestURL.deletingLastPathComponent().appendingPathComponent("actr.toml"))
 
             // Read publisher domain from environment or use the local E2E identity.
             let publisher = ProcessInfo.processInfo.environment["ACTR_PUBLISHER"] ?? "e2e.actrium.example"
@@ -110,7 +111,7 @@ final class ActrService: ObservableObject {
 
             setLogCallback(callback: ActrLogHandler(service: self))
 
-            let node = try await Actr.ActrNode.linked(config: manifestURL, type: actorType, workload: workload)
+            let node = try await Actr.ActrNode.linked(config: manifestURL.path, type: actorType, workload: workload, mobileLifecycleObservers: [], membership: membership)
             let ref = try await node.start()
 
             actrNode = node

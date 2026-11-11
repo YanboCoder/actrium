@@ -3,7 +3,7 @@
 # Actrium Full Pipeline Test Script
 #
 # 1. Kill old processes
-# 2. Rebuild: keel guest-bundle -> runtime.jsbundle -> Actrium.app
+# 2. Rebuild: keel guest-bundle -> system.jsbundle -> Actrium.app
 # 3. Launch app, collect logs for N seconds
 # 4. Kill, parse & filter logs
 # 5. Generate categorised report
@@ -71,14 +71,14 @@ else
     exit 1
 fi
 
-# 2b. All jsbundles (system + actr — both share Engine.ts)
-info "Building runtime.jsbundle..."
-ACTR_OUT=$(cd "$ACTRIUM_DIR" && ./scripts/bundle-actrium-runtime.sh --target all 2>&1)
+# 2b. The single system jsbundle (Actr Guests share Engine.ts)
+info "Building system.jsbundle..."
+ACTR_OUT=$(cd "$ACTRIUM_DIR" && ./scripts/bundle-actrium-runtime.sh --target system 2>&1)
 if echo "$ACTR_OUT" | grep -q 'Done!'; then
     ACTR_SIZE=$(echo "$ACTR_OUT" | grep -oE 'Size: [0-9A-Za-z.]+' | head -1)
-    ok "runtime.jsbundle built ($ACTR_SIZE)"
+    ok "system.jsbundle built ($ACTR_SIZE)"
 else
-    fail "runtime.jsbundle build failed:"
+    fail "system.jsbundle build failed:"
     echo "$ACTR_OUT" | tail -15
     exit 1
 fi

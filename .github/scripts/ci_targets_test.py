@@ -7,6 +7,13 @@ import ci_targets
 
 
 class CiTargetsTest(unittest.TestCase):
+    def test_mobile_fixture_compile_regression_runs_the_rust_gate(self) -> None:
+        path = "scripts/actr/tests/test_mobile_fixture_cfg.py"
+        targets, reasons = ci_targets.detect_targets([path], full_run=False)
+
+        self.assertTrue(targets["rust_core"])
+        self.assertIn(f"mobile_fixture_cfg:{path}", reasons)
+
     def test_upstream_overrides_run_the_full_gate(self) -> None:
         for path in (
             "Cargo.toml",

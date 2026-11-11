@@ -82,6 +82,8 @@ jobs:
           fi
       - name: Test SDK error message generation
         run: python3 scripts/actr/tests/test_patch_error_messages.py
+      - name: Test mobile credential packaging gate
+        run: python3 scripts/actr/tests/test_check_mobile_assets.py
       - name: Validate GitHub-hosted runner policy
         run: |
           python -m pip install --disable-pip-version-check -r .github/scripts/runner-policy-requirements.txt
@@ -390,6 +392,8 @@ jobs:
         # path, not only in the manual-dispatch ci-rust.yml job, otherwise it
         # provides zero regression prevention for merges.
         run: bash .github/workflows/scripts/check-payload-logging.sh
+      - name: Test mobile Issuer fixture on a non-Unix target
+        run: python3 scripts/actr/tests/test_mobile_fixture_cfg.py
       - name: Install native build dependencies
         run: |
           if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists openssl || ! command -v cmake >/dev/null 2>&1; then

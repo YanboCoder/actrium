@@ -112,7 +112,9 @@ Not an Actor. Able to send without authorization: `UNCONTROLLED`. Policy require
 
 ## 6. Declarations are input
 
-The `.actr` Manifest's `[actrium.privacy]` and the Native Capsule profile are still input to be verified, not a conclusion. The Actr Host must check them against imports, actual capabilities and actual edges. An undeclared egress that may be exercised: red if confirmed, yellow if it cannot be confirmed.
+The Program Privacy Contract and the Native Capsule profile provide inputs for verification.
+The Actr Host checks them against imports, actual capabilities, and actual edges. A potentially
+usable undeclared egress is red when confirmed and yellow when it cannot be confirmed.
 
 ## 7. Who issues the conclusion
 

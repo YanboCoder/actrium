@@ -293,6 +293,14 @@ impl MockLoranServer {
         self.pause_forwarding.store(true, Ordering::Release);
     }
 
+    /// Trigger the Host's normal soft-renewal path on heartbeat. The mock
+    /// still does not verify credentials; tests may use a real external Issuer.
+    pub fn warn_credential_expiring(&self, enabled: bool) {
+        self.state
+            .credential_warning
+            .store(enabled, Ordering::Relaxed);
+    }
+
     pub fn resume_forwarding(&self) {
         self.pause_forwarding.store(false, Ordering::Release);
     }

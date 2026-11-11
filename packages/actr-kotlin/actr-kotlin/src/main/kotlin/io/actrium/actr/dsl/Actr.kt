@@ -145,8 +145,10 @@ class ActrNode private constructor(
             configPath: String,
             packagePath: String,
             observers: RuntimeObservers? = null,
+            membership: io.actrium.actr.RealmMembership? = null,
         ): ActrNode {
-            val inner = createPackageBackedNode(configPath, packagePath, observers)
+            val inner = if (membership == null) createPackageBackedNode(configPath, packagePath, observers)
+                else ActrNodeGenerated.newFromPackageFileWithMembership(configPath, packagePath, membership, observers)
             return ActrNode(inner, retainedObservers = observers)
         }
 
@@ -166,8 +168,10 @@ class ActrNode private constructor(
             scope: CoroutineScope,
             onNetworkStatusLog: ((String) -> Unit)? = null,
             observers: RuntimeObservers? = null,
+            membership: io.actrium.actr.RealmMembership? = null,
         ): ActrNode {
-            val inner = createPackageBackedNode(configPath, packagePath, observers)
+            val inner = if (membership == null) createPackageBackedNode(configPath, packagePath, observers)
+                else ActrNodeGenerated.newFromPackageFileWithMembership(configPath, packagePath, membership, observers)
             return withNetworkMonitoring(
                 inner = inner,
                 retainedWorkload = null,
@@ -205,8 +209,10 @@ class ActrNode private constructor(
             configPath: String,
             actorType: ActrType,
             workload: DynamicWorkload,
+            membership: io.actrium.actr.RealmMembership? = null,
         ): ActrNode {
-            val inner = ActrNodeGenerated.newFromLinkedWorkload(configPath, actorType, workload)
+            val inner = if (membership == null) ActrNodeGenerated.newFromLinkedWorkload(configPath, actorType, workload)
+                else ActrNodeGenerated.newFromLinkedWorkloadWithMembership(configPath, actorType, workload, membership)
             return ActrNode(inner, workload)
         }
 
@@ -223,8 +229,10 @@ class ActrNode private constructor(
             context: Context,
             scope: CoroutineScope,
             onNetworkStatusLog: ((String) -> Unit)? = null,
+            membership: io.actrium.actr.RealmMembership? = null,
         ): ActrNode {
-            val inner = ActrNodeGenerated.newFromLinkedWorkload(configPath, actorType, workload)
+            val inner = if (membership == null) ActrNodeGenerated.newFromLinkedWorkload(configPath, actorType, workload)
+                else ActrNodeGenerated.newFromLinkedWorkloadWithMembership(configPath, actorType, workload, membership)
             return withNetworkMonitoring(
                 inner = inner,
                 retainedWorkload = workload,
@@ -752,7 +760,8 @@ suspend fun linked(
     configPath: String,
     actorType: ActrType,
     workload: DynamicWorkload,
-): ActrNode = ActrNode.linked(configPath, actorType, workload)
+    membership: io.actrium.actr.RealmMembership? = null,
+): ActrNode = ActrNode.linked(configPath, actorType, workload, membership)
 
 /**
  * Create a monitored ActrNode backed by a linked dynamic workload.
@@ -764,6 +773,7 @@ suspend fun linkedWithMonitoring(
     context: Context,
     scope: CoroutineScope,
     onNetworkStatusLog: ((String) -> Unit)? = null,
+    membership: io.actrium.actr.RealmMembership? = null,
 ): ActrNode =
     ActrNode.linkedWithMonitoring(
         configPath = configPath,
@@ -772,6 +782,7 @@ suspend fun linkedWithMonitoring(
         context = context,
         scope = scope,
         onNetworkStatusLog = onNetworkStatusLog,
+        membership = membership,
     )
 
 // ============================================================================

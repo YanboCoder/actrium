@@ -1,7 +1,9 @@
 # Actrium Actor Package manifest
 
-Actrium does not define a separate application archive. It consumes the shared
-`actr-package/2` `.actr` format and requires a `keel.guest/1` workload.
+This guide covers a standalone Keel Guest package on macOS. It uses the shared
+`actr-package/2` format with a `keel.guest/1` Workload. Product v1 releases pair
+a Front package with a Service package as shown in the
+[Product v1 reference manifests](../../docs/product/actrium-v1/12-reference-spec.md#4-actr-manifest).
 
 Every package contains a root `manifest.toml`, a raw Ed25519 `manifest.sig`, and
 only payloads declared by `[[files]]`. A minimal Actrium Guest manifest is:

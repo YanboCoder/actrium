@@ -68,20 +68,23 @@ struct PeerSignals {
     conn_state_rx: watch::Receiver<RTCPeerConnectionState>,
     ice_state_rx: watch::Receiver<RTCIceConnectionState>,
     incoming_dc_rx: mpsc::Receiver<Arc<dyn LaneDataChannel>>,
+    local_candidate_seen_rx: watch::Receiver<bool>,
 }
 
-/// Consume a peer's driver events after both remote descriptions are installed,
-/// trickling candidates and reporting state / incoming channels back to the test.
-/// This is the Stage 1 stand-in for the controller's event loop: it performs no
-/// SDP, no hooks, and no recovery decisions.
+/// Consume a peer's driver events, trickling candidates to the remote PC and
+/// reporting state / incoming channels back to the test. This is the Stage 1
+/// stand-in for the controller's event loop: it performs no SDP, no hooks, and
+/// no recovery decisions.
 fn spawn_event_forwarder(
     mut rx: PeerEventMailboxReceiver,
     remote_pc: Arc<dyn PeerConnection>,
     resources: super::peer::session::SessionResourceRegistry,
+    mut remote_sdp_set_rx: watch::Receiver<bool>,
 ) -> (PeerSignals, JoinHandle<()>) {
     let (conn_state_tx, conn_state_rx) = watch::channel(RTCPeerConnectionState::Unspecified);
     let (ice_state_tx, ice_state_rx) = watch::channel(RTCIceConnectionState::Unspecified);
     let (incoming_dc_tx, incoming_dc_rx) = mpsc::channel(8);
+    let (local_candidate_seen_tx, local_candidate_seen_rx) = watch::channel(false);
 
     let mut state_rx = rx.state();
     let handle = tokio::spawn(async move {
@@ -93,10 +96,16 @@ fn spawn_event_forwarder(
                     match event {
                         Some(PeerDriverEvent::LocalIceCandidate { candidate, .. }) => {
                             let init = candidate.to_json().expect("serialize local ICE candidate");
-                            remote_pc
-                                .add_ice_candidate(init)
-                                .await
-                                .expect("add ICE candidate after remote SDP");
+                            local_candidate_seen_tx.send_replace(true);
+                            // Native add_ice_candidate rejects candidates before
+                            // remote SDP. Retain this event until the description
+                            // is installed instead of silently losing early
+                            // loopback candidates under a different task schedule.
+                            if remote_sdp_set_rx.wait_for(|ready| *ready).await.is_err() {
+                                break;
+                            }
+                            remote_pc.add_ice_candidate(init).await
+                                .expect("add candidate after remote SDP is installed");
                         }
                         Some(PeerDriverEvent::DataChannelDiscovered { resource_id, .. }) => {
                             if let Some(channel) = resources.take_data_channel(resource_id) {
@@ -133,6 +142,7 @@ fn spawn_event_forwarder(
             conn_state_rx,
             ice_state_rx,
             incoming_dc_rx,
+            local_candidate_seen_rx,
         },
         handle,
     )
@@ -232,27 +242,47 @@ async fn build_connected_pair(
         .expect("create RpcReliable data channel");
     let dc_a: Arc<dyn LaneDataChannel> = Arc::new(RealLaneDataChannel::new(dc_a));
 
+    let (a_remote_sdp_set_tx, a_remote_sdp_set_rx) = watch::channel(false);
+    let (b_remote_sdp_set_tx, b_remote_sdp_set_rx) = watch::channel(false);
+    let (mut signals_a, _fwd_a) =
+        spawn_event_forwarder(rx_a, pc_b.clone(), resources_a, b_remote_sdp_set_rx);
+    let (mut signals_b, _fwd_b) =
+        spawn_event_forwarder(rx_b, pc_a.clone(), resources_b, a_remote_sdp_set_rx);
+
     // Offer / answer.
     let offer = pc_a.create_offer(None).await.expect("create offer");
     pc_a.set_local_description(offer.clone())
         .await
         .expect("set local description (offer)");
+    // Force the previously racy ordering on both peers: a local candidate is
+    // observed before its receiver installs remote SDP. These real-PC tests
+    // must exercise retention on every run, without sleeps or retries.
+    timeout(
+        OP_TIMEOUT,
+        signals_a.local_candidate_seen_rx.wait_for(|seen| *seen),
+    )
+    .await
+    .expect("offerer did not produce an ICE candidate")
+    .expect("offerer candidate forwarder stopped");
     pc_b.set_remote_description(offer)
         .await
         .expect("set remote description (offer)");
+    b_remote_sdp_set_tx.send_replace(true);
     let answer = pc_b.create_answer(None).await.expect("create answer");
     pc_b.set_local_description(answer.clone())
         .await
         .expect("set local description (answer)");
+    timeout(
+        OP_TIMEOUT,
+        signals_b.local_candidate_seen_rx.wait_for(|seen| *seen),
+    )
+    .await
+    .expect("answerer did not produce an ICE candidate")
+    .expect("answerer candidate forwarder stopped");
     pc_a.set_remote_description(answer)
         .await
         .expect("set remote description (answer)");
-
-    // ICE gathering can finish before the remote SDP is installed. Keep those
-    // candidates in the mailbox until both peers can accept them; an early
-    // add_ice_candidate would reject and permanently lose the host candidate.
-    let (signals_a, _fwd_a) = spawn_event_forwarder(rx_a, pc_b.clone(), resources_a);
-    let (mut signals_b, _fwd_b) = spawn_event_forwarder(rx_b, pc_a.clone(), resources_b);
+    a_remote_sdp_set_tx.send_replace(true);
 
     // Wait for the peer connection to come up on both ends.
     let mut conn_a = signals_a.conn_state_rx.clone();

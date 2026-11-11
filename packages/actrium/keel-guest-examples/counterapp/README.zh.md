@@ -1,7 +1,8 @@
 # Counter Keel Guest
 
-Counter 是一个可复用的 `keel.guest/1` 最小 Workload，用于验证 Actrium Actor
-Host。它只通过符合 `actr-package/2` 的 `.actr` 包分发。
+Counter 是用于验证 Actrium Actor Host 的独立 `keel.guest/1` 示例，构建产物是一个
+`actr-package/2` Guest 包。包含 Front 包和 Service 包的发布版本见
+[Product v1 参考清单](../../../../docs/product/actrium-v1/12-reference-spec.zh.md#4-actr-manifest)。
 
 在当前目录执行：
 
@@ -22,7 +23,8 @@ actrium-counter-1.0.0.actr
 ├── manifest.toml
 ├── manifest.sig
 └── workload/
-    └── guest.js
+    ├── guest.js
+    └── *.png
 ```
 
 规范模型见

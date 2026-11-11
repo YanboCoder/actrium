@@ -176,26 +176,30 @@ Contract 至少冻结：
 - output/declassification 规则；
 - 未知或失效证据的动作。
 
-示意：
+签名的 Program Release 记录通过 `privacy_contract.sha256` 认证独立 Privacy Contract 的原始字节。
+验证器先校验内容哈希，再解释契约用于授权，并将发布身份和两个包摘要与记录核对。
+绑定和验证规则见[第 12 章 §3.1](12-reference-spec.zh.md#31-签名-program-release-记录)。
 
 ```toml
-[actrium.privacy_contract]
+[privacy_contract]
 schema_version = 1
 contract_id = "notes.example/team-notes@1.4.2#privacy"
-package_digest = "sha256:..."
+release_id = "notes.example/team-notes@1.4.2"
+service_package_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+front_package_digest = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
 
-[[actrium.privacy_contract.actor_role]]
+[[privacy_contract.actor_role]]
 role = "service"
-actr_type = "notes.example/team-notes-service@1.4.2"
+actr_type = "notes.example/team-notes@1.4.2"
 cardinality = "1"
 required = true
 
-[[actrium.privacy_contract.actor_role]]
+[[privacy_contract.actor_role]]
 role = "ai-inference"
 cardinality = "0..n"
 required_assurance_profile = "confidential-ai-v1"
 
-[[actrium.privacy_contract.edge]]
+[[privacy_contract.edge]]
 source = "service"
 target = "ai-inference"
 data_classes = ["private"]
@@ -284,7 +288,7 @@ Change → SUSPENDED → 取证 / 评定 → Resume（须有当前 AA）→ 尝�
 示意：
 
 ```toml
-[[actrium.privacy.data_policy]]
+[[data_policy]]
 class = "public"
 required = [
   "identity",
@@ -293,7 +297,7 @@ required = [
   "egress_closure"
 ]
 
-[[actrium.privacy.data_policy]]
+[[data_policy]]
 class = "private"
 required = [
   "identity",
@@ -304,7 +308,7 @@ required = [
   "egress_closure"
 ]
 
-[[actrium.privacy.data_policy]]
+[[data_policy]]
 class = "secret"
 required = [
   "identity",
@@ -663,7 +667,7 @@ DEK ── KEK in local Keystore / organization KMS / Realm-approved KMS
 服务器保留审计日志本身必须是静态 Contract 中的显式 storage/audit sink：
 
 ```toml
-[[actrium.privacy_contract.audit_sink]]
+[[privacy_contract.audit_sink]]
 kind = "security-audit"
 fields = ["actor-pseudonym", "operation", "decision", "timestamp"]
 payload = false

@@ -10,6 +10,9 @@ import SwiftUI
 final class ActrService: ObservableObject {
     @Published var status = "Starting ACTR node..."
     @Published var errorMessage: String?
+    @Published var membershipStatus = ""
+    @Published var membershipBusy = false
+    @Published var invitationForDevice = ""
 
     private var actrNode: ActrNode?
     private var actorRef: ActrRef?
@@ -21,6 +24,52 @@ final class ActrService: ObservableObject {
         actorRef != nil
     }
 
+    func manageMembership(_ operation: String, invite: String, provider: String, target: String) async {
+        guard !membershipBusy, !isStarting else { return }
+        membershipBusy = true
+        defer { membershipBusy = false }
+        await stop()
+        do {
+            let manifest = try materializeRuntimeConfig()
+            let configURL = manifest.deletingLastPathComponent().appendingPathComponent("actr.toml")
+            let config = try readRealmRuntimeConfiguration(configPath: configURL.path)
+            if operation == "reset" {
+                try RealmIdentityStore().forgetForRejoin(realm: config.realm)
+                invitationForDevice = ""
+                membershipStatus = "Saved identity removed. Use a new invitation to rejoin."
+                return
+            }
+            let member = try await RealmEnrollment.membership(config: configURL,
+                invite: operation == "join" ? invite : nil, provider: provider.isEmpty ? nil : provider)
+            switch operation {
+            case "join":
+                membershipStatus = "Joined. Client key: \(member.keyId())"
+            case "revoke":
+                _ = try await member.revokeClient(keyId: target.isEmpty ? member.keyId() : target)
+                membershipStatus = "Client revoked"
+            case "invite":
+                let members = try JSONSerialization.jsonObject(with: Data(try await member.members().utf8)) as? [String: Any]
+                let own = (members?["members"] as? [[String: Any]])?.first { row in
+                    (row["clients"] as? [[String: Any]])?.contains { $0["key_id"] as? String == member.keyId() } == true
+                }
+                guard let memberId = own?["member_id"] as? String else { return }
+                let result = try await member.inviteClient(memberId: memberId,
+                    expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(900)))
+                let json = try JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
+                invitationForDevice = json?["invite"] as? String ?? ""
+                membershipStatus = "One-time invitation expires in 15 minutes."
+            default:
+                membershipStatus = try await member.members()
+            }
+        } catch RealmMembershipError.Rejected(_, let code) {
+            membershipStatus = code
+        } catch RealmMembershipError.Uncertain {
+            membershipStatus = "Result unknown. Retry the same invitation; the saved key is unchanged."
+        } catch {
+            membershipStatus = "Membership unavailable. Check the trusted provider and invitation. No key was replaced."
+        }
+    }
+
     func startIfNeeded() async {
         guard actorRef == nil, !isStarting else { return }
         isStarting = true
@@ -28,14 +77,15 @@ final class ActrService: ObservableObject {
 
         do {
             let manifestURL = try materializeRuntimeConfig()
-            let actorType = ActrType(publisher: "actrium", name: "EchoApp", version: "0.1.0")
+            let membership = try await RealmEnrollment.membership(config: manifestURL.deletingLastPathComponent().appendingPathComponent("actr.toml"))
+            let actorType = try resolveManifestPackageActrType(manifestPath: manifestURL.path)
 
             let handler = LocalEchoServiceHandlerImpl()
             let workload = Actr.dynamicWorkload(
                 lifecycle: LocalEchoServiceLifecycleAdapter(handler: handler)
             )
             linkedWorkload = workload
-            let node = try await ActrNode.linked(config: manifestURL, type: actorType, workload: workload)
+            let node = try await ActrNode.linked(config: manifestURL.path, type: actorType, workload: workload, mobileLifecycleObservers: [], membership: membership)
 
             actorRef = try await node.start()
             actrNode = node

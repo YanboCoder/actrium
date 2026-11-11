@@ -150,7 +150,7 @@ if [ "$SKIP_INSTALL" = "0" ] || [ ! -d Pods ] || [ ! -d build/generated/ios ]; t
     pod install
 fi
 
-./scripts/bundle-actrium-runtime.sh --target all --dev
+./scripts/bundle-actrium-runtime.sh --target system --dev
 
 ACTRIUM_CORE_LIBRARY="$REPO_ROOT/crates/actrium-core/ActriumCore.xcframework/macos-arm64_x86_64/libactrium_core.a"
 ACTRIUM_VAULT_LIBRARY="$REPO_ROOT/crates/actrium-vault/ActriumVault.xcframework/macos-arm64_x86_64/libactrium_vault.a"

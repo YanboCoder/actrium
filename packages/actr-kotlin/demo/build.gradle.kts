@@ -4,6 +4,17 @@ plugins {
     id("com.google.protobuf")
 }
 
+val checkRealmAssets =
+    tasks.register<Exec>("checkRealmAssets") {
+        commandLine(
+            "python3",
+            "$rootDir/../../scripts/actr/check-mobile-assets.py",
+            "$projectDir/src/main/assets",
+            "$projectDir/src/androidTest/assets",
+        )
+    }
+tasks.named("preBuild").configure { dependsOn(checkRealmAssets) }
+
 android {
     namespace = "io.actrium.demo"
     compileSdk = 34
