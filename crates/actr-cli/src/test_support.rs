@@ -458,8 +458,6 @@ impl LocalRustEchoService {
         ensure_success(&gen_out, "actr gen rust service")?;
         let build_out = run_actr(&["build"], &service_dir);
         ensure_success(&build_out, "actr build rust service")?;
-        let package_path = find_built_package(&service_dir)?;
-        publish_local_package(&package_path, signaling_ws_url)?;
 
         let runtime_config_path = write_package_runtime_config(&service_dir, signaling_ws_url)?;
 
@@ -638,41 +636,6 @@ fn find_built_package(project_dir: &Path) -> Result<PathBuf> {
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
         .find(|path| path.extension().and_then(|ext| ext.to_str()) == Some("actr"))
         .context("built rust service package missing .actr artifact under dist/")
-}
-
-fn publish_local_package(package_path: &Path, signaling_ws_url: &str) -> Result<()> {
-    let cli_config = crate::config::resolver::resolve_effective_cli_config()?;
-    let key_path = crate::commands::package_build::resolve_key_path(
-        None,
-        cli_config.publisher.keychain.as_deref(),
-    )?;
-    let issuer_url = signaling_ws_url
-        .trim_end_matches("/signaling/ws")
-        .trim_end_matches("/signaling")
-        .trim_end_matches("/ws");
-    let issuer_url = if let Some(rest) = issuer_url.strip_prefix("ws://") {
-        format!("http://{rest}/issuer")
-    } else if let Some(rest) = issuer_url.strip_prefix("wss://") {
-        format!("https://{rest}/issuer")
-    } else {
-        format!("{issuer_url}/issuer")
-    };
-
-    let out = Command::new(actr_bin())
-        .args([
-            "registry",
-            "publish",
-            "--package",
-            package_path.to_string_lossy().as_ref(),
-            "--keychain",
-            key_path.to_string_lossy().as_ref(),
-            "--endpoint",
-            &issuer_url,
-        ])
-        .output()
-        .context("failed to invoke actr registry publish")?;
-    ensure_success(&out, "actr registry publish")?;
-    Ok(())
 }
 
 fn drain_stream(

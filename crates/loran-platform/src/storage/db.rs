@@ -8,7 +8,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
 
-const LORAN_SCHEMA_VERSION: i64 = 9;
+const LORAN_SCHEMA_VERSION: i64 = 10;
 
 /// Database manager
 #[derive(Clone)]
@@ -342,10 +342,8 @@ impl Database {
         // Permanent Actor instance identity ledger. Snowflake worker leases
         // provide distributed uniqueness; this table additionally makes local
         // uniqueness fail closed across process restarts and clock rollback.
-        // `target` persists the package target bound at registration so that
-        // /renew and /reissue can recheck the exact (type_str, target) package
-        // row instead of masking a revoked target behind a sibling that is still
-        // active.
+        // `target` records the platform of the package verified at registration
+        // or the latest package-authenticated reissue.
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS issued_actor_identity (
                 realm TEXT NOT NULL,
@@ -397,40 +395,6 @@ impl Database {
         .execute(&mut *tx)
         .await?;
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS publisher_package (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                publisher_id       INTEGER NOT NULL REFERENCES publisher(id),
-                publisher TEXT    NOT NULL,
-                name         TEXT    NOT NULL,
-                version      TEXT    NOT NULL,
-                type_str     TEXT    NOT NULL,
-                target       TEXT    NOT NULL,
-                manifest     TEXT    NOT NULL,
-                signature    TEXT    NOT NULL,
-                signing_key_id TEXT,
-                proto_files  TEXT,
-                status       TEXT    NOT NULL DEFAULT 'active',
-                published_at INTEGER NOT NULL,
-                revoked_at   INTEGER,
-                UNIQUE(publisher, name, version, target)
-            )",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_publisher_package_type ON publisher_package(type_str)",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_publisher_package_publisher ON publisher_package(publisher_id, status)",
-        )
-        .execute(&mut *tx)
-        .await?;
-
         // Publisher Registry key history: stores retired public keys for JWKS-style rotation
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS publisher_key_history (
@@ -455,28 +419,6 @@ impl Database {
         sqlx::query(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_publisher_key_history_lookup
              ON publisher_key_history(publisher_id, key_id)",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        // Publish nonce table for challenge-response authentication on
-        // /registry/packages/publish.
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS publisher_publish_nonce (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                publisher_id     INTEGER NOT NULL REFERENCES publisher(id),
-                nonce      BLOB    NOT NULL UNIQUE,
-                status     TEXT    NOT NULL DEFAULT 'pending',
-                created_at INTEGER NOT NULL,
-                expires_at INTEGER NOT NULL
-            )",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_publisher_publish_nonce_expires
-             ON publisher_publish_nonce(expires_at)",
         )
         .execute(&mut *tx)
         .await?;

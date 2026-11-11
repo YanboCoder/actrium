@@ -162,67 +162,6 @@ async fn admin_realm_and_state_endpoints() {
 }
 
 #[tokio::test]
-async fn publish_flow_via_nonce_and_publish() {
-    let server = MockLoranServer::start().await.unwrap();
-
-    let client = reqwest::Client::new();
-
-    // Step 1: get a nonce.
-    let nonce_resp: serde_json::Value = client
-        .post(format!("{}/registry/packages/nonce", server.http_url()))
-        .json(&serde_json::json!({ "publisher": "apps.example.com" }))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    let nonce = nonce_resp["nonce"].as_str().unwrap().to_string();
-
-    // Step 2: publish with that nonce.
-    let publish: serde_json::Value = client
-        .post(format!("{}/registry/packages/publish", server.http_url()))
-        .json(&serde_json::json!({
-            "publisher": "apps.example.com",
-            "name": "EchoSvc",
-            "version": "0.1.0",
-            "target": "wasm32-wasip2",
-            "manifest": "edition = 1\n",
-            "signature": "sig",
-            "proto_files": null,
-            "nonce": nonce,
-            "nonce_sig": "anything",
-        }))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(publish["type_str"], "apps.example.com/EchoSvc@0.1.0");
-    assert_eq!(publish["status"], "active");
-
-    // Step 3: same nonce cannot be reused.
-    let reuse = client
-        .post(format!("{}/registry/packages/publish", server.http_url()))
-        .json(&serde_json::json!({
-            "publisher": "apps.example.com",
-            "name": "EchoSvc",
-            "version": "0.1.0",
-            "target": "wasm32-wasip2",
-            "manifest": "edition = 1\n",
-            "signature": "sig",
-            "proto_files": null,
-            "nonce": nonce,
-            "nonce_sig": "anything",
-        }))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(reuse.status(), 400, "reused nonce must be rejected");
-}
-
-#[tokio::test]
 async fn mock_renew_allows_consecutive_soft_renewals() {
     use actr_protocol::{
         RenewCredentialRequest, RenewCredentialResponse, renew_credential_response,

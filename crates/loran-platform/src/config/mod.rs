@@ -1570,7 +1570,6 @@ mod tests {
             );
         }
         assert_eq!(cfg.services.issuer.as_ref().unwrap().server.worker_id, 0);
-        assert_eq!(cfg.services.publisher_registry.nonce_retain_secs, 86_400);
     }
 
     #[test]

@@ -207,10 +207,9 @@ wait_for_signer
 ensure_realm
 provision_publisher_keychain
 
-# Phase 2: scaffold + publish the Rust EchoService + the client identity.
+# Phase 2: scaffold, build, and verify the Rust EchoService.
 scaffold_echo_service
-build_and_publish_service "$TMP_SERVICE_DIR" "$SERVICE_ACTOR" "$SERVICE_VERSION"
-publish_app_package_identity "$APP_ACTOR" "$APP_VERSION"
+build_service_package "$TMP_SERVICE_DIR" "$SERVICE_ACTOR" "$SERVICE_VERSION"
 
 # Phase 3: start the EchoService host and wait for registration.
 run_server_host "$SERVICE_PACKAGE" "${PUBLISHER}/${APP_ACTOR}@${APP_VERSION}" "kotlin-echo-server"

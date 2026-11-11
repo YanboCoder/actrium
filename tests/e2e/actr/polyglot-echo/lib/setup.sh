@@ -6,7 +6,7 @@
 #   2. Start mock-loran on $HTTP_PORT.
 #   3. Generate a fresh publisher keypair and seed it via /admin/publisher.
 #   4. Seed the realm via /admin/realms.
-#   5. Scaffold a Rust echo service (cdylib) via `actr init`, build, publish.
+#   5. Scaffold a Rust echo service (cdylib) via `actr init`, then build and verify it.
 #   6. Render server- and client-runtime configs from templates.
 #   7. Launch the server via `actr run`; export readiness state for the caller.
 #
@@ -165,7 +165,7 @@ scaffold_service() {
 }
 
 build_service_package() {
-    section "📦 Building + publishing service package"
+    section "📦 Building and verifying service package"
     local host_target
     host_target="$(rustc -vV | awk '/host:/ {print $2}')"
     SERVICE_PACKAGE="$DIST_DIR/${PUBLISHER}-EchoService-${SERVICE_VERSION}-${host_target}.actr"
@@ -179,11 +179,7 @@ build_service_package() {
     )
     [ -f "$SERVICE_PACKAGE" ] || fail "Service package missing: $SERVICE_PACKAGE"
 
-    run_actr registry publish \
-        --package "$SERVICE_PACKAGE" \
-        --keychain "$SERVICE_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}" >/dev/null
-    success "service package published: $SERVICE_PACKAGE"
+    success "service package built: $SERVICE_PACKAGE"
 }
 
 render_client_runtime_config() {
@@ -287,7 +283,7 @@ setup_common_prelude() {
     SERVICE_VERSION="1.0.0"
     SERVICE_TYPE="${PUBLISHER}/EchoService@${SERVICE_VERSION}"
 
-    # Set up the service keychain (signing key for `actr build` + publish).
+    # Set up the service keychain (signing key for `actr build`).
     # Only the cdylib path creates this in scaffold_service today; other
     # forms that drive `actr build` directly (wasm-rust) need it too.
     cp "$PUBLISHER_KEY_FILE" "$SERVICE_KEYCHAIN"
@@ -459,15 +455,7 @@ build_wasm_rust_server() {
     }
     [ -f "$WASM_RUST_PACKAGE" ] || fail "wasm-rust package missing: $WASM_RUST_PACKAGE"
 
-    run_actr registry publish \
-        --package "$WASM_RUST_PACKAGE" \
-        --keychain "$SERVICE_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}" \
-        >>"$LOG_DIR/wasm-rust-build.log" 2>&1 || {
-            cat "$LOG_DIR/wasm-rust-build.log" >&2
-            fail "wasm-rust publish failed"
-        }
-    success "wasm-rust package built + published: $WASM_RUST_PACKAGE"
+    success "wasm-rust package built: $WASM_RUST_PACKAGE"
 }
 
 start_wasm_rust_server() {

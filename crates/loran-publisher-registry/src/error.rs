@@ -24,14 +24,8 @@ pub enum PublisherRegistryError {
     InvalidStatus(String),
     #[error("verification failed: {0}")]
     VerificationFailed(String),
-    #[error("invalid signature")]
-    InvalidSignature,
-    #[error("package already published, revoke first")]
-    PackageAlreadyPublished,
     #[error("crypto error: {0}")]
     Crypto(String),
-    #[error("unauthorized")]
-    Unauthorized,
     #[error("certificate expired: signing key has expired, please renew")]
     CertificateExpired,
     #[error("invalid request: {0}")]
@@ -44,10 +38,7 @@ impl IntoResponse for PublisherRegistryError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {
             PublisherRegistryError::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
-            PublisherRegistryError::AlreadyExists(_)
-            | PublisherRegistryError::PackageAlreadyPublished => {
-                (StatusCode::CONFLICT, self.to_string())
-            }
+            PublisherRegistryError::AlreadyExists(_) => (StatusCode::CONFLICT, self.to_string()),
             PublisherRegistryError::ReservedName(_)
             | PublisherRegistryError::InvalidName(_)
             | PublisherRegistryError::InvalidRequest(_) => {
@@ -55,9 +46,6 @@ impl IntoResponse for PublisherRegistryError {
             }
             PublisherRegistryError::InvalidStatus(_) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, self.to_string())
-            }
-            PublisherRegistryError::InvalidSignature | PublisherRegistryError::Unauthorized => {
-                (StatusCode::UNAUTHORIZED, self.to_string())
             }
             PublisherRegistryError::VerificationFailed(_) => {
                 (StatusCode::BAD_REQUEST, self.to_string())

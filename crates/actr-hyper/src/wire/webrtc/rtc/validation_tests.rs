@@ -70,10 +70,10 @@ struct PeerSignals {
     incoming_dc_rx: mpsc::Receiver<Arc<dyn LaneDataChannel>>,
 }
 
-/// Consume a peer's driver events, trickling candidates to the remote PC and
-/// reporting state / incoming channels back to the test. This is the Stage 1
-/// stand-in for the controller's event loop: it performs no SDP, no hooks, and
-/// no recovery decisions.
+/// Consume a peer's driver events after both remote descriptions are installed,
+/// trickling candidates and reporting state / incoming channels back to the test.
+/// This is the Stage 1 stand-in for the controller's event loop: it performs no
+/// SDP, no hooks, and no recovery decisions.
 fn spawn_event_forwarder(
     mut rx: PeerEventMailboxReceiver,
     remote_pc: Arc<dyn PeerConnection>,
@@ -92,11 +92,11 @@ fn spawn_event_forwarder(
                 event = rx.recv_structural() => {
                     match event {
                         Some(PeerDriverEvent::LocalIceCandidate { candidate, .. }) => {
-                            if let Ok(init) = candidate.to_json() {
-                                // Best-effort trickle; a failure here just means the
-                                // remote is not ready yet, the candidate is dropped.
-                                let _ = remote_pc.add_ice_candidate(init).await;
-                            }
+                            let init = candidate.to_json().expect("serialize local ICE candidate");
+                            remote_pc
+                                .add_ice_candidate(init)
+                                .await
+                                .expect("add ICE candidate after remote SDP");
                         }
                         Some(PeerDriverEvent::DataChannelDiscovered { resource_id, .. }) => {
                             if let Some(channel) = resources.take_data_channel(resource_id) {
@@ -232,9 +232,6 @@ async fn build_connected_pair(
         .expect("create RpcReliable data channel");
     let dc_a: Arc<dyn LaneDataChannel> = Arc::new(RealLaneDataChannel::new(dc_a));
 
-    let (signals_a, _fwd_a) = spawn_event_forwarder(rx_a, pc_b.clone(), resources_a);
-    let (mut signals_b, _fwd_b) = spawn_event_forwarder(rx_b, pc_a.clone(), resources_b);
-
     // Offer / answer.
     let offer = pc_a.create_offer(None).await.expect("create offer");
     pc_a.set_local_description(offer.clone())
@@ -250,6 +247,12 @@ async fn build_connected_pair(
     pc_a.set_remote_description(answer)
         .await
         .expect("set remote description (answer)");
+
+    // ICE gathering can finish before the remote SDP is installed. Keep those
+    // candidates in the mailbox until both peers can accept them; an early
+    // add_ice_candidate would reject and permanently lose the host candidate.
+    let (signals_a, _fwd_a) = spawn_event_forwarder(rx_a, pc_b.clone(), resources_a);
+    let (mut signals_b, _fwd_b) = spawn_event_forwarder(rx_b, pc_a.clone(), resources_b);
 
     // Wait for the peer connection to come up on both ends.
     let mut conn_a = signals_a.conn_state_rx.clone();

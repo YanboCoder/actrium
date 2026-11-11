@@ -23,7 +23,7 @@ HTTP 服务在一个 listener 上组合。STUN/TURN 使用独立 UDP socket；TU
 启动顺序的安全前提：
 
 1. 解析配置并执行 fail-closed 校验；
-2. 打开 SQLite，验证 `PRAGMA user_version = 9`；
+2. 打开 SQLite，验证 `PRAGMA user_version = 10`；
 3. 初始化 recording、监控与控制面；
 4. 构建 Issuer Signer、Issuer、Signaling（含 Actor Registry）、Publisher Registry 和
    descriptor router；

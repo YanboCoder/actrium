@@ -42,9 +42,6 @@ PROVISIONED_KEYCHAIN="$RUN_DIR/publisher.keychain.json"
 PROVISIONED_PUBLIC_KEY="$RUN_DIR/publisher-public-key.json"
 SWIFTTSAPP_LORAN_CONFIG="$TMP_APP_DIR/actr.toml"
 HOST_TARGET="$(rustc -vV | awk '/host:/ {print $2}')"
-SWIFTTSAPP_PACKAGE_MANIFEST="$RUN_DIR/swift_ts_workload_app-package-manifest.toml"
-SWIFTTSAPP_MARKER_BINARY="$RUN_DIR/swift_ts_workload_app-linked-identity.bin"
-SWIFTTSAPP_PACKAGE="$DIST_DIR/${PUBLISHER}-SwiftTsWorkloadApp-0.1.0-${HOST_TARGET}.actr"
 APP_STDOUT_LOG="$LOG_DIR/app.stdout.log"
 APP_STDERR_LOG="$LOG_DIR/app.stderr.log"
 APP_BUNDLE_ID="io.actrium.SwiftTsWorkloadApp"
@@ -489,7 +486,7 @@ provision_publisher_keychain() {
     provision_e2e_publisher
 }
 
-# ──── TS service scaffold/build/publish ────
+# ──── TS service scaffold/build ────
 
 scaffold_service_guest() {
     section "🧱 Scaffolding temporary TS DuplexEchoService"
@@ -520,7 +517,7 @@ scaffold_service_guest() {
         "$SCRIPT_DIR/service-src/package.json" >"$TMP_SERVICE_DIR/package.json"
 
     # manifest.toml: export our proto (template defaults to echo.proto) and keep
-    # the published service identity DuplexEchoService:1.0.0.
+    # the service identity DuplexEchoService:1.0.0.
     perl -i -pe 's{exports = \["protos/local/echo\.proto"\]}{exports = ["protos/local/duplex_echo.proto"]}' \
         "$TMP_SERVICE_DIR/manifest.toml"
 
@@ -570,7 +567,7 @@ EOF
 }
 
 build_service_package() {
-    section "📦 Building and publishing the TS server package"
+    section "📦 Building and verifying the TS server package"
     SERVICE_PACKAGE="$DIST_DIR/${PUBLISHER}-DuplexEchoService-${SERVICE_VERSION}-wasm32-wasip2.actr"
 
     (
@@ -585,48 +582,10 @@ build_service_package() {
     [ -f "$SERVICE_PACKAGE" ] || fail "Server package missing: $SERVICE_PACKAGE"
 
     run_actr pkg verify --pubkey "$SERVICE_PUBLIC_KEY" --package "$SERVICE_PACKAGE" >/dev/null
-    run_actr registry publish \
-        --package "$SERVICE_PACKAGE" \
-        --keychain "$SERVICE_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}"
 
-    success "TS server package published"
+    success "TS server package built and verified"
 }
 
-publish_swift_ts_workload_app_package_identity() {
-    section "📦 Publishing SwiftTsWorkloadApp package identity"
-
-    # Linked SwiftTsWorkloadApp does not load this package. It is a registry marker for
-    # loran versions that still require the actor type to be package-registered.
-    printf 'linked SwiftTsWorkloadApp identity marker\n' >"$SWIFTTSAPP_MARKER_BINARY"
-    cat >"$SWIFTTSAPP_PACKAGE_MANIFEST" <<EOF
-edition = 1
-
-[package]
-name = "SwiftTsWorkloadApp"
-publisher = "${PUBLISHER}"
-version = "0.1.0"
-description = "Actrium SwiftTsWorkloadApp linked runtime identity marker"
-
-[binary]
-path = "${SWIFTTSAPP_MARKER_BINARY}"
-target = "${HOST_TARGET}"
-EOF
-
-    run_actr build \
-        --no-compile \
-        --manifest-path "$SWIFTTSAPP_PACKAGE_MANIFEST" \
-        --key "$PROVISIONED_KEYCHAIN" \
-        --output "$SWIFTTSAPP_PACKAGE"
-
-    run_actr pkg verify --pubkey "$PROVISIONED_PUBLIC_KEY" --package "$SWIFTTSAPP_PACKAGE" >/dev/null
-    run_actr registry publish \
-        --package "$SWIFTTSAPP_PACKAGE" \
-        --keychain "$PROVISIONED_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}"
-
-    success "SwiftTsWorkloadApp package identity published"
-}
 
 # ──── SwiftTsWorkloadApp config ────
 
@@ -1072,10 +1031,9 @@ wait_for_signer
 ensure_realm
 provision_publisher_keychain
 
-# Phase 2: Build service package and publish identities
+# Phase 2: Build and verify the service package
 scaffold_service_guest
 build_service_package
-publish_swift_ts_workload_app_package_identity
 
 # Phase 3: Render SwiftTsWorkloadApp config and prepare the simulator
 scaffold_swift_ts_workload_app

@@ -9,7 +9,7 @@ authority descriptor. It is independent of authority discovery and of the
 Publisher Registry:
 
 - `/.well-known/actr` publishes the authority descriptor;
-- the Publisher Registry manages publishers, keys, signing authority, and publication audit;
+- the Publisher Registry manages Publisher identities and signing keys;
 - `loran-packages` serves package bytes.
 
 The default Loran daemon mounts the component at `/actr/packages`. Local files

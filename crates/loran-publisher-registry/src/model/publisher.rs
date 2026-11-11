@@ -55,10 +55,10 @@ pub struct Publisher {
     pub verified_at: Option<i64>,
     pub suspended_at: Option<i64>,
     pub revoked_at: Option<i64>,
-    /// Signing key expiration (unix timestamp). Set on activate(), checked on publish.
+    /// Signing key validity limit (unix timestamp), accepted from its Profile.
     pub key_expires_at: Option<i64>,
     /// A second `active` package signing key while the publisher rotates
-    /// (`actor-package.md` section 6.8); it publishes too.
+    /// (`actor-package.md` section 6.8); it also verifies packages.
     pub next_public_key: Option<String>,
     pub next_key_id: Option<String>,
     pub next_key_expires_at: Option<i64>,
@@ -94,21 +94,6 @@ impl<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> for Publisher {
 }
 
 impl Publisher {
-    /// The keys that may publish at `now`, as `(key_id, public_key)`: the
-    /// current key and the second active key, each before its expiry.
-    pub fn publishing_keys(&self, now: i64) -> Vec<(&str, &str)> {
-        let mut keys = Vec::new();
-        if !self.key_id.is_empty() && self.key_expires_at.is_some_and(|at| now < at) {
-            keys.push((self.key_id.as_str(), self.public_key.as_str()));
-        }
-        if let (Some(key_id), Some(public_key)) = (&self.next_key_id, &self.next_public_key)
-            && self.next_key_expires_at.is_some_and(|at| now < at)
-        {
-            keys.push((key_id.as_str(), public_key.as_str()));
-        }
-        keys
-    }
-
     /// A pending record; production records come from
     /// `PublisherRegistryManager::register_publisher`.
     #[cfg(test)]
@@ -231,8 +216,8 @@ impl Publisher {
     /// Coherent post-state: the publisher is deliberately LEFT in `active` status
     /// but WITHOUT a usable key. With `public_key`/`key_id` blanked and
     /// `key_expires_at` set to NULL, every current-key path fails closed -
-    /// `resolve_by_name` and `validate_publish_authority` return
-    /// `CertificateExpired`, and `resolve_key_by_id` for the old key_id returns
+    /// `resolve_by_name` returns `CertificateExpired`, and
+    /// `resolve_key_by_id` for the old key_id returns
     /// `KeyRevoked`. Recovery is only possible by registering a later
     /// Publisher Profile, which requires `active` status and, thanks to the
     /// blacklist, cannot reinstate the revoked key - the publisher must rotate
@@ -284,7 +269,7 @@ impl Publisher {
         }
 
         // Blank the live key material and expiry so no resolution path can serve
-        // it and publish fails closed until the publisher renews to a fresh key.
+        // it until the Publisher registers a fresh key.
         sqlx::query(
             "UPDATE publisher SET public_key = '', key_id = '', key_expires_at = NULL,
                  next_public_key = NULL, next_key_id = NULL, next_key_expires_at = NULL,
@@ -365,13 +350,10 @@ impl Publisher {
     /// nothing.
     pub async fn delete(pool: &SqlitePool, id: i64) -> Result<(), PublisherRegistryError> {
         let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
-        for statement in [
-            "DELETE FROM publisher_key_history WHERE publisher_id = ?",
-            "DELETE FROM publisher_package WHERE publisher_id = ?",
-            "DELETE FROM publisher_publish_nonce WHERE publisher_id = ?",
-        ] {
-            sqlx::query(statement).bind(id).execute(&mut *tx).await?;
-        }
+        sqlx::query("DELETE FROM publisher_key_history WHERE publisher_id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("DELETE FROM publisher WHERE id = ?")
             .bind(id)
             .execute(&mut *tx)

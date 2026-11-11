@@ -91,10 +91,7 @@ fn aid_error_to_code(err: &AidError) -> u32 {
         | AidError::Base64DecodeError(_)
         | AidError::HexDecodeError(_) => 400,
         AidError::Expired => 401,
-        AidError::RealmError(_)
-        | AidError::PublisherNotVerified
-        | AidError::PackageRevoked
-        | AidError::Membership(_) => 403,
+        AidError::RealmError(_) | AidError::PublisherNotVerified | AidError::Membership(_) => 403,
         AidError::GenerationFailed(msg) => {
             if msg.contains("Signer unavailable") || msg.contains("Signer service") {
                 503
@@ -416,9 +413,7 @@ impl AIdIssuer {
         // development identity whose publisher name is now in the registry,
         // and a Publisher identity whose publisher left it.
 
-        let register_ok = self
-            .issue_credential_for_actor(actor_id, request.target.as_deref(), signer)
-            .await?;
+        let register_ok = self.issue_credential_for_actor(actor_id, signer).await?;
 
         // Reissue accepts proofs that already expired (anything inside the
         // binding grace window), so anchoring the successor on the proof's
@@ -661,7 +656,7 @@ impl AIdIssuer {
         // names (e.g. "apps.example.com") are reserved for Package identities whose
         // domain ownership is cryptographically verified. Realm membership is not
         // proof of owning a publisher domain, so allowing a dotted publisher
-        // here would let any realm workload impersonate a published publisher's
+        // here would let any realm workload impersonate a registered Publisher's
         // service type and overwrite its ACL (AIS-01 / SIG-05).
         if request.actr_type.publisher.contains('.') {
             platform::recording::warn!(
@@ -687,16 +682,10 @@ impl AIdIssuer {
     /// against the publisher domain's current Publisher Profile first
     /// ([`Self::resolve_package_key`]).
     ///
-    /// Whether the package was published to this Loran does not choose the
-    /// path. The registry is consulted as a revocation source only: a revoked
-    /// package, or a published release whose manifest differs, is rejected
-    /// whatever the provenance.
     async fn verify_package_identity(
         &self,
         request: &RegisterRequest,
     ) -> Result<Provenance, AidError> {
-        use sha2::{Digest, Sha256};
-
         let actr_type = &request.actr_type;
         if actr_type.version.is_empty() {
             return Err(AidError::InvalidFormat);
@@ -787,36 +776,7 @@ impl AIdIssuer {
             return Err(AidError::PublisherNotVerified);
         }
 
-        // Revocation source: a revoked release stays revoked whatever the
-        // package source, and a published release is pinned to its bytes.
         let pool = platform::storage::db::get_database().get_pool().clone();
-        let published =
-            loran_publisher_registry::model::ActrPackage::get_by_type_and_target_any_status(
-                &pool, &type_str, target,
-            )
-            .await
-            .map_err(|e| {
-                AidError::GenerationFailed(format!("Publisher Registry lookup failed: {e}"))
-            })?;
-        if let Some(package) = published {
-            if package.status == loran_publisher_registry::model::PkgStatus::Revoked {
-                platform::recording::warn!(
-                    "Package verification rejected: package revoked, type_str={}, target={}",
-                    type_str,
-                    target
-                );
-                return Err(AidError::PackageRevoked);
-            }
-            if Sha256::digest(package.manifest.as_bytes()) != Sha256::digest(manifest_bytes) {
-                platform::recording::warn!(
-                    "Package verification rejected: manifest differs from the published release, type_str={}, target={}",
-                    type_str,
-                    target
-                );
-                return Err(AidError::PublisherNotVerified);
-            }
-        }
-
         let manager = loran_publisher_registry::PublisherRegistryManager::new(pool);
         let (public_key, provenance) = match self
             .resolve_package_key(&manager, &actr_type.publisher, signing_key_id, &type_str)
@@ -946,8 +906,6 @@ impl AIdIssuer {
             | loran_publisher_registry::PublisherRegistryError::KeyRevoked(_)
             | loran_publisher_registry::PublisherRegistryError::InvalidStatus(_)
             | loran_publisher_registry::PublisherRegistryError::CertificateExpired
-            | loran_publisher_registry::PublisherRegistryError::InvalidSignature
-            | loran_publisher_registry::PublisherRegistryError::Unauthorized
             | loran_publisher_registry::PublisherRegistryError::InvalidRequest(_) => {
                 platform::recording::warn!("Publisher Registry verification rejected: {}", message);
                 AidError::PublisherNotVerified
@@ -1110,27 +1068,6 @@ impl AIdIssuer {
         ))
     }
 
-    /// The package target recorded for `actor_id`: from registration, or the
-    /// last package-auth reissue. A NULL target (legacy row) degrades the
-    /// package recheck to type-only matching.
-    pub(crate) async fn issued_target(actor_id: &ActrId) -> Option<String> {
-        sqlx::query_scalar::<_, Option<String>>(
-            "SELECT target FROM issued_actor_identity WHERE realm = ? AND serial_number = ?",
-        )
-        .bind(&actor_id.realm)
-        .bind(actor_id.serial_number as i64)
-        .fetch_one(platform::storage::db::get_database().get_pool())
-        .await
-        .unwrap_or_else(|err| {
-            platform::recording::warn!(
-                "Failed to look up target for actor {}: {}",
-                actor_id.to_string_repr(),
-                err
-            );
-            None
-        })
-    }
-
     /// Recheck, before a stored credential is replayed, that `actor_id` may
     /// still receive credentials: a replay never hands out what the Issuer
     /// would refuse now.
@@ -1139,8 +1076,7 @@ impl AIdIssuer {
         actor_id: &ActrId,
         signer: &Signer,
     ) -> Result<(), AidError> {
-        let target = Self::issued_target(actor_id).await;
-        self.recheck_existing_actor(actor_id, target.as_deref(), signer)
+        self.recheck_existing_actor(actor_id, signer)
             .await
             .map(|_| ())
     }
@@ -1195,28 +1131,24 @@ impl AIdIssuer {
     ///
     /// - AIS-04: the actor must not be on the explicit revocation list.
     /// - AIS-03: the realm must still exist and be in a usable state.
-    /// - AIS-03: any published package must remain active. A Publisher
-    ///   identity requires its publisher to stay active; a development
-    ///   identity requires its publisher name to stay absent from the
-    ///   registry. Explicit Linked identities without a package row skip
-    ///   publisher checks.
+    /// - AIS-03: a Publisher identity requires its publisher to stay active;
+    ///   a development identity requires the name to stay absent from the
+    ///   registry. Explicit Linked identities skip publisher checks.
     async fn recheck_existing_actor(
         &self,
         actor_id: &ActrId,
-        target: Option<&str>,
         signer: &Signer,
     ) -> Result<IssuedActor, AidError> {
-        Self::recheck_actor_on(&mut *Self::db_connection().await?, actor_id, target, signer).await
+        Self::recheck_actor_on(&mut *Self::db_connection().await?, actor_id, signer).await
     }
 
     /// [`AIdIssuer::recheck_existing_actor`] on `conn`. The renew and reissue
-    /// commits run it inside their transaction, so a revocation, Realm,
-    /// package or publisher change that lands after the first check still
+    /// commits run it inside their transaction, so an Actor revocation, Realm change, or
+    /// Publisher change that lands after the first check still
     /// stops the credential.
     pub(crate) async fn recheck_actor_on(
         conn: &mut sqlx::SqliteConnection,
         actor_id: &ActrId,
-        target: Option<&str>,
         signer: &Signer,
     ) -> Result<IssuedActor, AidError> {
         // AIS-04: an explicitly revoked identity is terminal, regardless of any
@@ -1265,53 +1197,13 @@ impl AIdIssuer {
                 _ => AidError::GenerationFailed(format!("realm validation failed: {e:?}")),
             })?;
 
-        // AIS-03(b): recheck package/publisher status for package identities.
+        // AIS-03(b): recheck Publisher status for package identities.
         // The Actor type is the one recorded when the identity was issued.
         let issued = Self::issued_actor(&mut *conn, actor_id).await?;
         let (actor_type, auth_mode) = (&issued.actor_type, issued.auth_mode);
         let type_str = actor_type.to_program_identity();
-        // Any package row (regardless of lifecycle status) for this type marks a
-        // published-package identity. `publisher_package.status` stores 'active' or
-        // 'revoked'. When the target is known (persisted at registration time),
-        // scope the recheck to that exact target so revoking one target of a
-        // multi-target type does not get masked by a sibling target that is still
-        // active. Without target (legacy rows), fall back to type-only matching.
-        let statuses: Vec<String> = if let Some(target) = target.filter(|t| !t.is_empty()) {
-            sqlx::query_scalar(
-                "SELECT status FROM publisher_package WHERE type_str = ?1 AND target = ?2",
-            )
-            .bind(&type_str)
-            .bind(target)
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(|e| AidError::GenerationFailed(format!("package status lookup failed: {e}")))?
-        } else {
-            platform::recording::warn!(
-                "Recheck without target for type {}: per-target revocation cannot be enforced; falling back to type-only lookup",
-                type_str
-            );
-            sqlx::query_scalar("SELECT status FROM publisher_package WHERE type_str = ?1")
-                .bind(&type_str)
-                .fetch_all(&mut *conn)
-                .await
-                .map_err(|e| {
-                    AidError::GenerationFailed(format!("package status lookup failed: {e}"))
-                })?
-        };
-
-        if statuses.is_empty() && auth_mode == Some(actr_protocol::RegisterAuthMode::Linked as i32)
-        {
+        if auth_mode == Some(actr_protocol::RegisterAuthMode::Linked as i32) {
             return Ok(issued);
-        }
-
-        let has_active = statuses.iter().any(|status| status == "active");
-        if !statuses.is_empty() && !has_active {
-            platform::recording::warn!(
-                "Credential issuance rejected: every package for type {} (target={:?}) has been revoked",
-                type_str,
-                target
-            );
-            return Err(AidError::PackageRevoked);
         }
 
         let publisher_name =
@@ -1341,13 +1233,9 @@ impl AIdIssuer {
             };
         }
         // Pre-upgrade rows have no auth mode. A DNS-style identity is always a
-        // package identity; a non-domain identity without a publisher or package
+        // package identity; a non-domain identity without a publisher
         // is the legacy linked case. Known package identities never take this fallback.
-        if auth_mode.is_none()
-            && statuses.is_empty()
-            && publisher.is_none()
-            && !actor_type.publisher.contains('.')
-        {
+        if auth_mode.is_none() && publisher.is_none() && !actor_type.publisher.contains('.') {
             return Ok(issued);
         }
         // A Publisher identity requires its publisher to stay active.
@@ -1385,15 +1273,12 @@ impl AIdIssuer {
     pub async fn issue_credential_for_actor(
         &self,
         actor_id: &ActrId,
-        target: Option<&str>,
         signer: &Signer,
     ) -> Result<register_response::RegisterOk, AidError> {
-        // Re-validate realm/package/publisher state and the revocation list
+        // Re-validate Realm and Publisher state and the revocation list
         // before signing (AIS-03 / AIS-04). Covers both /renew and /reissue,
         // which are the only callers of this method.
-        let issued = self
-            .recheck_existing_actor(actor_id, target, signer)
-            .await?;
+        let issued = self.recheck_existing_actor(actor_id, signer).await?;
 
         // Build IdentityClaims.
         let (key_id, verifying_key) = self.realm_key(&actor_id.realm).await?;
@@ -1626,11 +1511,7 @@ impl AIdIssuer {
         actor: &ActrId,
         signer: &Signer,
     ) -> Result<ActrType, AidError> {
-        let target = Self::issued_target(actor).await;
-        Ok(self
-            .recheck_existing_actor(actor, target.as_deref(), signer)
-            .await?
-            .actor_type)
+        Ok(self.recheck_existing_actor(actor, signer).await?.actor_type)
     }
 
     pub(crate) async fn mint_relay_identity(

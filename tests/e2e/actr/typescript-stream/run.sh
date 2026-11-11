@@ -1153,7 +1153,6 @@ write_ts_echo_impl
 (cd "$TS_ECHO" && run_logged "ts echo actr build" "$ACTR_BIN" build --no-compile -k "$RUN_ROOT/dev-key.json" -o dist/echo-service-ts.actr)
 write_public_key "$TS_ECHO"
 write_runtime_config "$TS_ECHO" "dist/echo-service-ts.actr" "true" "typescript-stream-echo"
-(cd "$TS_ECHO" && run_logged "publish echo" "$ACTR_BIN" registry publish -p dist/echo-service-ts.actr -k "$RUN_ROOT/dev-key.json" -e "$MOCK_HTTP")
 
 log "Start EchoService for dependency discovery"
 (cd "$TS_ECHO" && NO_COLOR=1 "$ACTR_BIN" run --config actr.toml --hyper-dir "$RUN_ROOT/hyper/echo" >"$LOG_DIR/echo-run.log" 2>&1) &
@@ -1170,7 +1169,6 @@ write_runtime_config "$RELAY" "dist/relay-service.actr" "true" "typescript-strea
 (cd "$RELAY" && run_logged "relay protoc-gen-actrframework" protoc-gen-actrframework --version)
 (cd "$RELAY" && run_logged "relay gen" "$ACTR_BIN" gen -l rust --clean)
 (cd "$RELAY" && run_logged "relay build" "$ACTR_BIN" build -k "$RUN_ROOT/dev-key.json" -o dist/relay-service.actr)
-(cd "$RELAY" && run_logged "publish relay" "$ACTR_BIN" registry publish -p dist/relay-service.actr -k "$RUN_ROOT/dev-key.json" -e "$MOCK_HTTP")
 
 log "Start RelayService for dependency discovery"
 (cd "$RELAY" && NO_COLOR=1 "$ACTR_BIN" run --config actr.toml --hyper-dir "$RUN_ROOT/hyper/relay" >"$LOG_DIR/relay-run.log" 2>&1) &

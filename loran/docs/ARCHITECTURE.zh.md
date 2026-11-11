@@ -23,11 +23,11 @@
 │       │ Actor credential / TURN credential              │
 │       ├────────► Rendezvous: Signaling                   │
 │       └────────► Relay: STUN / TURN                      │
-│ Distribution: Publisher Registry                         │
+│ Publisher identity: Publisher Registry                         │
 │ Management: Admin UI/API + Realm 管理请求 + Realm 生命周期 │
 └────────────────────────┬─────────────────────────────────┘
                          ▼
-                    SQLite schema v9
+                    SQLite schema v10
 ```
 
 这些是逻辑平面，不要求永远同进程。v1 默认 all-in-one 是为了减少部署依赖；Issuer
@@ -110,7 +110,7 @@ Workspace 不属于 Loran。一个 Service 至多绑定一个 Workspace，同一
    key，之后只接受由已固定 key 签名、`sequence` 更高的 Publisher Profile（包签名 key 轮换即由此完成）。
 2. Loran 取 descriptor 的方式与 Realm 相同：按 authority-discovery 跟随重定向（最多 5 次、每跳
    HTTPS、始终用原域名验证 `authority` 绑定），每一跳执行 SSRF 检查与 DNS pinning，限长 64 KiB。
-3. 包发布使用一次性 nonce 与 Publisher 签名。
+3. 包身份直接验证 manifest 签名与 Publisher 公钥，不需要发布备案。
 4. 消费端从允许的 HTTPS origin 下载后验证 digest 和签名；origin 不是信任根。
 
 ## 网络
@@ -122,7 +122,7 @@ relay port range。端口可配置，descriptor 发布实际 endpoint。公网�
 ## 失败策略
 
 - 配置未知字段、占位 secret、明文 admin 密码、生产无 TLS/KEK：拒绝启动。
-- SQLite schema 不是 v9：拒绝启动，需停机后重建数据库。
+- SQLite schema 不是 v10：拒绝启动，需停机后重建数据库。
 - 请求所属 Realm 不存在或不是 `active`：拒绝，不猜测默认 Realm；Realm 签名 key 生成完成前
   `GET /.well-known/actr` 返回 503。
 - Actor credential scope、连接 ACL 或 envelope identity 不一致：拒绝。

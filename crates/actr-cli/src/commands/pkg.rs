@@ -9,7 +9,6 @@
 //! actr pkg keygen   [--output FILE] [--force]
 //! ```
 //!
-//! Remote registry operations (`publish`) live under `actr registry`.
 //! End-to-end build + package is a single top-level command: `actr build`.
 
 use std::path::PathBuf;
@@ -115,7 +114,7 @@ pub struct PkgKeygenArgs {
     /// Force overwrite existing key
     #[arg(long)]
     pub force: bool,
-    /// Bind this keychain to a publisher; signing/publishing packages for
+    /// Bind this keychain to a publisher; signing packages for
     /// any other publisher will then be rejected (issue #425).
     #[arg(long, value_name = "NAME")]
     pub publisher: Option<String>,

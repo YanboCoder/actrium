@@ -81,7 +81,7 @@ TLS/mTLS；Management 即使共享 listener 也必须经过独立认证中间件
 | 共享 Actr Facility Provider 或实例管理员关联同一客户端 | 每个客户端安装在每个 Realm 使用独立的 Realm 客户端 key，不跨 Realm 复用，无法据 Realm 客户端 key 关联同一客户端加入的不同 Realm |
 | TURN secret 在 Realm 之间串用 | TURN secret 由主密钥按 Realm 名与 Actr Facility Provider ID 经 HKDF 派生；username 绑定 Realm 名与 ActorId |
 | 续期/重签响应丢失后重试造成重复签发或身份失效 | `/renew`、`/reissue` 以客户端 `attempt_id` 幂等：状态变化与加密响应同一事务提交，同一 attempt 原样重放（重放凭证前重查撤销），请求体不同 `409`、超过保留期 `410`、处理中 `425`；持有证明只能成功 reissue 一次；后继已生成的 renewal token 只在 5 分钟内可 `/renew`，且只换回该后继 |
-| 撤销与续期/重签竞态 | `/renew`、`/reissue` 在提交事务内重查 Actor 撤销、Realm 状态、包撤销与 publisher 停用 |
+| 撤销与续期/重签竞态 | `/renew`、`/reissue` 在提交事务内重查 Actor 撤销、Realm 状态与 publisher 停用 |
 | `/renew` 泄露 Realm 状态 | 先只读校验 renewal token，通过后才报告 Realm 不可用原因 |
 | Snowflake 重启/时钟回拨碰撞 | 显式 worker ID；SQLite 永久已签发身份登记以主键拒绝复用并重试 |
 | Actor Registry 注册成功后立即重启丢记录 | Signaling 在 SQLite 写入成功后才完成 Actor Registry 注册；恢复项仅是离线元数据，原 Actor 通过认证重连后才重新进入发现/路由 |

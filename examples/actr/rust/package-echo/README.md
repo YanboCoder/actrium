@@ -1,6 +1,6 @@
 # package-echo
 
-End-to-end test for the Actr package-driven execution flow, demonstrating how to build, sign, publish, and run `.actr` packages with WebRTC-based service discovery.
+End-to-end test for the Actr package-driven execution flow, demonstrating how to build, sign, verify, and run `.actr` packages with WebRTC-based service discovery.
 
 ## Overview
 
@@ -9,10 +9,9 @@ This example demonstrates:
 1. **Build**: Compile echo-actr package (WASM or native cdylib) and package it as a signed `.actr` archive
 2. **Sign**: Create signed `.actr` archive using `actr build` (cdylib) or `actr build` (wasm)
 3. **Verify**: Validate package signature with `actr pkg verify`
-4. **Publish**: Register package with Publisher Registry via `actr pkg publish`
-5. **Run**: Host server loads the package and exposes the echo service
-6. **Discover**: Client discovers the service via Loran signaling server
-7. **Connect**: Establish WebRTC connection and exchange messages
+4. **Run**: Host server loads the package and exposes the echo service
+5. **Discover**: Client discovers the service via Loran signaling server
+6. **Connect**: Establish WebRTC connection and exchange messages
 
 ## Architecture
 
@@ -255,8 +254,7 @@ Two backends are supported via the `--backend` flag:
 ### Step 2.5-2.7: Setup Infrastructure
 - Creates realms in the Loran database
 - Registers publisher identity with public key
-- Publishes the package via `actr registry publish` (challenge-response flow)
-- Seeds client package metadata
+- Registers the client-guest Publisher public key
 
 ### Step 3-4: Start Server
 - Builds package-echo-server binary
@@ -415,7 +413,7 @@ cd examples/actr/rust/package-echo
 bash manual-runtime-lifecycle.sh
 ```
 
-The script derives an isolated config from `server-actr.toml`, starts loran, publishes the local package, and verifies:
+The script derives an isolated config from `server-actr.toml`, starts loran, runs the signed local package, and verifies:
 
 - `actr run -d` prints the WID plus the `actr logs <wid> -f` follow hint.
 - `actr ps` shows `WID`, `ACTR_ID`, `PID`, `STATUS`, and `STARTED_AT`.

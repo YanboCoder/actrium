@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Loran Publisher Registry - domain identity and signed Actor packages"
+description = "Loran Publisher Registry - Publisher domain identity and signing keys"
 
 [dependencies]
 # Workspace dependencies
@@ -20,18 +20,17 @@ ed25519-dalek = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 sha2 = { workspace = true }
-toml = { version = "0.8" }
 sqlx.workspace = true
 
 # Not in workspace
-rand = "0.8"
-hex = "0.4"
 url = "2"
 
 # Internal dependencies
 platform = { path = "../loran-platform", package = "loran-platform", version = "0.10.7" }
 
 [dev-dependencies]
+rand.workspace = true
+tower = { version = "0.5", features = ["util"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tempfile = { workspace = true }
 serial_test = { workspace = true }

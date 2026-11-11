@@ -1,8 +1,6 @@
 use crate::{
     PublisherRegistryError, crypto,
-    model::{
-        ActrPackage, PkgStatus, PublishNonce, Publisher, PublisherKeyHistory, PublisherStatus,
-    },
+    model::{Publisher, PublisherKeyHistory, PublisherStatus},
     reserved::canonical_publisher_domain,
 };
 use actr_protocol::realm_profile::jcs;
@@ -21,7 +19,7 @@ pub enum PackageSigningKey {
     Untrusted,
 }
 
-/// How long a package signing key without `not_after` may publish.
+/// Default validity of a package signing key without `not_after`.
 const DEFAULT_KEY_LIFETIME_SECS: i64 = 365 * 24 * 3600;
 
 #[cfg(test)]
@@ -36,83 +34,9 @@ pub struct PublisherCertificate {
     pub publisher: String,
     pub public_key: String,
     pub issued_at: i64,
-    /// End of this key's authority to publish new packages. Natural expiry
-    /// does not invalidate signatures made by this key.
+    /// The key's declared validity limit. Natural expiry does not invalidate
+    /// signatures made by this key.
     pub expires_at: i64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PublishRequest {
-    pub publisher: String,
-    pub name: String,
-    pub version: String,
-    /// Target platform (e.g. "wasm32-wasip1", "x86_64-unknown-linux-gnu")
-    #[serde(default = "default_target")]
-    pub target: String,
-    /// Full content of actr.toml (with binary_hash field populated)
-    pub manifest: String,
-    /// base64 Ed25519 signature by the Publisher private key over manifest bytes
-    pub signature: String,
-    /// Proto files JSON for filing/audit (optional)
-    #[serde(default)]
-    pub proto_files: Option<serde_json::Value>,
-    /// Challenge-Response nonce from POST /registry/packages/nonce.
-    #[serde(default)]
-    pub nonce: Option<String>,
-    /// Ed25519 signature over the request authorization payload:
-    /// ACTR-PUBLISH-V2 + publisher + method + path + hex(nonce) + sha256(signable_body)
-    #[serde(default)]
-    pub nonce_sig: Option<String>,
-}
-
-/// Request body for POST /registry/packages/nonce.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NonceRequest {
-    pub publisher: String,
-}
-
-fn default_target() -> String {
-    "wasm32-wasip1".to_string()
-}
-
-#[derive(Serialize)]
-struct SignablePublishBody<'a> {
-    publisher: &'a str,
-    name: &'a str,
-    version: &'a str,
-    target: &'a str,
-    manifest: &'a str,
-    signature: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    proto_files: Option<&'a serde_json::Value>,
-    nonce: &'a str,
-}
-
-fn signable_publish_body_bytes(
-    req: &PublishRequest,
-    nonce: &str,
-) -> Result<Vec<u8>, PublisherRegistryError> {
-    serde_json::to_vec(&SignablePublishBody {
-        publisher: &req.publisher,
-        name: &req.name,
-        version: &req.version,
-        target: &req.target,
-        manifest: &req.manifest,
-        signature: &req.signature,
-        proto_files: req.proto_files.as_ref(),
-        nonce,
-    })
-    .map_err(|e| {
-        PublisherRegistryError::InvalidRequest(format!(
-            "failed to serialize signable publish body: {e}"
-        ))
-    })
-}
-
-fn build_publish_auth_payload(publisher: &str, nonce_hex: &str, body_sha256_hex: &str) -> String {
-    format!(
-        "ACTR-PUBLISH-V2\npublisher={publisher}\nmethod=POST\npath=/registry/packages/publish\nnonce={nonce_hex}\nbody_sha256={body_sha256_hex}"
-    )
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -129,9 +53,6 @@ pub struct PublisherPublicInfo {
 
 pub struct PublisherRegistryManager {
     pool: SqlitePool,
-    /// How long (seconds) to retain expired/used nonce records for auditing.
-    /// Default: 86400 (24 hours).
-    nonce_retain_secs: i64,
     /// Most publishers `register_publisher` registers; `None`: no limit.
     max_publishers: Option<u32>,
 }
@@ -140,7 +61,6 @@ impl PublisherRegistryManager {
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool,
-            nonce_retain_secs: 86400, // 24 hours
             max_publishers: None,
         }
     }
@@ -151,63 +71,12 @@ impl PublisherRegistryManager {
         self
     }
 
-    /// Set nonce retention duration in seconds (for cleanup of expired/used nonces).
-    pub fn with_nonce_retain_secs(mut self, secs: i64) -> Self {
-        self.nonce_retain_secs = secs;
-        self
-    }
-
-    /// Access the underlying database pool (used by tests for nonce setup).
+    /// Access the underlying database pool.
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
 
-    fn validate_publish_authority(
-        publisher_record: &Publisher,
-    ) -> Result<(), PublisherRegistryError> {
-        if publisher_record.status != PublisherStatus::Active {
-            return Err(PublisherRegistryError::InvalidStatus(format!(
-                "Publisher '{}' is not active",
-                publisher_record.name
-            )));
-        }
-
-        if publisher_record
-            .publishing_keys(chrono::Utc::now().timestamp())
-            .is_empty()
-        {
-            return Err(PublisherRegistryError::CertificateExpired);
-        }
-
-        Ok(())
-    }
-
     // ========== Publish Nonce Challenge-Response ==========
-
-    /// Request a one-time nonce for publish authentication.
-    ///
-    /// Also performs lazy cleanup of old nonce records.
-    pub async fn request_nonce(&self, publisher: &str) -> Result<Vec<u8>, PublisherRegistryError> {
-        let publisher_record = Publisher::get_by_name(&self.pool, publisher)
-            .await?
-            .ok_or(PublisherRegistryError::NotFound)?;
-        Self::validate_publish_authority(&publisher_record)?;
-
-        // Lazy cleanup of old nonces
-        let cleaned = PublishNonce::cleanup(&self.pool, self.nonce_retain_secs).await?;
-        if cleaned > 0 {
-            platform::recording::debug!("cleaned up {} expired publish nonces", cleaned);
-        }
-
-        // Create new nonce
-        let nonce = PublishNonce::create(&self.pool, publisher_record.id).await?;
-        platform::recording::info!(
-            "publish nonce issued for publisher '{}' (publisher_id={})",
-            publisher,
-            publisher_record.id
-        );
-        Ok(nonce)
-    }
 
     /// Register `publisher` from `profile`, its Publisher Profile verified
     /// by [`PublisherProfile::verify`] with `keys`, or accept a later profile
@@ -220,7 +89,7 @@ impl PublisherRegistryManager {
     /// a rotation chain, introduce keys; an identity change is refused.
     ///
     /// The profile lists one or two `active` package signing keys, each
-    /// within its `not_before`/`not_after`; all of them publish. The current
+    /// within its `not_before`/`not_after`; all of them verify packages. The current
     /// key stays current while it is active; a key that is no longer active
     /// is archived as retired; a key the profile no longer lists is revoked,
     /// and a key used before is never reinstated.
@@ -801,248 +670,6 @@ impl PublisherRegistryManager {
             .map(PackageSigningKey::Trusted)
     }
 
-    pub async fn publish_package(
-        &self,
-        req: PublishRequest,
-    ) -> Result<ActrPackage, PublisherRegistryError> {
-        let publisher_record = Publisher::get_by_name(&self.pool, &req.publisher)
-            .await?
-            .ok_or(PublisherRegistryError::NotFound)?;
-        Self::validate_publish_authority(&publisher_record)?;
-
-        // --- Challenge-Response nonce verification ---
-        // Flow: find_pending → verify nonce_sig over the full signable request body
-        //       → verify manifest_sig → atomic consume.
-        let (nonce_entry, (signing_key_id, signing_public_key)) = match (&req.nonce, &req.nonce_sig)
-        {
-            (Some(nonce_b64), Some(nonce_sig_b64)) => {
-                use base64::Engine as _;
-                use sha2::{Digest, Sha256};
-
-                // Decode nonce
-                let nonce_bytes = base64::engine::general_purpose::STANDARD
-                    .decode(nonce_b64)
-                    .map_err(|_| {
-                        PublisherRegistryError::InvalidRequest("invalid nonce base64".to_string())
-                    })?;
-
-                // Step 1: Read-only lookup — does NOT consume the nonce
-                let entry = PublishNonce::find_pending(&self.pool, &nonce_bytes).await?;
-
-                // Ensure nonce was issued for this publisher
-                if entry.publisher_id != publisher_record.id {
-                    platform::recording::warn!(
-                        "publish nonce publisher_id mismatch: nonce={}, request={}",
-                        entry.publisher_id,
-                        publisher_record.id
-                    );
-                    return Err(PublisherRegistryError::Unauthorized);
-                }
-
-                // Step 2: Verify nonce signature (before consuming).
-                // The signature authorizes this exact publish request body (excluding nonce_sig).
-                let body_bytes = signable_publish_body_bytes(&req, nonce_b64)?;
-                let body_sha256 = hex::encode(Sha256::digest(&body_bytes));
-                let nonce_hex = hex::encode(&nonce_bytes);
-                let payload = build_publish_auth_payload(&req.publisher, &nonce_hex, &body_sha256);
-
-                // Any key that may publish; it must also sign the manifest.
-                let mut signer = None;
-                for (key_id, public_key) in
-                    publisher_record.publishing_keys(chrono::Utc::now().timestamp())
-                {
-                    if crypto::verify_signature(payload.as_bytes(), nonce_sig_b64, public_key)? {
-                        signer = Some((key_id.to_string(), public_key.to_string()));
-                        break;
-                    }
-                }
-                let Some(signer) = signer else {
-                    platform::recording::warn!(
-                        "publish nonce signature invalid: publisher={}",
-                        req.publisher
-                    );
-                    return Err(PublisherRegistryError::Unauthorized);
-                };
-
-                (entry, signer)
-            }
-            _ => {
-                platform::recording::warn!(
-                    "publish request missing nonce/nonce_sig: publisher={}",
-                    req.publisher
-                );
-                return Err(PublisherRegistryError::Unauthorized);
-            }
-        };
-
-        // Step 3: Verify manifest signature
-        let valid =
-            crypto::verify_signature(req.manifest.as_bytes(), &req.signature, &signing_public_key)?;
-        if !valid {
-            return Err(PublisherRegistryError::InvalidSignature);
-        }
-
-        // Step 4: Atomically consume nonce (only after both signatures verified)
-        PublishNonce::consume(&self.pool, nonce_entry.id).await?;
-        platform::recording::info!(
-            "publish nonce verified and consumed: publisher={}",
-            req.publisher
-        );
-
-        // Step 5: Verify outer fields match manifest content (parse as TOML)
-        let manifest_toml: toml::Value = toml::from_str(&req.manifest).map_err(|e| {
-            PublisherRegistryError::InvalidRequest(format!("manifest is not valid TOML: {}", e))
-        })?;
-
-        // Check Publisher
-        let m = manifest_toml
-            .get("publisher")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                PublisherRegistryError::InvalidRequest(
-                    "manifest missing required field 'publisher'".into(),
-                )
-            })?;
-        if m != req.publisher {
-            return Err(PublisherRegistryError::InvalidRequest(format!(
-                "manifest publisher '{}' != request '{}'",
-                m, req.publisher
-            )));
-        }
-
-        // Check name
-        let n = manifest_toml
-            .get("name")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                PublisherRegistryError::InvalidRequest(
-                    "manifest missing required field 'name'".into(),
-                )
-            })?;
-        if n != req.name {
-            return Err(PublisherRegistryError::InvalidRequest(format!(
-                "manifest name '{}' != request '{}'",
-                n, req.name
-            )));
-        }
-
-        // Check version
-        let v = manifest_toml
-            .get("version")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                PublisherRegistryError::InvalidRequest(
-                    "manifest missing required field 'version'".into(),
-                )
-            })?;
-        if v != req.version {
-            return Err(PublisherRegistryError::InvalidRequest(format!(
-                "manifest version '{}' != request '{}'",
-                v, req.version
-            )));
-        }
-
-        // If a modern manifest declares its signing key, it must identify the
-        // key that signed this request. The database field remains
-        // authoritative so legacy manifests without this field stay publishable.
-        if let Some(manifest_key_id) = manifest_toml
-            .get("signing_key_id")
-            .and_then(|value| value.as_str())
-            && manifest_key_id != signing_key_id
-        {
-            return Err(PublisherRegistryError::InvalidRequest(format!(
-                "manifest signing_key_id '{}' != signing Publisher key '{}'",
-                manifest_key_id, signing_key_id
-            )));
-        }
-
-        // Check target (nested under [binary])
-        let t = manifest_toml
-            .get("binary")
-            .and_then(|b| b.get("target"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                PublisherRegistryError::InvalidRequest(
-                    "manifest missing required field 'binary.target'".into(),
-                )
-            })?;
-        if t != req.target {
-            return Err(PublisherRegistryError::InvalidRequest(format!(
-                "manifest binary.target '{}' != request '{}'",
-                t, req.target
-            )));
-        }
-
-        // Serialize proto_files JSON to string for storage
-        let proto_files_str = req.proto_files.as_ref().map(|v| v.to_string());
-
-        let pkg = ActrPackage::publish(
-            &self.pool,
-            publisher_record.id,
-            &req.publisher,
-            &req.name,
-            &req.version,
-            &req.target,
-            &req.manifest,
-            &req.signature,
-            &signing_key_id,
-            proto_files_str.as_deref(),
-        )
-        .await?;
-
-        if req.proto_files.is_some() {
-            platform::recording::info!(
-                "actor package published with proto filing: type_str={}, publisher_id={}",
-                pkg.type_str,
-                publisher_record.id
-            );
-        } else {
-            platform::recording::info!(
-                "actor package published: type_str={}, publisher_id={}",
-                pkg.type_str,
-                publisher_record.id
-            );
-        }
-        Ok(pkg)
-    }
-
-    pub async fn get_package(&self, type_str: &str) -> Result<ActrPackage, PublisherRegistryError> {
-        ActrPackage::get_by_type(&self.pool, type_str)
-            .await?
-            .ok_or(PublisherRegistryError::NotFound)
-    }
-
-    pub async fn list_packages(
-        &self,
-        publisher: Option<&str>,
-    ) -> Result<Vec<ActrPackage>, PublisherRegistryError> {
-        if let Some(name) = publisher {
-            let publisher_record = Publisher::get_by_name(&self.pool, name)
-                .await?
-                .ok_or(PublisherRegistryError::NotFound)?;
-            ActrPackage::list_by_publisher(&self.pool, publisher_record.id).await
-        } else {
-            Ok(sqlx::query_as::<_, ActrPackage>(
-                "SELECT * FROM publisher_package ORDER BY published_at DESC",
-            )
-            .fetch_all(&self.pool)
-            .await?)
-        }
-    }
-
-    pub async fn revoke_package(&self, pkg_id: i64) -> Result<(), PublisherRegistryError> {
-        let mut pkg = ActrPackage::get_by_id(&self.pool, pkg_id)
-            .await?
-            .ok_or(PublisherRegistryError::NotFound)?;
-        pkg.revoke(&self.pool).await?;
-        platform::recording::warn!(
-            "actor package revoked: pkg_id={}, type_str={}",
-            pkg_id,
-            pkg.type_str
-        );
-        Ok(())
-    }
-
     // Admin methods
     pub async fn admin_list(
         &self,
@@ -1105,7 +732,7 @@ impl PublisherRegistryManager {
     ///
     /// `admin_revoke_historical_key` only covers keys already rotated away; this
     /// handles a compromised live key. Afterwards the publisher holds no usable
-    /// key (publish and resolution fail closed) and must register a later
+    /// key (key resolution fails closed) and must register a later
     /// Publisher Profile with a fresh key - the rollback blacklist prevents
     /// reinstating the revoked one. See `Publisher::revoke_active_key` for the exact post-state.
     pub async fn admin_revoke_active_key(
@@ -1136,44 +763,4 @@ fn accepted_profile(profile_json: &str) -> Option<Value> {
     serde_json::from_str::<Value>(profile_json)
         .ok()
         .filter(|profile| profile.get("signature").is_some())
-}
-
-/// Public API for Issuer integration: check if a type_str is a valid, active package.
-/// Reserved names always return true.
-///
-/// When `target` is provided, lookup is narrowed to that specific platform.
-/// When `manifest_hash` is provided, the stored manifest is SHA-256 compared for content integrity.
-pub async fn lookup_package(
-    pool: &SqlitePool,
-    type_str: &str,
-    target: Option<&str>,
-    manifest_hash: Option<&[u8]>,
-) -> Result<bool, PublisherRegistryError> {
-    let pkg = if let Some(t) = target {
-        ActrPackage::get_by_type_and_target(pool, type_str, t).await?
-    } else {
-        ActrPackage::get_by_type(pool, type_str).await?
-    };
-
-    match pkg {
-        Some(p) if p.status == PkgStatus::Active => {
-            // C1: manifest hash comparison (defense-in-depth)
-            if let Some(expected_hash) = manifest_hash {
-                use sha2::{Digest, Sha256};
-                let mut hasher = Sha256::new();
-                hasher.update(p.manifest.as_bytes());
-                let stored_hash = hasher.finalize();
-                if stored_hash.as_slice() != expected_hash {
-                    platform::recording::warn!(
-                        "manifest hash mismatch for type_str={}, target={:?}",
-                        type_str,
-                        target
-                    );
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        }
-        _ => Ok(false),
-    }
 }

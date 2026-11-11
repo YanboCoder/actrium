@@ -60,9 +60,6 @@ PROVISIONED_KEYCHAIN="$RUN_DIR/publisher.keychain.json"
 PROVISIONED_PUBLIC_KEY="$RUN_DIR/publisher-public-key.json"
 ECHOAPP_LORAN_CONFIG="$TMP_APP_DIR/actr.toml"
 HOST_TARGET="$(rustc -vV | awk '/host:/ {print $2}')"
-ECHOAPP_PACKAGE_MANIFEST="$RUN_DIR/echoapp-package-manifest.toml"
-ECHOAPP_MARKER_BINARY="$RUN_DIR/echoapp-linked-identity.bin"
-ECHOAPP_PACKAGE="$DIST_DIR/${PUBLISHER}-EchoApp-0.1.0-${HOST_TARGET}.actr"
 APP_STDOUT_LOG="$LOG_DIR/app.stdout.log"
 APP_STDERR_LOG="$LOG_DIR/app.stderr.log"
 APP_BUNDLE_ID="io.actrium.EchoApp"
@@ -597,7 +594,7 @@ scaffold_service_guest() {
 }
 
 build_service_package() {
-    section "📦 Building and publishing the server package"
+    section "📦 Building and verifying the server package"
     SERVICE_PACKAGE="$DIST_DIR/${PUBLISHER}-EchoService-${SERVICE_VERSION}-${HOST_TARGET}.actr"
 
     (
@@ -611,48 +608,10 @@ build_service_package() {
     [ -f "$SERVICE_PACKAGE" ] || fail "Server package missing: $SERVICE_PACKAGE"
 
     run_actr pkg verify --pubkey "$SERVICE_PUBLIC_KEY" --package "$SERVICE_PACKAGE" >/dev/null
-    run_actr registry publish \
-        --package "$SERVICE_PACKAGE" \
-        --keychain "$SERVICE_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}"
 
-    success "Server package published"
+    success "Server package built and verified"
 }
 
-publish_echoapp_package_identity() {
-    section "📦 Publishing EchoApp package identity"
-
-    # Linked EchoApp does not load this package. It is a registry marker for
-    # loran versions that still require the actor type to be package-registered.
-    printf 'linked EchoApp identity marker\n' >"$ECHOAPP_MARKER_BINARY"
-    cat >"$ECHOAPP_PACKAGE_MANIFEST" <<EOF
-edition = 1
-
-[package]
-name = "EchoApp"
-publisher = "${PUBLISHER}"
-version = "0.1.0"
-description = "Actrium EchoApp linked runtime identity marker"
-
-[binary]
-path = "${ECHOAPP_MARKER_BINARY}"
-target = "${HOST_TARGET}"
-EOF
-
-    run_actr build \
-        --no-compile \
-        --manifest-path "$ECHOAPP_PACKAGE_MANIFEST" \
-        --key "$PROVISIONED_KEYCHAIN" \
-        --output "$ECHOAPP_PACKAGE"
-
-    run_actr pkg verify --pubkey "$PROVISIONED_PUBLIC_KEY" --package "$ECHOAPP_PACKAGE" >/dev/null
-    run_actr registry publish \
-        --package "$ECHOAPP_PACKAGE" \
-        --keychain "$PROVISIONED_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}"
-
-    success "EchoApp package identity published"
-}
 
 # ──── EchoApp config ────
 
@@ -1076,10 +1035,9 @@ wait_for_signer
 ensure_realm
 provision_publisher_keychain
 
-# Phase 2: Build service package and publish identities
+# Phase 2: Build and verify the service package
 scaffold_service_guest
 build_service_package
-publish_echoapp_package_identity
 
 # Phase 3: Prepare the isolated EchoApp workspace, render config, and setup simulator
 # (Service starts in Phase 4 before the app build, because `actr deps install`

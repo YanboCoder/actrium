@@ -35,14 +35,13 @@ graph LR
 
 1. Start local loran, create a realm, and provision an E2E publisher keychain.
 2. Initialize a temporary Rust service with `actr init --template empty`, then write the E2E `duplex_stream.proto`, manifest exports, Cargo files, and Rust handler.
-3. Run `actr deps install`, `actr gen -l rust`, `actr build`, and publish `e2e.actrium.example/DuplexStreamService@1.0.0`.
-4. Publish a linked-runtime identity marker for `e2e.actrium.example/DataStreamApp@0.1.0`.
-5. Initialize a temporary Swift app with `actr init --template empty`, then write local `probe.proto`, DataStreamApp sources, `manifest.toml`, `actr.toml`, and `project.yml`.
-6. Start the package-backed Rust service and wait until `DuplexStreamService` is registered with signaling.
-7. Run `actr deps install` so the app fetches the remote `duplex_stream.proto` from the published service, run `actr gen -l swift`, then build it with XcodeGen/Xcode.
-8. Install the app into the iOS Simulator and launch it with `ACTR_DATASTREAMAPP_AUTO_STREAM_COUNT=3`.
-9. DataStreamApp sends `hello 1`, `hello 2`, and `hello 3`; the service replies with `echo: hello 1`, `echo: hello 2`, and `echo: hello 3`.
-10. `run.sh` waits for `ACTR_E2E_RESULT:3/3` in the app logs.
+3. Run `actr deps install`, `actr gen -l rust`, `actr build`, and verify the signed `e2e.actrium.example/DuplexStreamService@1.0.0` package.
+4. Initialize a temporary Swift app with `actr init --template empty`, then write local `probe.proto`, DataStreamApp sources, `manifest.toml`, `actr.toml`, and `project.yml`.
+5. Start the package-backed Rust service and wait until `DuplexStreamService` is registered with signaling.
+6. Run `actr deps install` so the app fetches the remote `duplex_stream.proto` from the running service, run `actr gen -l swift`, then build it with XcodeGen/Xcode.
+7. Install the app into the iOS Simulator and launch it with `ACTR_DATASTREAMAPP_AUTO_STREAM_COUNT=3`.
+8. DataStreamApp sends `hello 1`, `hello 2`, and `hello 3`; the service replies with `echo: hello 1`, `echo: hello 2`, and `echo: hello 3`.
+9. `run.sh` waits for `ACTR_E2E_RESULT:3/3` in the app logs.
 
 ## File Structure
 
@@ -79,7 +78,7 @@ The main acceptance path is the 3-message stream echo check:
 2. The app discovers `${PUBLISHER}/DuplexStreamService@1.0.0`.
 3. It opens a duplex stream and sends `hello 1`, `hello 2`, `hello 3`.
 4. The service echoes each payload as `echo: hello N`.
-5. The app verifies the ordered received lines and prints `ACTR_E2E_RESULT:3/3`.
+4. The app verifies the ordered received lines and prints `ACTR_E2E_RESULT:3/3`.
 
 The older 8-probe runner remains in source for manual/debug use, but it is not the CI acceptance marker.
 

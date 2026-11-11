@@ -443,12 +443,6 @@ ACTR_CMD="$ACTR_CLI_BIN" "$WORKSPACE_ROOT/scripts/join-realm.sh" \
     "$LORAN_DB" "package-echo@example.com" "http://localhost:8081/issuer" \
     "$ARTIFACT_DIR/realm-client.json"
 
-"$ACTR_CLI_BIN" pkg publish \
-    --package "$ACTR_PACKAGE" \
-    --keychain "$SIGNING_KEY" \
-    --endpoint "http://localhost:8081" \
-    > "$COMMAND_DIR/pkg-publish.txt" 2>&1
-
 section "🧪 actr run -d"
 
 RUN_OUTPUT="$("$ACTR_CLI_BIN" run -d "${ACTR_RUNTIME_ARGS[@]}" 2>&1)"

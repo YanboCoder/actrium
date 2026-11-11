@@ -1,7 +1,7 @@
 //! HTTP handlers for the mock loran server.
 //!
 //! Covers the REST endpoints that `actr-hyper` (`IssuerClient`, `PublisherCertCache`)
-//! and the `actr` CLI (`pkg publish`) talk to, plus admin seeding routes
+//! talk to, plus admin seeding routes
 //! used by integration test scripts.
 
 use std::sync::Arc;
@@ -21,7 +21,7 @@ use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
 
 use crate::signaling;
-use crate::state::{MockState, PackageEntry, PublisherEntry, RegisteredActor};
+use crate::state::{MockState, PublisherEntry, RegisteredActor};
 
 // ---------------------------------------------------------------------------
 // Health
@@ -215,89 +215,6 @@ pub async fn verifying_key_handler(
 }
 
 // ---------------------------------------------------------------------------
-// Publish: nonce + publish (used by `actr pkg publish`).
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-pub struct NonceRequest {
-    pub publisher: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct NonceResponse {
-    pub nonce: String,
-}
-
-pub async fn publish_nonce_handler(
-    State(state): State<Arc<MockState>>,
-    Json(req): Json<NonceRequest>,
-) -> Json<NonceResponse> {
-    let bytes: [u8; 32] = rand::random();
-    let nonce = base64::engine::general_purpose::STANDARD.encode(bytes);
-    state.nonces.issue(&req.publisher, nonce.clone()).await;
-    Json(NonceResponse { nonce })
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PublishRequest {
-    pub publisher: String,
-    pub name: String,
-    pub version: String,
-    pub target: String,
-    pub manifest: String,
-    pub signature: String,
-    #[serde(default)]
-    pub proto_files: Option<serde_json::Value>,
-    pub nonce: String,
-    pub nonce_sig: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PublishResponse {
-    pub id: u64,
-    pub type_str: String,
-    pub status: String,
-}
-
-pub async fn publish_handler(
-    State(state): State<Arc<MockState>>,
-    Json(req): Json<PublishRequest>,
-) -> Result<Json<PublishResponse>, ApiError> {
-    // Consume the nonce.
-    if !state.nonces.take(&req.publisher, &req.nonce).await {
-        return Err(ApiError::bad_request(
-            "publish nonce mismatch or already consumed".to_string(),
-        ));
-    }
-
-    // Note: the mock deliberately does not verify the ed25519 signature
-    // against the Publisher Registry's registered pubkey. Real loran does; leaving this as
-    // a trust-on-first-publish flow keeps the mock simple for CLI e2e tests.
-    let _ = req.nonce_sig;
-    let _ = req.proto_files;
-
-    let entry = PackageEntry {
-        publisher: req.publisher.clone(),
-        name: req.name.clone(),
-        version: req.version.clone(),
-        target: req.target.clone(),
-        manifest_raw: req.manifest,
-        signature_b64: req.signature,
-    };
-    state.add_package(entry).await;
-
-    let id = state.packages.read().await.len() as u64;
-    let type_str = format!("{}/{}@{}", req.publisher, req.name, req.version);
-
-    tracing::info!(%type_str, target = %req.target, "mock-loran: package published");
-
-    Ok(Json(PublishResponse {
-        id,
-        type_str,
-        status: "active".into(),
-    }))
-}
-
 // ---------------------------------------------------------------------------
 // Admin seeding — replaces register.sh sqlite3 INSERTs.
 // ---------------------------------------------------------------------------
@@ -353,57 +270,16 @@ pub async fn admin_publisher_registry_handler(
     Ok(Json(AdminOk { ok: true }))
 }
 
-#[derive(Debug, Deserialize)]
-pub struct AdminPackageRequest {
-    pub publisher: String,
-    pub name: String,
-    pub version: String,
-    pub target: String,
-    #[serde(default)]
-    pub manifest: Option<String>,
-    #[serde(default)]
-    pub signature: Option<String>,
-}
-
-pub async fn admin_package_handler(
-    State(state): State<Arc<MockState>>,
-    Json(req): Json<AdminPackageRequest>,
-) -> Json<AdminOk> {
-    state
-        .add_package(PackageEntry {
-            publisher: req.publisher,
-            name: req.name,
-            version: req.version,
-            target: req.target,
-            manifest_raw: req.manifest.unwrap_or_default(),
-            signature_b64: req.signature.unwrap_or_default(),
-        })
-        .await;
-    Json(AdminOk { ok: true })
-}
-
 #[derive(Debug, Serialize)]
 pub struct AdminStateSnapshot {
     pub realms: Vec<String>,
     pub publishers: Vec<String>,
-    pub packages: Vec<String>,
 }
 
 pub async fn admin_state_handler(State(state): State<Arc<MockState>>) -> Json<AdminStateSnapshot> {
     let realms: Vec<String> = state.realms.read().await.keys().cloned().collect();
     let publishers: Vec<String> = state.publishers.read().await.keys().cloned().collect();
-    let packages: Vec<String> = state
-        .packages
-        .read()
-        .await
-        .iter()
-        .map(|p| format!("{}/{}@{}#{}", p.publisher, p.name, p.version, p.target))
-        .collect();
-    Json(AdminStateSnapshot {
-        realms,
-        publishers,
-        packages,
-    })
+    Json(AdminStateSnapshot { realms, publishers })
 }
 
 // ---------------------------------------------------------------------------

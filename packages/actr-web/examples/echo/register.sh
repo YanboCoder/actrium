@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# register.sh — Seed realm + publisher and publish web echo .actr packages
+# register.sh — Seed the web echo Realm and Publisher public key
 #               to a running loran instance.
 # Usage: ./register.sh [--db <path>] [--endpoint <url>]
 #
@@ -178,45 +178,10 @@ SQL
 
 echo -e "${GREEN}✅ publisher '$PUBLISHER_NAME' registered${NC}"
 
-# ── Step 3: Publish packages via actr pkg publish ─────────────────────────────
+# ── Step 3: Inject publisher pubkey into config files ──────────────────────────────
 
 echo ""
-echo "📡 Step 3: Publishing packages to publisher..."
-
-PUBLISH_MAX_RETRIES=5
-
-for PKG_LABEL in server client; do
-    if [ "$PKG_LABEL" = "server" ]; then
-        PKG_FILE="$SERVER_ACTR_PACKAGE"
-    else
-        PKG_FILE="$CLIENT_ACTR_PACKAGE"
-    fi
-
-    PUBLISH_RETRY=0
-    PUBLISH_OK=0
-    while [ $PUBLISH_RETRY -lt $PUBLISH_MAX_RETRIES ]; do
-        if $ACTR_CMD pkg publish \
-            --package "$PKG_FILE" \
-            --keychain "$PUBLISHER_KEY_FILE" \
-            --endpoint "$ENDPOINT"; then
-            PUBLISH_OK=1
-            break
-        fi
-        PUBLISH_RETRY=$((PUBLISH_RETRY + 1))
-        echo -e "${YELLOW}⚠️  $PKG_LABEL publish failed (attempt $PUBLISH_RETRY/$PUBLISH_MAX_RETRIES), retrying in 2s...${NC}"
-        sleep 2
-    done
-    if [ $PUBLISH_OK -eq 0 ]; then
-        echo -e "${RED}❌ ${PKG_LABEL^} package publish failed after $PUBLISH_MAX_RETRIES attempts${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✅ ${PKG_LABEL^} package published${NC}"
-done
-
-# ── Step 4: Inject publisher pubkey into config files ──────────────────────────────
-
-echo ""
-echo "🔐 Step 4: Injecting publisher pubkey into config files..."
+echo "🔐 Step 3: Injecting publisher pubkey into config files..."
 
 sed -i '' "s|__PUBLISHER_PUBKEY_PLACEHOLDER__|${PUBLISHER_PUBKEY}|g" "$SERVER_ACTR_TOML"
 sed -i '' "s|__PUBLISHER_PUBKEY_PLACEHOLDER__|${PUBLISHER_PUBKEY}|g" "$CLIENT_ACTR_TOML"

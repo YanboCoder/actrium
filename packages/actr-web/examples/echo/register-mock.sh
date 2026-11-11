@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# register-mock.sh — Seed realm + publisher + publish web echo .actr packages
+# register-mock.sh — Seed the web echo Realm and Publisher public key
 #                    against a running `mock-loran` instance.
 #
 # Unlike register.sh, this does NOT touch SQLite. It drives the mock's
@@ -105,33 +105,10 @@ curl -fsS -X POST "$ENDPOINT/admin/publisher" \
 
 echo -e "${GREEN}publisher '$PUBLISHER_NAME' registered${NC}"
 
-# --- Step 3: Publish packages via `actr registry publish` (hits /publisher-registry/pkg/* routes) ---
+# --- Step 3: Inject publisher pubkey into config files ---
 
 echo ""
-echo "Step 3: Publishing packages..."
-
-for PKG_LABEL in server client; do
-    if [ "$PKG_LABEL" = "server" ]; then
-        PKG_FILE="$SERVER_ACTR_PACKAGE"
-    else
-        PKG_FILE="$CLIENT_ACTR_PACKAGE"
-    fi
-
-    if "$ACTR_CMD" registry publish \
-        --package "$PKG_FILE" \
-        --keychain "$PUBLISHER_KEY_FILE" \
-        --endpoint "$ENDPOINT"; then
-        echo -e "${GREEN}$PKG_LABEL package published${NC}"
-    else
-        echo -e "${RED}$PKG_LABEL package publish failed${NC}"
-        exit 1
-    fi
-done
-
-# --- Step 4: Inject publisher pubkey into config files ---
-
-echo ""
-echo "Step 4: Injecting publisher pubkey into config files..."
+echo "Step 3: Injecting publisher pubkey into config files..."
 
 sed_inplace "s|__PUBLISHER_PUBKEY_PLACEHOLDER__|${PUBLISHER_PUBKEY}|g" "$SERVER_ACTR_TOML"
 sed_inplace "s|__PUBLISHER_PUBKEY_PLACEHOLDER__|${PUBLISHER_PUBKEY}|g" "$CLIENT_ACTR_TOML"

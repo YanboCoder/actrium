@@ -10,14 +10,12 @@ This scenario validates the local package runtime flow end-to-end:
    with its key (`deployment.realm_client_key`).
 3. Seed the service publisher's public package key into the disposable SQLite database. The test-only server supplies a signed Publisher Profile for `e2e.actrium.example` through the Issuer's document-fetch interface, then runs normal signature, pin and Registry acceptance checks. Production binaries have no fixture override and always fetch public HTTPS documents. The client package remains a development identity, verified by its configured public key.
 4. Generate a temporary Rust echo service with `actr init/install/gen`.
-5. Build and verify the signed server package. The default flow does not publish
-   a package record to this Loran's Registry.
+5. Build and verify the signed server package.
 6. Build a local client guest package and run the client host.
 7. Assert the client receives the echoed reply.
 8. Remove the client's member (`actr realm remove-member`) and assert the same
    client host is refused a credential (`client_revoked`).
 
-The default and optional published scenarios share this complete lifecycle.
 Formal Realm scenarios also repeat the Echo after a Service Host restart, then
 retire the Realm and require the resolver to refuse it.
 
@@ -42,8 +40,7 @@ retire the Realm and require the resolver to refuse it.
 bash tests/e2e/actr/package-runtime-echo/run.sh
 bash tests/e2e/actr/package-runtime-echo/run.sh "Hello"
 
-# Optional Registry-specific scenarios, separate from the default runtime path.
-MODE=published bash tests/e2e/actr/package-runtime-echo/run.sh
+# Verify Publisher signing-key retirement and revocation.
 MODE=rotation bash tests/e2e/actr/package-runtime-echo/run.sh
 ```
 
@@ -58,7 +55,7 @@ REALM_HTTPS=1 REALM_MODE=provider bash tests/e2e/actr/package-runtime-echo/run.s
 REALM_HTTPS=1 REALM_MODE=external bash tests/e2e/actr/package-runtime-echo/run.sh
 ```
 
-The matrix defaults to `MODE=unpublished` and enables the Provider's authority. It builds
+The matrix defaults to `MODE=runtime` and enables the Provider's authority. It builds
 the real package before creating the Realm, so the Profile pins its actual
 SHA-256 and Actor type. `REALM_MODE=provider` creates `echo-<run>@localhost`
 through the Admin API and verifies the Provider-signed Profile.
@@ -106,16 +103,14 @@ Profiles, single-use invites, and (external domain) invalid management signature
 and request replay. The test orchestrator translates the verified Profile into
 the existing Host runtime configuration; automatic Host resolution is not added.
 
-Before and after the Registry-independent lifecycle, the scenario requires zero
-package-publication rows for the service's exact type/version/target, including
-revoked rows. Its public Publisher Profile/key cache is provisioned separately;
-that cache does not imply that the package has been published. The Issuer must
-verify the package as the trusted Publisher, rather than a development identity.
-Set `MODE=published` to exercise optional publication with the same Realm matrix.
+Before and after the lifecycle, the scenario requires the obsolete package-publication
+tables to be absent. Its public Publisher Profile/key cache is provisioned separately.
+The Issuer must verify the package as the trusted Publisher, rather than a
+development identity.
 
 ## Publisher signing-key boundary (#345)
 
-Package signing and optional Registry publication happen in the builder. Their
+Package signing happens in the builder. Its
 private keychains stay in a dedicated `publisher-private` directory. Both the
 Service Host and the client Host run through `lib/runtime-isolation.py`, which
 removes builder-specific environment variables and denies access to that
@@ -135,7 +130,7 @@ keychain and Realm key. The signing keys remain on disk during execution, so a
 missing-file cleanup cannot make this check pass accidentally. The existing
 Issuer integration regression `test_trusted_package_registers_without_publisher_private_key`
 also covers registration, renewal and reissue after dropping the Publisher key,
-while checking that no package-publication row was created.
+while checking that no package-publication tables exist.
 
 Builder CLI commands also use a disposable HOME so `pkg keygen` cannot rewrite
 the developer's global `~/.actr/config.toml`. Cargo/Rustup caches are explicitly
@@ -146,11 +141,10 @@ general-purpose sandbox for untrusted native workloads. The server fixture's
 legacy/rotation Publisher Profile root stays inside the server process. In HTTPS
 mode the builder's Profile root stays in the protected `publisher-private`
 directory and the TLS origin serves only its public signed descriptor.
-Production package signing and authenticated optional Registry publication
-continue to require their legitimate signing keys. Removed runtime proof fields
+Production package signing continues to require its legitimate signing keys. Removed runtime proof fields
 remain reserved in the protocol.
 
-CI runs the default runtime, both formal Realm paths, optional publication, and
+CI runs the default runtime, both formal Realm paths, and
 the retired-key/revoked-key scenario. The latter is Publisher package-key
 revocation coverage, separate from Realm Issuer-key rotation tests.
 The lightweight `Runtime Publisher Key Isolation` workflow can also validate

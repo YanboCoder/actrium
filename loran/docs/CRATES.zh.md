@@ -12,7 +12,7 @@ Loran 位于 Actr workspace 内，crate 版本与 workspace 同步。本文只�
 | `crates/loran-signaling` | `loran-signaling` | 认证 WebSocket、presence、Actor Registry 与发现、signaling envelope 转发 |
 | `crates/loran-stun` | `loran-stun` | RFC 5389 Binding 与 NAT 地址发现 |
 | `crates/loran-turn` | `loran-turn` | scoped long-term credential、allocation、permission、relay 与配额 |
-| `crates/loran-publisher-registry` | `loran-publisher-registry` | Publisher Registry：publisher 身份、Publisher 签名权限与发布审计 |
+| `crates/loran-publisher-registry` | `loran-publisher-registry` | Publisher Registry：publisher 身份、Publisher 签名公钥与密钥撤销 |
 | `crates/loran-packages` | `loran-packages` | `.actr` 包托管（Realm Profile 的 `package.href` 可指向它）：按 SHA-256 内容寻址的静态下载，不解析 Target |
 | `crates/loran-proto` | `loran-proto` | 管理/控制面的 protobuf 契约 |
 | `crates/loran-control` | `loran-admin` | 管理控制服务实现 |
@@ -38,7 +38,7 @@ loran-server
 
 ### `loran-platform`
 
-- SQLite `user_version` 必须等于 schema v9；
+- SQLite `user_version` 必须等于 schema v10；
 - 一个实例承载多个 Realm，`realm.name`（完整 Realm 名）唯一且不可变，退役行即 Actr Facility
   Provider tombstone、名字不复用；所有按 Realm 分区的状态以完整 Realm 名 `realm` 为键；
 - Actor credential validation 检查 protocol version、issuer（即 Realm 名）、Actr Facility Provider、
@@ -83,12 +83,12 @@ loran-server
   key 签名）登记；获取 authority descriptor 拒绝重定向超限、私网目标、超限 body 与 DNS
   rebinding；key rotation 通过再次发送 `register_publisher` 完成，见 REALM_V1_ARCHITECTURE
   第 7 节；
-- 发布 nonce 一次性使用；
+- 包身份直接验证 manifest 签名与 Publisher 公钥，不登记包发布记录；
 - package origin 不成为信任根。
 
 ## 公开与内部命名
 
-v1 公开 TOML（如 `[services.publisher_registry]`、`[services.issuer]`、
+v1 公开 TOML（如 `[services.issuer]`、
 `[services.signer]`）、HTTP JSON、descriptor 和文档统一使用 `publisher`、`issuer`、
 `signer`。SQLite 表名与 Cargo package 名属于内部实现，不是协议标识，不允许
 出现在新的外部契约中。

@@ -161,7 +161,7 @@ MOCK_PID=$!
 wait_for_log "$MOCK_LOG" "listening on 127.0.0.1:$MOCK_PORT" "mock-loran"
 ENDPOINT="http://127.0.0.1:$MOCK_PORT"
 
-log_step "Registering realm, publisher, and packages..."
+log_step "Registering Realm and Publisher key..."
 curl -fsS -X POST "$ENDPOINT/admin/realms" \
     -H 'content-type: application/json' \
     --data "{\"realm\": \"$REALM\"}" >/dev/null
@@ -169,8 +169,6 @@ curl -fsS -X POST "$ENDPOINT/admin/publisher" \
     -H 'content-type: application/json' \
     --data "{\"name\": \"$PUBLISHER_NAME\", \"pubkey_b64\": \"$PUBLISHER_PUBKEY\", \"contact\": \"dev@example.com\"}" >/dev/null
 
-"$ACTR_CMD" registry publish --package "$PY_ACTR_PACKAGE" --keychain "$PUBLISHER_KEY_FILE" --endpoint "$ENDPOINT"
-"$ACTR_CMD" registry publish --package "$CLIENT_ACTR_PACKAGE" --keychain "$PUBLISHER_KEY_FILE" --endpoint "$ENDPOINT"
 
 PY_SERVER_CONFIG="$RUN_DIR/python-server-actr.toml"
 CLIENT_CONFIG="$RUN_DIR/client-actr.toml"

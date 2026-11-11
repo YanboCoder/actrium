@@ -10,8 +10,6 @@
 //! - HTTP Issuer endpoints at `/issuer/register` + `/register` (protobuf body).
 //! - HTTP Publisher Registry registry endpoints at `/issuer/registry/publishers/{name}/verifying-key` +
 //!   `/registry/publishers/{name}/verifying-key` for package verification.
-//! - HTTP publish endpoints at `/registry/packages/nonce` + `/registry/packages/publish` used by
-//!   `actr pkg publish`.
 //! - Admin seeding endpoints under `/admin/*` (replaces the old
 //!   `register.sh` that used `sqlite3` directly on loran.db).
 //!
@@ -32,7 +30,7 @@ use ed25519_dalek::{SigningKey, VerifyingKey};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-pub use state::{MockState, PackageEntry, PublisherEntry, RealmEntry};
+pub use state::{MockState, PublisherEntry, RealmEntry};
 
 /// Mock loran server with WebSocket signaling and HTTP Issuer/Publisher Registry endpoints.
 ///
@@ -284,22 +282,6 @@ impl MockLoranServer {
             .await;
     }
 
-    /// Register a package (publisher + name + version + target). Used by
-    /// tests that want to pre-seed the registry without going through
-    /// `POST /registry/packages/publish`.
-    pub async fn add_package(&self, publisher: &str, name: &str, version: &str, target: &str) {
-        self.state
-            .add_package(PackageEntry {
-                publisher: publisher.to_string(),
-                name: name.to_string(),
-                version: version.to_string(),
-                target: target.to_string(),
-                manifest_raw: String::new(),
-                signature_b64: String::new(),
-            })
-            .await;
-    }
-
     /// Shutdown the server.
     pub async fn shutdown(&mut self) {
         if !self.cancel.is_cancelled() {
@@ -456,11 +438,6 @@ fn build_router(state: Arc<MockState>) -> Router {
             "/registry/publishers/{name}/verifying-key",
             get(http::verifying_key_handler),
         )
-        .route(
-            "/registry/packages/nonce",
-            post(http::publish_nonce_handler),
-        )
-        .route("/registry/packages/publish", post(http::publish_handler))
         .with_state(state.clone());
 
     Router::new()
@@ -479,18 +456,12 @@ fn build_router(state: Arc<MockState>) -> Router {
             "/registry/publishers/{name}/verifying-key",
             get(http::verifying_key_handler),
         )
-        .route(
-            "/registry/packages/nonce",
-            post(http::publish_nonce_handler),
-        )
-        .route("/registry/packages/publish", post(http::publish_handler))
         // Admin seeding API (replaces register.sh sqlite3 INSERTs).
         .route("/admin/realms", post(http::admin_realm_handler))
         .route(
             "/admin/publisher",
             post(http::admin_publisher_registry_handler),
         )
-        .route("/admin/packages", post(http::admin_package_handler))
         .route("/admin/state", get(http::admin_state_handler))
         .with_state(state)
         // Issuer routes mounted under `/issuer/*` for callers whose configured Issuer

@@ -240,7 +240,7 @@ async fn credentials_are_signed_with_the_realm_issuer_key() {
     };
     let issued = tokio::time::timeout(
         TEST_STEP_TIMEOUT,
-        issuer.issue_credential_for_actor(&actor_id, None, &owner()),
+        issuer.issue_credential_for_actor(&actor_id, &owner()),
     )
     .await
     .expect("credential issuance timed out")
@@ -340,7 +340,7 @@ async fn credentials_are_signed_with_the_realm_issuer_key() {
         .await
         .expect("switch keys");
     let rotated = issuer
-        .issue_credential_for_actor(&actor_id, None, &owner())
+        .issue_credential_for_actor(&actor_id, &owner())
         .await
         .expect("issue credential after rotation");
     assert_eq!(rotated.credential.key_id, next_id);

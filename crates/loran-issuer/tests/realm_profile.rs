@@ -57,8 +57,6 @@ async fn setup() -> (Arc<RealmProfiles>, TempDir) {
         "DELETE FROM realm_mgmt_nonce",
         "DELETE FROM realm",
         "DELETE FROM publisher_key_history",
-        "DELETE FROM publisher_package",
-        "DELETE FROM publisher_publish_nonce",
         "DELETE FROM publisher",
     ] {
         sqlx::query(statement).execute(pool).await.unwrap();

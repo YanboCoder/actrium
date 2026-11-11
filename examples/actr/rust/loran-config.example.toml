@@ -38,8 +38,6 @@ token_ttl_secs = 3600
 # Development-only 32-byte renewal-token key.
 renewal_token_secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
-[services.publisher_registry]
-
 [services.signaling]
 [services.signaling.server]
 ws_path = "/signaling"

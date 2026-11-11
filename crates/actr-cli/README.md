@@ -100,7 +100,7 @@ Groups are named after **what the subcommand operates on**:
 
 - `deps` — local dependency manifest / lockfile
 - `pkg` — a local `.actr` package file (sign, verify, keygen)
-- `registry` — the remote registry / Issuer (discover, publish, fingerprint)
+- `registry` — the remote registry / Issuer (discover, fingerprint)
 - `dlq` — the Dead Letter Queue
 - `realm` — a Realm signing key (keygen, and signed Realm management requests),
   and a member's Realm client key (join, invite, members, …)

@@ -229,10 +229,10 @@ done
 [ "$READY" -eq 1 ] || { echo -e "${RED}mock-loran did not reach 'listening on' within 10s${NC}"; cat "$MOCK_LOG"; exit 1; }
 echo -e "${GREEN}mock-loran ready on http://127.0.0.1:$MOCK_PORT${NC}"
 
-# ---- Step 4: seed realm + publisher + packages ----
+# ---- Step 4: seed Realm + Publisher key ----
 
 echo ""
-echo -e "${BLUE}Step 4: Seeding realm + publisher + packages on mock-loran...${NC}"
+echo -e "${BLUE}Step 4: Seeding Realm + Publisher key on mock-loran...${NC}"
 
 ENDPOINT="http://127.0.0.1:$MOCK_PORT"
 bash "$SCRIPT_DIR/register-mock.sh" --endpoint "$ENDPOINT"

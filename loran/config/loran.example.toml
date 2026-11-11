@@ -217,13 +217,6 @@ renewal_token_secret = "<generate-distinct-renewal-token-secret-openssl-rand-bas
 # [services.issuer.dependencies.signer]
 # endpoint = "https://signer.internal.example:8443"
 
-# Publisher Registry configuration (optional)
-# Controls publish nonce retention for audit / replay investigation.
-[services.publisher_registry]
-# How long to retain expired/used publish nonces, in seconds.
-# Default: 86400 (24 hours)
-# nonce_retain_secs = 86400
-
 # Content-addressed .actr hosting is an independent static download service.
 # Each file is served at /actr/packages/artifact?sha256=<digest>, which a
 # Realm Profile package.href may point to. It may run here even when this

@@ -251,13 +251,6 @@ if [ -z "$REALM" ]; then REALM=mutil-actr@example.com; fi
 
 
 sqlite3 "$LORAN_DB" <<EOF
-INSERT OR REPLACE INTO publisher (name, public_key, status, created_at, verified_at) VALUES ('acme', '', 'verified', strftime('%s','now'), strftime('%s','now'));
-INSERT OR REPLACE INTO publisher_package (publisher_id, publisher, name, version, type_str, manifest, signature, status, published_at)
-  SELECT id, 'acme', 'EchoService', '1.0.0', 'acme/EchoService@1.0.0', '{}', '', 'active', strftime('%s','now') FROM publisher WHERE name='acme'
-  ON CONFLICT(publisher, name, version) DO UPDATE SET status='active';
-INSERT OR REPLACE INTO publisher_package (publisher_id, publisher, name, version, type_str, manifest, signature, status, published_at)
-  SELECT id, 'acme', 'echo-client-app', '1.0.0', 'acme/echo-client-app@1.0.0', '{}', '', 'active', strftime('%s','now') FROM publisher WHERE name='acme'
-  ON CONFLICT(publisher, name, version) DO UPDATE SET status='active';
 INSERT OR IGNORE INTO realm (name, status, enabled, created_at) VALUES ('$REALM', 'active', 1, strftime('%s','now'));
 DELETE FROM actoracl WHERE realm = '$REALM';
 INSERT INTO actoracl (realm, source_realm, from_type, to_type, access)

@@ -729,94 +729,31 @@ SQL
 
 echo -e "${GREEN}✅ publisher 'actrium' registered (key_id: $PUBLISHER_KEY_ID, pubkey: ${PUBLISHER_PUBKEY:0:20}...)${NC}"
 
-# ── Step 2.7: Publish package via actr registry publish ──────────────────
+# ── Step 2.7: Seed client-guest Publisher key ────────────────────
 
 echo ""
-echo "📡 Publishing package to publisher (challenge-response flow)..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-cargo run --manifest-path "$ACTR_CLI_MANIFEST" --bin actr --features wasm-engine -- registry publish \
-    --package "$ACTR_PACKAGE" \
-    --keychain "$SIGNING_KEY" \
-    --endpoint "${LORAN_HTTP_URL}"
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ actr registry publish failed${NC}"
-    echo "Loran logs (last 20 lines):"
-    tail -20 "$LOG_DIR/loran.log"
-    exit 1
-fi
-
-echo -e "${GREEN}✅ Package published via challenge-response nonce flow${NC}"
-
-# ── Step 2.8: Seed client identity for Issuer Path 1 lookup ─────────────────
-
-echo ""
-echo "🪪 Seeding client package identity for Issuer lookup..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-CLIENT_PUBLISHER="acme"
-CLIENT_NAME="package-echo-client-app"
-CLIENT_VERSION="0.1.0"
-CLIENT_TYPE_STR="$CLIENT_PUBLISHER/$CLIENT_NAME@$CLIENT_VERSION"
-
-sqlite3 "$LORAN_DB" << SQL
-INSERT OR IGNORE INTO publisher
-    (name, public_key, key_id, contact, status, created_at, updated_at, verified_at)
-VALUES ('$CLIENT_PUBLISHER', '', '', 'examples@actrium.local', 'active', $NOW, $NOW, $NOW);
-
-INSERT OR REPLACE INTO publisher_package
-    (publisher_id, publisher, name, version, type_str, target, manifest, signature, status, published_at, revoked_at)
-SELECT id, '$CLIENT_PUBLISHER', '$CLIENT_NAME', '$CLIENT_VERSION', '$CLIENT_TYPE_STR', 'native', '', '', 'active', $NOW, NULL
-  FROM publisher
- WHERE name = '$CLIENT_PUBLISHER';
-SQL
-
-echo -e "${GREEN}✅ Client package identity seeded: $CLIENT_TYPE_STR${NC}"
-
-# ── Step 2.7: Seed client-guest publisher package metadata ────────────────────
-
-echo ""
-echo "🏷️  Seeding client-guest publisher package metadata..."
+echo "🏷️  Seeding client-guest Publisher key..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 python3 - \
     "$LORAN_DB" \
-    "$CLIENT_GUEST_PACKAGE" \
     "$CLIENT_GUEST_PUBLIC_KEY" \
     "$CLIENT_GUEST_PUBLISHER" \
-    "$CLIENT_GUEST_NAME" \
-    "$CLIENT_GUEST_VERSION" \
-    "$CLIENT_GUEST_TARGET" <<'PY'
+    <<'PY'
 import base64
 import hashlib
 import json
 import sqlite3
 import sys
 import time
-import zipfile
 
-(
-    db_path,
-    package_path,
-    public_key_path,
-    publisher,
-    name,
-    version,
-    target,
-) = sys.argv[1:]
+db_path, public_key_path, publisher = sys.argv[1:]
 now = int(time.time())
 key_expires_at = now + 365 * 24 * 3600
 
 with open(public_key_path, "r", encoding="utf-8") as fh:
     public_key = json.load(fh)["public_key"]
 key_id = "publisher-" + hashlib.sha256(base64.b64decode(public_key)).hexdigest()[:16]
-
-with zipfile.ZipFile(package_path, "r") as zf:
-    manifest = zf.read("manifest.toml").decode("utf-8")
-    signature = base64.b64encode(zf.read("manifest.sig")).decode("ascii")
-
-type_str = f"{publisher}/{name}@{version}"
 
 conn = sqlite3.connect(db_path)
 try:
@@ -844,36 +781,14 @@ try:
         """,
         (public_key, key_id, now, now, key_expires_at, publisher),
     )
-    cur.execute("SELECT id FROM publisher WHERE name = ?", (publisher,))
-    row = cur.fetchone()
-    if row is None:
-        raise RuntimeError(f"failed to seed publisher {publisher}")
-    publisher_id = row[0]
-
-    cur.execute(
-        """
-        INSERT INTO publisher_package
-            (publisher_id, publisher, name, version, type_str, target, manifest, signature, status, published_at, revoked_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, NULL)
-        ON CONFLICT(publisher, name, version, target) DO UPDATE SET
-            publisher_id = excluded.publisher_id,
-            type_str = excluded.type_str,
-            manifest = excluded.manifest,
-            signature = excluded.signature,
-            status = 'active',
-            published_at = excluded.published_at,
-            revoked_at = NULL
-        """,
-        (publisher_id, publisher, name, version, type_str, target, manifest, signature, now),
-    )
     conn.commit()
 finally:
     conn.close()
 
-print(f"Seeded publisher package metadata for {type_str}")
+print(f"Seeded Publisher key for {publisher}")
 PY
 
-echo -e "${GREEN}✅ publisher package metadata seeded for client-guest package${NC}"
+echo -e "${GREEN}✅ Publisher key seeded for client-guest package${NC}"
 
 # ── Step 3: Build host binaries ──────────────────────────────────────────
 
@@ -1162,10 +1077,9 @@ if { [ "$CLIENT_MODE" = "http" ] && { [ "$RECEIVED_REPLY" = "Echo: $TEST_INPUT" 
     echo "✅ Validated:"
     echo "   1. $BACKEND artifact built from $ECHO_ACTR_DIR"
     echo "   2. signed .actr package created (key: $SIGNING_KEY)"
-    echo "   3. actr registry publish → registered via challenge-response nonce"
-    echo "   4. Hyper (TRUST_MODE=production) fetched pubkey from publisher, verified .actr"
-    echo "   5. Issuer issued credential (Path 1: published package lookup)"
-    echo "   6. Client ↔ server echo confirmed via WebRTC"
+    echo "   3. Hyper (TRUST_MODE=production) fetched pubkey from publisher, verified .actr"
+    echo "   4. Issuer verified the package signature and issued a credential"
+    echo "   5. Client ↔ server echo confirmed via WebRTC"
     echo ""
     echo "Client output:"
     grep "Received reply" "$LOG_DIR/package-echo-client.log" || true

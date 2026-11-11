@@ -356,13 +356,11 @@ impl ControlAttemptStore {
     }
 
     /// Commit a prepared renewal and its response in one transaction.
-    /// `target` is the package target the credential was rechecked under.
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn complete_renewal(
         &self,
         lease: &AttemptLease,
         actor_id: &ActrId,
-        target: Option<&str>,
         prepared: &PreparedRotation,
         body: &[u8],
         response_expires_at: i64,
@@ -393,7 +391,7 @@ impl ControlAttemptStore {
         if presented_exists == 0 {
             return Err(AttemptError::TokenRejected);
         }
-        crate::issuer::AIdIssuer::recheck_actor_on(&mut tx, actor_id, target, signer)
+        crate::issuer::AIdIssuer::recheck_actor_on(&mut tx, actor_id, signer)
             .await
             .map_err(AttemptError::Refused)?;
         // Only the bound key renews; a reissue may have moved the Actor.
@@ -540,14 +538,9 @@ impl ControlAttemptStore {
                 "client_unknown: the Actor belongs to another member".to_string(),
             )));
         }
-        crate::issuer::AIdIssuer::recheck_actor_on(
-            &mut tx,
-            actor_id,
-            prepared.target.as_deref(),
-            &prepared.signer,
-        )
-        .await
-        .map_err(AttemptError::Refused)?;
+        crate::issuer::AIdIssuer::recheck_actor_on(&mut tx, actor_id, &prepared.signer)
+            .await
+            .map_err(AttemptError::Refused)?;
 
         if prepared.package
             && let Some(target) = prepared.target.as_deref().filter(|t| !t.is_empty())
@@ -897,15 +890,7 @@ pub(crate) mod tests {
 
         assert!(matches!(
             store
-                .complete_renewal(
-                    &renew,
-                    &actor,
-                    None,
-                    &rotation,
-                    b"response",
-                    now + 60,
-                    &signer
-                )
+                .complete_renewal(&renew, &actor, &rotation, b"response", now + 60, &signer)
                 .await,
             Err(AttemptError::LeaseLost)
         ));
@@ -978,7 +963,7 @@ pub(crate) mod tests {
         .unwrap();
 
         let error = store
-            .complete_renewal(&renew, &actor, None, &kept, b"response", now + 60, &signer)
+            .complete_renewal(&renew, &actor, &kept, b"response", now + 60, &signer)
             .await
             .unwrap_err();
         assert!(matches!(error, AttemptError::LeaseLost), "{error:?}");
@@ -1008,7 +993,7 @@ pub(crate) mod tests {
         setup_db().await;
         let secret = [7u8; 32];
         let store = ControlAttemptStore::new(&secret);
-        for n in 0..5u8 {
+        for n in 0..4u8 {
             let token = [60 + n; 32];
             let realm = format!("attempt-refused-{n}@example.com");
             platform::realm::Realm::create(realm.clone()).await.unwrap();
@@ -1019,26 +1004,12 @@ pub(crate) mod tests {
             };
             let pool = platform::storage::db::get_database().get_pool();
             let publisher = format!("pub{n}.example");
-            let publisher_id = sqlx::query(
-                "INSERT INTO publisher (name, status, created_at) VALUES (?, 'active', 1)",
-            )
-            .bind(&publisher)
-            .execute(pool)
-            .await
-            .unwrap()
-            .last_insert_rowid();
+            sqlx::query("INSERT INTO publisher (name, status, created_at) VALUES (?, 'active', 1)")
+                .bind(&publisher)
+                .execute(pool)
+                .await
+                .unwrap();
             let actor_type = format!("{publisher}/worker@1.0.0");
-            sqlx::query(
-                "INSERT INTO publisher_package (publisher_id, publisher, name, version,
-                    type_str, target, manifest, signature, published_at)
-                 VALUES (?, ?, 'worker', '1.0.0', ?, 'wasm32-wasip1', '', '', 1)",
-            )
-            .bind(publisher_id)
-            .bind(&publisher)
-            .bind(&actor_type)
-            .execute(pool)
-            .await
-            .unwrap();
             sqlx::query(
                 "INSERT INTO issued_actor_identity
                     (realm, serial_number, actor_type, target, auth_mode, issued_at,
@@ -1097,7 +1068,6 @@ pub(crate) mod tests {
             crate::issuer::AIdIssuer::recheck_actor_on(
                 &mut pool.acquire().await.unwrap(),
                 &actor,
-                None,
                 &signer,
             )
             .await
@@ -1112,15 +1082,6 @@ pub(crate) mod tests {
                         .unwrap();
                 }
                 2 => {
-                    sqlx::query(
-                        "UPDATE publisher_package SET status = 'revoked' WHERE publisher = ?",
-                    )
-                    .bind(&publisher)
-                    .execute(pool)
-                    .await
-                    .unwrap();
-                }
-                3 => {
                     sqlx::query("UPDATE publisher SET status = 'suspended' WHERE name = ?")
                         .bind(&publisher)
                         .execute(pool)
@@ -1139,15 +1100,7 @@ pub(crate) mod tests {
 
             assert!(matches!(
                 store
-                    .complete_renewal(
-                        &renew,
-                        &actor,
-                        None,
-                        &rotation,
-                        b"response",
-                        now + 60,
-                        &signer
-                    )
+                    .complete_renewal(&renew, &actor, &rotation, b"response", now + 60, &signer)
                     .await,
                 Err(AttemptError::Refused(_))
             ));
@@ -1226,15 +1179,7 @@ pub(crate) mod tests {
 
         assert!(matches!(
             store
-                .complete_renewal(
-                    &renew,
-                    &actor,
-                    None,
-                    &rotation,
-                    b"response",
-                    now + 60,
-                    &signer
-                )
+                .complete_renewal(&renew, &actor, &rotation, b"response", now + 60, &signer)
                 .await,
             Err(AttemptError::Refused(_))
         ));

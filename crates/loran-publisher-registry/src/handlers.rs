@@ -1,8 +1,4 @@
-use crate::{
-    PublisherRegistryError, PublisherRegistryManager,
-    manager::{NonceRequest, PublishRequest},
-    model::PublisherStatus,
-};
+use crate::{PublisherRegistryError, PublisherRegistryManager, model::PublisherStatus};
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
@@ -22,10 +18,6 @@ pub fn create_public_router(state: PublisherRegistryState) -> Router {
     Router::new()
         // Hyper runtime: fetches a Publisher public key for package verification
         .route("/publishers/{name}/verifying-key", get(get_verifying_key))
-        // CLI `actr pkg publish`: request a one-time nonce for publish auth
-        .route("/packages/nonce", post(request_nonce))
-        // CLI `actr pkg publish`: publishes signed packages (authenticated via nonce challenge-response)
-        .route("/packages/publish", post(publish_package))
         .with_state(state)
 }
 
@@ -37,9 +29,6 @@ pub fn create_admin_router(state: PublisherRegistryState) -> Router {
         // request at the Actr Facility Provider's `realm-management` endpoint.
         .route("/{id}/status", get(get_status))
         .route("/resolve/{name}", get(resolve_by_name))
-        // Package management
-        .route("/packages", get(list_packages))
-        .route("/packages/{id}/revoke", post(revoke_package))
         // Admin privileged operations
         .route("/admin/list", get(admin_list))
         .route("/admin/{id}/suspend", post(admin_suspend))
@@ -60,11 +49,6 @@ pub fn create_admin_router(state: PublisherRegistryState) -> Router {
 }
 
 // --- Request / Response types ---
-
-#[derive(Deserialize)]
-struct ListPackagesQuery {
-    publisher: Option<String>,
-}
 
 #[derive(Deserialize)]
 struct GetVerifyingKeyQuery {
@@ -101,39 +85,6 @@ async fn get_verifying_key(
         "public_key": info.public_key,
         "key_id": info.key_id,
     })))
-}
-
-/// POST /registry/packages/nonce — request one publish-auth nonce.
-async fn request_nonce(
-    State(s): State<PublisherRegistryState>,
-    Json(req): Json<NonceRequest>,
-) -> Result<Json<serde_json::Value>, PublisherRegistryError> {
-    use base64::Engine as _;
-    let nonce_bytes = s.manager.request_nonce(&req.publisher).await?;
-    let nonce_b64 = base64::engine::general_purpose::STANDARD.encode(&nonce_bytes);
-    Ok(Json(serde_json::json!({ "nonce": nonce_b64 })))
-}
-
-async fn publish_package(
-    State(s): State<PublisherRegistryState>,
-    Json(req): Json<PublishRequest>,
-) -> Result<Json<crate::model::ActrPackage>, PublisherRegistryError> {
-    Ok(Json(s.manager.publish_package(req).await?))
-}
-
-async fn list_packages(
-    State(s): State<PublisherRegistryState>,
-    Query(q): Query<ListPackagesQuery>,
-) -> Result<Json<Vec<crate::model::ActrPackage>>, PublisherRegistryError> {
-    Ok(Json(s.manager.list_packages(q.publisher.as_deref()).await?))
-}
-
-async fn revoke_package(
-    State(s): State<PublisherRegistryState>,
-    Path(id): Path<i64>,
-) -> Result<Json<serde_json::Value>, PublisherRegistryError> {
-    s.manager.revoke_package(id).await?;
-    Ok(Json(serde_json::json!({"ok": true})))
 }
 
 async fn admin_list(

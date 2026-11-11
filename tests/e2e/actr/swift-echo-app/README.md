@@ -51,7 +51,6 @@ sequenceDiagram
     CLI-->>CI: scaffold echo-service
     CI->>CLI: actr deps install && actr gen
     CI->>CLI: actr build → .actr package
-    CI->>CLI: actr registry publish → loran
 
     CI->>CI: prepare temporary EchoApp workspace
     CI->>CI: render actr.toml from template

@@ -43,9 +43,6 @@ PROVISIONED_KEYCHAIN="$RUN_DIR/publisher.keychain.json"
 PROVISIONED_PUBLIC_KEY="$RUN_DIR/publisher-public-key.json"
 DATASTREAMAPP_LORAN_CONFIG="$TMP_APP_DIR/actr.toml"
 HOST_TARGET="$(rustc -vV | awk '/host:/ {print $2}')"
-DATASTREAMAPP_PACKAGE_MANIFEST="$RUN_DIR/datastreamapp-package-manifest.toml"
-DATASTREAMAPP_MARKER_BINARY="$RUN_DIR/datastreamapp-linked-identity.bin"
-DATASTREAMAPP_PACKAGE="$DIST_DIR/${PUBLISHER}-DataStreamApp-0.1.0-${HOST_TARGET}.actr"
 APP_STDOUT_LOG="$LOG_DIR/app.stdout.log"
 APP_STDERR_LOG="$LOG_DIR/app.stderr.log"
 APP_BUNDLE_ID="io.actrium.DataStreamApp"
@@ -1080,7 +1077,7 @@ scaffold_service_guest() {
 }
 
 build_service_package() {
-    section "📦 Building and publishing the server package"
+    section "📦 Building and verifying the server package"
     SERVICE_PACKAGE="$DIST_DIR/${PUBLISHER}-DuplexStreamService-${SERVICE_VERSION}-${HOST_TARGET}.actr"
 
     (
@@ -1094,48 +1091,10 @@ build_service_package() {
     [ -f "$SERVICE_PACKAGE" ] || fail "Server package missing: $SERVICE_PACKAGE"
 
     run_actr pkg verify --pubkey "$SERVICE_PUBLIC_KEY" --package "$SERVICE_PACKAGE" >/dev/null
-    run_actr registry publish \
-        --package "$SERVICE_PACKAGE" \
-        --keychain "$SERVICE_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}"
 
-    success "Server package published"
+    success "Server package built and verified"
 }
 
-publish_datastreamapp_package_identity() {
-    section "📦 Publishing DataStreamApp package identity"
-
-    # Linked DataStreamApp does not load this package. It is a registry marker for
-    # loran versions that still require the actor type to be package-registered.
-    printf 'linked DataStreamApp identity marker\n' >"$DATASTREAMAPP_MARKER_BINARY"
-    cat >"$DATASTREAMAPP_PACKAGE_MANIFEST" <<EOF
-edition = 1
-
-[package]
-name = "DataStreamApp"
-publisher = "${PUBLISHER}"
-version = "0.1.0"
-description = "Actrium DataStreamApp linked runtime identity marker"
-
-[binary]
-path = "${DATASTREAMAPP_MARKER_BINARY}"
-target = "${HOST_TARGET}"
-EOF
-
-    run_actr build \
-        --no-compile \
-        --manifest-path "$DATASTREAMAPP_PACKAGE_MANIFEST" \
-        --key "$PROVISIONED_KEYCHAIN" \
-        --output "$DATASTREAMAPP_PACKAGE"
-
-    run_actr pkg verify --pubkey "$PROVISIONED_PUBLIC_KEY" --package "$DATASTREAMAPP_PACKAGE" >/dev/null
-    run_actr registry publish \
-        --package "$DATASTREAMAPP_PACKAGE" \
-        --keychain "$PROVISIONED_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}"
-
-    success "DataStreamApp package identity published"
-}
 
 # ──── DataStreamApp config ────
 
@@ -1584,10 +1543,9 @@ wait_for_signer
 ensure_realm
 provision_publisher_keychain
 
-# Phase 2: Build service package and publish identities
+# Phase 2: Build and verify the service package
 scaffold_service_guest
 build_service_package
-publish_datastreamapp_package_identity
 
 # Phase 3: Render DataStreamApp config and prepare the simulator
 scaffold_datastream_app

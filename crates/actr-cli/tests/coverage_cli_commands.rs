@@ -336,57 +336,6 @@ fn build_reports_missing_manifest_and_missing_binary_section() {
 }
 
 #[test]
-fn registry_publish_reports_reading_errors_before_network() {
-    let tmp = TempDir::new().expect("tempdir");
-    let home = isolated_home(tmp.path());
-
-    // Nonexistent package → fs::read fails first.
-    let no_pkg = run_actr(
-        &[
-            "registry",
-            "publish",
-            "--package",
-            "nonex.actr",
-            "--keychain",
-            "x.json",
-            "--endpoint",
-            "http://localhost:1",
-        ],
-        tmp.path(),
-        &home,
-    );
-    assert_failure(&no_pkg, "publish no package");
-    assert!(
-        stderr(&no_pkg).contains("Failed to read package"),
-        "publish no pkg stderr:\n{}",
-        stderr(&no_pkg)
-    );
-
-    // Empty file → zip-parsing fails (read_manifest_raw rejects it).
-    fs::write(tmp.path().join("bad.actr"), b"not a zip").expect("write bad actr");
-    let bad_pkg = run_actr(
-        &[
-            "registry",
-            "publish",
-            "--package",
-            "bad.actr",
-            "--keychain",
-            "x.json",
-            "--endpoint",
-            "http://localhost:1",
-        ],
-        tmp.path(),
-        &home,
-    );
-    assert_failure(&bad_pkg, "publish bad package");
-    assert!(
-        stderr(&bad_pkg).contains("Failed to read manifest from .actr package"),
-        "publish bad pkg stderr:\n{}",
-        stderr(&bad_pkg)
-    );
-}
-
-#[test]
 fn config_rejects_unknown_keys_and_bad_values() {
     let tmp = TempDir::new().expect("tempdir");
     let home = isolated_home(tmp.path());

@@ -71,12 +71,11 @@ fi
 
 # MODE selects the scenario. The service host never holds the Publisher's
 # private key: it registers with the signed package and its Realm client key.
-#   unpublished  (default) full lifecycle without publishing the package to Loran
-#   published    optional Registry publication, same full runtime lifecycle
-#   rotation     unpublished package, Publisher key retired (pass) then revoked (reject)
-MODE="${MODE:-unpublished}"
+#   runtime   (default) signed package runtime lifecycle
+#   rotation  Publisher key retired (pass) then revoked (reject)
+MODE="${MODE:-runtime}"
 case "$MODE" in
-    published|unpublished|rotation) ;;
+    runtime|rotation) ;;
     *) fail "Unknown MODE: $MODE" ;;
 esac
 
@@ -355,15 +354,6 @@ build_service_package() {
     success "Server package built: $SERVICE_PACKAGE"
 }
 
-publish_service_package() {
-    section "📣 Publishing the server package to the registry"
-    run_actr registry publish \
-        --package "$SERVICE_PACKAGE" \
-        --keychain "$SERVICE_KEYCHAIN" \
-        --endpoint "${HTTP_BASE}"
-    success "Server package published"
-}
-
 client_guest_library_path() {
     case "$(uname)" in
         Darwin)
@@ -547,25 +537,20 @@ mk_isolated_env() {
     printf '%s\t%s\n' "$home_dir" "$hyper_dir"
 }
 
-# A public Publisher Profile/key cache is allowed; a package-publication row
-# for this release is not. Do not hide DB errors or ignore revoked rows.
-assert_no_package_record() {
-    local type_str="$1"
-    local target="$2"
-    local count
-    count="$(python3 - "$LORAN_DB" "$type_str" "$target" <<'PY'
-import sqlite3, sys
+# Publisher Profile/key caches are independent of the removed publication ledger.
+# Require the obsolete tables to be absent and surface database errors.
+assert_no_publication_tables() {
+    python3 - "$LORAN_DB" <<'PY'
+import sqlite3
+import sys
 with sqlite3.connect(sys.argv[1]) as connection:
-    print(connection.execute(
-        'SELECT COUNT(*) FROM publisher_package WHERE type_str = ? AND target = ?',
-        sys.argv[2:4],
-    ).fetchone()[0])
+    tables = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name IN ('publisher_package', 'publisher_publish_nonce')"
+    ).fetchall()
+    if tables:
+        raise SystemExit(f"obsolete publication tables exist: {tables}")
 PY
-)"
-    if [ "$count" != "0" ]; then
-        fail "Unexpected package-publication record(s): $count for $type_str / $target"
-    fi
-    success "Confirmed no package-publication record for $type_str / $target"
 }
 
 # Render the server runtime config (reuses the existing template).
@@ -683,11 +668,7 @@ stop_loran() {
 # ============================================================================
 
 mode_runtime() {
-    if [ "$MODE" = published ]; then
-        publish_service_package
-    else
-        assert_no_package_record "${PUBLISHER}/EchoService@${SERVICE_VERSION}" "$HOST_TARGET"
-    fi
+    assert_no_publication_tables
     local env
     env="$(mk_isolated_env "$MODE")"
     local home_dir hyper_dir
@@ -712,8 +693,7 @@ mode_runtime() {
 
 mode_rotation() {
     section "🧪 MODE=rotation (retired key passes, revoked key rejects)"
-    local type_str="${PUBLISHER}/EchoService@${SERVICE_VERSION}"
-    assert_no_package_record "$type_str" "$HOST_TARGET"
+    assert_no_publication_tables
 
     # The manifest's signing_key_id (key A) — needed to find the history_id after rotation.
     local signing_key_id
@@ -793,8 +773,8 @@ PY
         "UPDATE publisher_key_history SET status='revoked' WHERE publisher_id=${publisher_id} AND key_id='${signing_key_id}'; SELECT changes();")"
     [ "$revoked_rows" = "1" ] || fail "Could not revoke historical key ${signing_key_id}"
 
-    # Re-confirm no published package row, so rejection comes from KeyRevoked.
-    assert_no_package_record "$type_str" "$HOST_TARGET"
+    # KeyRevoked is enforced directly from the Publisher key history.
+    assert_no_publication_tables
 
     local env2
     env2="$(mk_isolated_env "rot2")"
@@ -835,20 +815,18 @@ if [ "$REALM_STAGE" = profile ]; then
     # An explicit transport diagnostic, not a successful runtime Echo. Keep
     # the default/full CI path unchanged and require retirement verification.
     retire_profile_realm
-    assert_no_package_record "${PUBLISHER}/EchoService@${SERVICE_VERSION}" "$HOST_TARGET"
+    assert_no_publication_tables
     success "Realm Profile/package lifecycle (REALM_MODE=${REALM_MODE}, REALM_HTTPS=${REALM_HTTPS:-0}) passed; runtime Echo was not run"
     exit 0
 fi
 
 case "$MODE" in
-    published|unpublished) mode_runtime ;;
+    runtime) mode_runtime ;;
     rotation)    mode_rotation ;;
 esac
 
 if [ "$REALM_MODE" != legacy ]; then retire_profile_realm; fi
-if [ "$MODE" != published ]; then
-    assert_no_package_record "${PUBLISHER}/EchoService@${SERVICE_VERSION}" "$HOST_TARGET"
-fi
+assert_no_publication_tables
 
 echo ""
 success "Package runtime echo E2E (MODE=${MODE}, REALM_MODE=${REALM_MODE}) completed successfully"

@@ -40,39 +40,6 @@ pub struct PublisherEntry {
     pub contact: Option<String>,
 }
 
-/// Package registration entry — populated by `POST /registry/packages/publish` or the
-/// admin seeding endpoint.
-#[derive(Clone, Debug)]
-pub struct PackageEntry {
-    pub publisher: String,
-    pub name: String,
-    pub version: String,
-    pub target: String,
-    pub manifest_raw: String,
-    pub signature_b64: String,
-}
-
-/// Publish nonces issued via `POST /registry/packages/nonce`; consumed once by
-/// `POST /registry/packages/publish`.
-#[derive(Default)]
-pub struct NonceStore {
-    inner: RwLock<HashMap<String, String>>, // publisher -> nonce (b64)
-}
-
-impl NonceStore {
-    pub async fn issue(&self, publisher: &str, nonce_b64: String) {
-        self.inner
-            .write()
-            .await
-            .insert(publisher.to_string(), nonce_b64);
-    }
-
-    pub async fn take(&self, publisher: &str, expected: &str) -> bool {
-        let mut map = self.inner.write().await;
-        matches!(map.remove(publisher), Some(v) if v == expected)
-    }
-}
-
 /// All shared state owned by the server.
 pub struct MockState {
     // --- Signing material -------------------------------------------------
@@ -96,8 +63,6 @@ pub struct MockState {
     // --- Issuer/Publisher Registry registry -------------------------------------------------
     pub realms: RwLock<HashMap<String, RealmEntry>>,
     pub publishers: RwLock<HashMap<String, PublisherEntry>>,
-    pub packages: RwLock<Vec<PackageEntry>>,
-    pub nonces: NonceStore,
 
     // --- Test observability -----------------------------------------------
     pub message_count: Arc<AtomicU32>,
@@ -135,8 +100,6 @@ impl MockState {
             next_serial: AtomicU64::new(1),
             realms: RwLock::new(HashMap::new()),
             publishers: RwLock::new(HashMap::new()),
-            packages: RwLock::new(Vec::new()),
-            nonces: NonceStore::default(),
             message_count: Arc::new(AtomicU32::new(0)),
             ice_restart_offer_count: Arc::new(AtomicU32::new(0)),
             ice_restart_request_count: Arc::new(AtomicU32::new(0)),
@@ -183,18 +146,6 @@ impl MockState {
                 contact: None,
             },
         );
-    }
-
-    pub async fn add_package(&self, pkg: PackageEntry) {
-        let mut packages = self.packages.write().await;
-        // De-duplicate by (publisher, name, version, target).
-        packages.retain(|p| {
-            !(p.publisher == pkg.publisher
-                && p.name == pkg.name
-                && p.version == pkg.version
-                && p.target == pkg.target)
-        });
-        packages.push(pkg);
     }
 
     /// Look up a publisher's verifying key, falling back to the built-in

@@ -427,7 +427,7 @@ async fn seed_realm(realm: &str, key_label: Option<&str>) {
     add_client(realm, key_label.unwrap_or(DEFAULT_KEY_LABEL), Role::Owner).await;
 }
 
-fn test_registry_manifest(publisher: &str, name: &str, version: &str, target: &str) -> Vec<u8> {
+fn test_package_manifest(publisher: &str, name: &str, version: &str, target: &str) -> Vec<u8> {
     format!(
         r#"publisher = "{publisher}"
 name = "{name}"
@@ -442,15 +442,20 @@ hash = "0000000000000000000000000000000000000000000000000000000000000000"
     .into_bytes()
 }
 
-async fn seed_active_package(publisher: &str, name: &str, version: &str, target: &str) -> Vec<u8> {
+async fn signed_package_for_publisher(
+    publisher: &str,
+    name: &str,
+    version: &str,
+    target: &str,
+) -> Vec<u8> {
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
 
     let signing_key = SigningKey::generate(&mut OsRng);
-    seed_active_package_with_key(publisher, name, version, target, &signing_key).await
+    signed_package_for_key(publisher, name, version, target, &signing_key).await
 }
 
-async fn seed_active_package_with_key(
+async fn signed_package_for_key(
     publisher: &str,
     name: &str,
     version: &str,
@@ -458,42 +463,15 @@ async fn seed_active_package_with_key(
     signing_key: &ed25519_dalek::SigningKey,
 ) -> Vec<u8> {
     let pool = platform::storage::db::get_database().get_pool();
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
-    let (publisher_id, signing_key_id) =
-        seed_publisher_with_key(pool, publisher, signing_key).await;
-    let (manifest, signature) =
-        build_signed_manifest(signing_key, publisher, name, version, target);
-    let manifest_str = std::str::from_utf8(&manifest).expect("test manifest is UTF-8");
-    let signature_b64 = base64::prelude::BASE64_STANDARD.encode(signature);
-
-    sqlx::query(
-        "INSERT OR REPLACE INTO publisher_package
-         (publisher_id, publisher, name, version, type_str, target, manifest, signature, signing_key_id, status, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)",
-    )
-    .bind(publisher_id)
-    .bind(publisher)
-    .bind(name)
-    .bind(version)
-    .bind(format!("{publisher}/{name}@{version}"))
-    .bind(target)
-    .bind(manifest_str)
-    .bind(signature_b64)
-    .bind(signing_key_id)
-    .bind(now)
-    .execute(pool)
-    .await
-    .expect("seed publisher package");
+    seed_publisher_with_key(pool, publisher, signing_key).await;
+    let (manifest, _) = build_signed_manifest(signing_key, publisher, name, version, target);
 
     manifest
 }
 
-/// Seed an active published package and return both its manifest bytes and the
+/// Register a Publisher and return its signed package manifest and
 /// signing key.
-async fn seed_active_package_returning_key(
+async fn signed_package_with_generated_key(
     publisher: &str,
     name: &str,
     version: &str,
@@ -503,8 +481,7 @@ async fn seed_active_package_returning_key(
     use rand::rngs::OsRng;
 
     let signing_key = SigningKey::generate(&mut OsRng);
-    let manifest =
-        seed_active_package_with_key(publisher, name, version, target, &signing_key).await;
+    let manifest = signed_package_for_key(publisher, name, version, target, &signing_key).await;
     (manifest, signing_key)
 }
 
@@ -1400,7 +1377,7 @@ async fn test_register_route_package_with_publisher_identity_succeeds() {
     let realm = "package-http-route@example.com";
     seed_realm(realm, Some(ROUTE_KEY_LABEL)).await;
     let (_, key) =
-        seed_active_package_returning_key("httppkg", "PackagedService", "1.0.0", "wasm32-wasip1")
+        signed_package_with_generated_key("httppkg", "PackagedService", "1.0.0", "wasm32-wasip1")
             .await;
     let app = create_test_router(&env).await;
 
@@ -1438,7 +1415,7 @@ async fn test_register_accepts_canonical_digit_and_long_publisher_domains() {
         "a-very-long-publisher-domain-name.example.com",
     ] {
         let (_, key) =
-            seed_active_package_returning_key(publisher, "echo", "1.0.0", "wasm32-wasip1").await;
+            signed_package_with_generated_key(publisher, "echo", "1.0.0", "wasm32-wasip1").await;
         let request =
             signed_package_request(publisher, "echo", "1.0.0", realm, "wasm32-wasip1", &key);
         let response = post_register(app.clone(), request, Some(ROUTE_KEY_LABEL)).await;
@@ -1458,7 +1435,7 @@ async fn test_register_route_unspecified_auth_mode_uses_package_identity() {
     let realm = "unspecified-http-route@example.com";
     seed_realm(realm, Some(ROUTE_KEY_LABEL)).await;
     let (_, key) =
-        seed_active_package_returning_key("legacyhttp", "LegacyService", "1.0.0", "wasm32-wasip1")
+        signed_package_with_generated_key("legacyhttp", "LegacyService", "1.0.0", "wasm32-wasip1")
             .await;
     let app = create_test_router(&env).await;
 
@@ -1487,11 +1464,11 @@ async fn test_register_route_unspecified_auth_mode_uses_package_identity() {
 
 #[tokio::test]
 #[serial]
-async fn test_register_route_published_package_without_manifest_raw_is_rejected() {
+async fn test_register_route_package_without_manifest_raw_is_rejected() {
     let env = setup_test_environment().await;
-    let realm = "published-package-missing-manifest@example.com";
+    let realm = "package-missing-manifest@example.com";
     seed_realm(realm, Some(ROUTE_KEY_LABEL)).await;
-    seed_active_package(
+    signed_package_for_publisher(
         "missingmanifest",
         "PublishedService",
         "1.0.0",
@@ -1524,18 +1501,18 @@ async fn test_register_route_published_package_without_manifest_raw_is_rejected(
             assert_eq!(err.code, 400);
         }
         register_response::Result::Success(_) => {
-            panic!("published package registration without manifest_raw should be rejected")
+            panic!("package registration without manifest_raw should be rejected")
         }
     }
 }
 
 #[tokio::test]
 #[serial]
-async fn test_register_route_published_package_without_target_is_rejected() {
+async fn test_register_route_package_without_target_is_rejected() {
     let env = setup_test_environment().await;
-    let realm = "published-package-missing-target@example.com";
+    let realm = "package-missing-target@example.com";
     seed_realm(realm, Some(ROUTE_KEY_LABEL)).await;
-    let manifest_raw = seed_active_package(
+    let manifest_raw = signed_package_for_publisher(
         "missingtarget",
         "PublishedService",
         "1.0.0",
@@ -1568,57 +1545,7 @@ async fn test_register_route_published_package_without_target_is_rejected() {
             assert_eq!(err.code, 400);
         }
         register_response::Result::Success(_) => {
-            panic!("published package registration without target should be rejected")
-        }
-    }
-}
-
-/// A release published to this Loran is pinned to its manifest: a different,
-/// validly signed manifest for the same `(type, target)` is rejected.
-#[tokio::test]
-#[serial]
-async fn test_published_release_rejects_a_different_manifest() {
-    use ed25519_dalek::{Signer, SigningKey};
-    use rand::rngs::OsRng;
-
-    let env = setup_test_environment().await;
-    let issuer = create_test_issuer(&env).await;
-    seed_realm("mismatch@example.com", None).await;
-    let key = SigningKey::generate(&mut OsRng);
-    seed_active_package_with_key(
-        "publishedmismatch",
-        "MismatchService",
-        "1.0.0",
-        "wasm32-wasip1",
-        &key,
-    )
-    .await;
-
-    let mut request = signed_package_request(
-        "publishedmismatch",
-        "MismatchService",
-        "1.0.0",
-        "mismatch@example.com",
-        "wasm32-wasip1",
-        &key,
-    );
-    let mut manifest_bytes = request.manifest_raw.as_deref().unwrap().to_vec();
-    manifest_bytes.extend_from_slice(b"\n# different, but still valid, manifest bytes\n");
-    let sig_bytes = key.sign(&manifest_bytes).to_bytes().to_vec();
-    request.manifest_raw = Some(prost::bytes::Bytes::from(manifest_bytes));
-    request.publisher_signature = Some(prost::bytes::Bytes::from(sig_bytes));
-
-    let response = issuer
-        .issue_credential(&request, &owner(&request.realm).await)
-        .await
-        .expect("issue");
-    match response.result.expect("result") {
-        register_response::Result::Error(err) => {
-            assert_eq!(err.code, 403);
-            assert!(err.message.contains("publisher not verified"));
-        }
-        register_response::Result::Success(_) => {
-            panic!("a manifest that differs from the published release must be rejected")
+            panic!("package registration without target should be rejected")
         }
     }
 }
@@ -1636,7 +1563,7 @@ async fn test_expired_publisher_key_still_verifies_packages() {
 
     let pool = platform::storage::db::get_database().get_pool();
     let key = SigningKey::generate(&mut OsRng);
-    seed_active_package_with_key(
+    signed_package_for_key(
         "expiredruntime",
         "ExistingService",
         "1.0.0",
@@ -1649,11 +1576,10 @@ async fn test_expired_publisher_key_still_verifies_packages() {
         .bind("expiredruntime")
         .execute(pool)
         .await
-        .expect("expire Publisher Registry publish authority");
+        .expect("expire package signing key");
 
-    // Natural expiry ends the key's authority to publish, not to verify:
-    // both a published and a never-published package still verify.
-    for name in ["ExistingService", "UnpublishedService"] {
+    // Natural key expiry does not invalidate existing package signatures.
+    for name in ["ExistingService", "OtherService"] {
         let request = signed_package_request(
             "expiredruntime",
             name,
@@ -1675,68 +1601,6 @@ async fn test_expired_publisher_key_still_verifies_packages() {
     }
 }
 
-/// A revoked package stays revoked whatever its source: the Publisher's own
-/// signed package (say, imported from a local file) and the same release
-/// re-signed with a development key are both rejected; nothing falls back to
-/// a development identity.
-#[tokio::test]
-#[serial]
-async fn test_revoked_package_is_rejected_whatever_its_source() {
-    use ed25519_dalek::SigningKey;
-    use rand::rngs::OsRng;
-
-    let env = setup_test_environment().await;
-    let issuer = create_test_issuer(&env).await;
-    let realm = "revoked-package-terminal@example.com";
-    seed_realm(realm, None).await;
-
-    let pool = platform::storage::db::get_database().get_pool();
-    let key = SigningKey::generate(&mut OsRng);
-    seed_active_package_with_key(
-        "revokedterminal",
-        "RevokedService",
-        "1.0.0",
-        "wasm32-wasip1",
-        &key,
-    )
-    .await;
-    sqlx::query(
-        "UPDATE publisher_package SET status = 'revoked', revoked_at = ? \
-         WHERE type_str = ? AND target = ?",
-    )
-    .bind(test_unix_now_secs() as i64)
-    .bind("revokedterminal/RevokedService@1.0.0")
-    .bind("wasm32-wasip1")
-    .execute(pool)
-    .await
-    .expect("revoke package");
-
-    let development_key = SigningKey::generate(&mut OsRng);
-    for (label, signing_key) in [("publisher", &key), ("development", &development_key)] {
-        let request = signed_package_request(
-            "revokedterminal",
-            "RevokedService",
-            "1.0.0",
-            realm,
-            "wasm32-wasip1",
-            signing_key,
-        );
-        let response = issuer
-            .issue_credential(&request, &owner(realm).await)
-            .await
-            .expect("issue");
-        match response.result.expect("result") {
-            register_response::Result::Error(err) => {
-                assert_eq!(err.code, 403, "{label}");
-                assert!(err.message.contains("revoked"), "{label}: {}", err.message);
-            }
-            register_response::Result::Success(_) => {
-                panic!("{label}: a revoked package must be rejected")
-            }
-        }
-    }
-}
-
 #[tokio::test]
 #[serial]
 async fn test_suspended_publisher_rejects_its_packages() {
@@ -1750,7 +1614,7 @@ async fn test_suspended_publisher_rejects_its_packages() {
 
     let pool = platform::storage::db::get_database().get_pool();
     let key = SigningKey::generate(&mut OsRng);
-    seed_active_package_with_key(
+    signed_package_for_key(
         "suspendedruntime",
         "ExistingService",
         "1.0.0",
@@ -1764,13 +1628,13 @@ async fn test_suspended_publisher_rejects_its_packages() {
         .await
         .expect("suspend Publisher Registry");
 
-    // Published, never published, and a development key claiming the
-    // suspended name: all rejected.
+    // Different package names and a development key claiming the suspended
+    // Publisher name are all rejected.
     let development_key = SigningKey::generate(&mut OsRng);
     let cases = [
         ("ExistingService", &key),
-        ("UnpublishedService", &key),
-        ("UnpublishedService", &development_key),
+        ("OtherService", &key),
+        ("OtherService", &development_key),
     ];
     for (name, signing_key) in cases {
         let request = signed_package_request(
@@ -1797,7 +1661,7 @@ async fn test_suspended_publisher_rejects_its_packages() {
 
 #[tokio::test]
 #[serial]
-async fn test_published_package_retired_key_survives_until_explicit_revocation() {
+async fn test_package_retired_key_survives_until_explicit_revocation() {
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
 
@@ -1808,7 +1672,7 @@ async fn test_published_package_retired_key_survives_until_explicit_revocation()
 
     let pool = platform::storage::db::get_database().get_pool();
     let old_key = SigningKey::generate(&mut OsRng);
-    seed_active_package_with_key(
+    signed_package_for_key(
         "revokedhistory",
         "ExistingService",
         "1.0.0",
@@ -1902,7 +1766,7 @@ async fn test_register_route_unsigned_package_is_rejected() {
         acl: None,
         service: None,
         ws_address: None,
-        manifest_raw: Some(prost::bytes::Bytes::from(test_registry_manifest(
+        manifest_raw: Some(prost::bytes::Bytes::from(test_package_manifest(
             "missing-http-publisher",
             "PackagedService",
             "1.0.0",
@@ -1993,7 +1857,7 @@ async fn test_unsigned_package_registration_is_rejected() {
         acl: None,
         service: None,
         ws_address: None,
-        manifest_raw: Some(prost::bytes::Bytes::from(test_registry_manifest(
+        manifest_raw: Some(prost::bytes::Bytes::from(test_package_manifest(
             "missing-publisher-for-package-auth-test",
             "package-workload",
             "1.0.0",
@@ -2042,7 +1906,7 @@ async fn test_end_to_end_credential_flow() {
     .expect("Failed to create issuer");
 
     let (_, key) =
-        seed_active_package_returning_key("acme", "test-device", "1.0.0", "wasm32-wasip1").await;
+        signed_package_with_generated_key("acme", "test-device", "1.0.0", "wasm32-wasip1").await;
     let request = signed_package_request(
         "acme",
         "test-device",
@@ -2365,7 +2229,7 @@ async fn archive_key_to_history(
 /// only the public package and its own Realm client key, and registers the
 /// Realm's Service, then renews and reissues it. No Publisher private key takes
 /// part after preparation, and the package keeps its Publisher identity although
-/// it was never published to this Loran.
+/// its signature and Publisher identity are sufficient.
 #[tokio::test]
 #[serial]
 async fn test_trusted_package_registers_without_publisher_private_key() {
@@ -2447,13 +2311,14 @@ async fn test_trusted_package_registers_without_publisher_private_key() {
             panic!("reissue must not require a Publisher private key: {err:?}")
         }
     }
-    let publications: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM publisher_package WHERE type_str = 'publisher-a.example/notes@1.0.0'",
+    let publication_tables: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'
+         AND name IN ('publisher_package', 'publisher_publish_nonce')",
     )
     .fetch_one(pool)
     .await
     .unwrap();
-    assert_eq!(publications, 0, "runtime must not publish the package");
+    assert_eq!(publication_tables, 0, "runtime needs no publication ledger");
 }
 
 /// A valid package whose publisher this Loran's registry does not know runs as
@@ -2473,7 +2338,7 @@ async fn test_unregistered_publisher_package_runs_as_development_identity() {
     let key = SigningKey::generate(&mut OsRng);
     let request = signed_package_request(
         "dev.local.example",
-        "UnpublishedService",
+        "OtherService",
         "1.0.0",
         realm,
         "wasm32-wasip1",
@@ -2908,8 +2773,7 @@ async fn test_manifest_identity_mismatch_rejected() {
 // ============================================================================
 
 /// Shared package fixture: realm seeded, publisher with an active key in the
-/// Publisher Registry, and a validly signed manifest. No `publisher_package`
-/// row is seeded: the package was never published to this Loran.
+/// Publisher Registry, and a validly signed manifest.
 ///
 /// `env` is held for the fixture's lifetime: dropping it would drop the
 /// embedded signer's shutdown sender, which resolves `serve_with_shutdown`
@@ -3290,16 +3154,16 @@ async fn test_trusted_package_from_a_local_file_keeps_publisher_identity() {
     }
 }
 
-/// A package published to this Loran registers with its manifest and
+/// A package registers with its manifest and
 /// signature alone; no Publisher private-key proof is asked for.
 #[tokio::test]
 #[serial]
-async fn test_published_package_registers_without_publisher_proof() {
+async fn test_package_registers_without_publisher_proof() {
     let env = setup_test_environment().await;
     let realm = "package-no-auth-route@example.com";
     seed_realm(realm, Some(ROUTE_KEY_LABEL)).await;
     let (_, key) =
-        seed_active_package_returning_key("noauthpkg", "NoAuthService", "1.0.0", "wasm32-wasip1")
+        signed_package_with_generated_key("noauthpkg", "NoAuthService", "1.0.0", "wasm32-wasip1")
             .await;
     let app = create_test_router(&env).await;
 
@@ -3319,7 +3183,7 @@ async fn test_published_package_registers_without_publisher_proof() {
             assert_eq!(development(&ok), None);
         }
         register_response::Result::Error(err) => {
-            panic!("a published package must register without a Publisher proof: {err:?}")
+            panic!("a signed package must register without a Publisher proof: {err:?}")
         }
     }
 }
@@ -3385,7 +3249,7 @@ async fn test_linked_auth_with_package_fields_rejected() {
     }
 }
 
-/// Register a published package, then renew via `POST /issuer/renew` with the
+/// Register a signed package, then renew via `POST /issuer/renew` with the
 /// renewal token alone.
 #[tokio::test]
 #[serial]
@@ -3394,7 +3258,7 @@ async fn test_renewal_token_renew_of_a_package_identity() {
     let realm = "renew-route@example.com";
     seed_realm(realm, Some(ROUTE_KEY_LABEL)).await;
     let (_, key) =
-        seed_active_package_returning_key("renewpkg", "RenewService", "1.0.0", "wasm32-wasip1")
+        signed_package_with_generated_key("renewpkg", "RenewService", "1.0.0", "wasm32-wasip1")
             .await;
     let app = create_test_router(&env).await;
 
@@ -3677,69 +3541,6 @@ async fn test_reissue_rejected_after_actor_revoked() {
     env.shutdown_signer().await;
 }
 
-/// AIS-03: renewing a package identity re-checks package lifecycle. A package
-/// that was revoked after the credential was first issued must block re-issuance
-/// even though the renewal token is still valid.
-#[tokio::test]
-#[serial]
-async fn test_issue_for_actor_rejected_after_package_revoked() {
-    let env = setup_test_environment().await;
-    let issuer = create_test_issuer(&env).await;
-    let realm = "renew-revoked-package@example.com";
-    seed_realm(realm, None).await;
-    let (_, key) = seed_active_package_returning_key(
-        "revokepkg",
-        "RevokeRenewService",
-        "1.0.0",
-        "wasm32-wasip1",
-    )
-    .await;
-
-    let request = signed_package_request(
-        "revokepkg",
-        "RevokeRenewService",
-        "1.0.0",
-        realm,
-        "wasm32-wasip1",
-        &key,
-    );
-    let ok = match issuer
-        .issue_credential(&request, &owner(&request.realm).await)
-        .await
-        .expect("issue")
-        .result
-        .expect("result")
-    {
-        register_response::Result::Success(ok) => ok,
-        register_response::Result::Error(err) => panic!("register failed: {err:?}"),
-    };
-
-    // Re-issuing for the actor succeeds while the package is still active.
-    issuer
-        .issue_credential_for_actor(&ok.actr_id, None, &owner(&ok.actr_id.realm).await)
-        .await
-        .expect("reissue before revoke should succeed");
-
-    let pool = platform::storage::db::get_database().get_pool();
-    sqlx::query(
-        "UPDATE publisher_package SET status = 'revoked', revoked_at = ? WHERE type_str = ?",
-    )
-    .bind(test_unix_now_secs() as i64)
-    .bind("revokepkg/RevokeRenewService@1.0.0")
-    .execute(pool)
-    .await
-    .expect("revoke package");
-
-    let err = issuer
-        .issue_credential_for_actor(&ok.actr_id, None, &owner(&ok.actr_id.realm).await)
-        .await
-        .expect_err("a revoked package must block re-issuance");
-    assert!(
-        matches!(err, platform::aid::AidError::PackageRevoked),
-        "expected PackageRevoked, got {err:?}"
-    );
-}
-
 /// AIS-03: renewing a package identity re-checks the publisher. A publisher that
 /// was suspended after issuance must block re-issuance for its packages.
 #[tokio::test]
@@ -3749,7 +3550,7 @@ async fn test_issue_for_actor_rejected_after_publisher_suspended() {
     let issuer = create_test_issuer(&env).await;
     let realm = "renew-suspended-publisher@example.com";
     seed_realm(realm, None).await;
-    let (_, key) = seed_active_package_returning_key(
+    let (_, key) = signed_package_with_generated_key(
         "suspendpub",
         "SuspendRenewService",
         "1.0.0",
@@ -3784,7 +3585,7 @@ async fn test_issue_for_actor_rejected_after_publisher_suspended() {
         .expect("suspend publisher");
 
     let err = issuer
-        .issue_credential_for_actor(&ok.actr_id, None, &owner(&ok.actr_id.realm).await)
+        .issue_credential_for_actor(&ok.actr_id, &owner(&ok.actr_id.realm).await)
         .await
         .expect_err("a suspended publisher must block re-issuance");
     assert!(
@@ -4036,14 +3837,13 @@ async fn test_reissue_attempt_in_progress_returns_too_early() {
     env.shutdown_signer().await;
 }
 
-/// A never-published package of a trusted Publisher has no package row, but
-/// still depends on its publisher. Exercise
+/// A signed package identity depends on its trusted Publisher. Exercise
 /// the real renewal endpoint, legacy NULL auth modes, and publisher deletion.
 // Reloading the signing key from storage uses `block_in_place`.
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn test_unpublished_renewal_enforces_publisher_status() {
-    let fx = package_fixture("renew.example.com", "UnpublishedRenew", "wasm32-wasip1").await;
+async fn test_package_renewal_enforces_publisher_status() {
+    let fx = package_fixture("renew.example.com", "PackageRenew", "wasm32-wasip1").await;
     let app = create_test_router(&fx._env).await;
     let registration = base_package_request(&fx, TEST_REALM);
     let initial = post_register(app.clone(), registration, Some(DEFAULT_KEY_LABEL)).await;

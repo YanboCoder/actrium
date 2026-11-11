@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# register.sh — Register publisher and publish echo-actr package to a running loran instance.
+# register.sh — Register the echo-actr Publisher public key to a running loran instance.
 # Usage: ./register.sh [--db <path>] [--endpoint <url>] [--package <path>]
 set -euo pipefail
 
@@ -147,17 +147,6 @@ UPDATE publisher
 SQL
 
 echo -e "${GREEN}✅ publisher 'actrium' registered (key_id: $PUBLISHER_KEY_ID)${NC}"
-
-# ── Step 3: Publish package via actr pkg publish ──────────────────────────────
-echo ""
-echo "📡 Step 3: Publishing package to publisher..."
-
-cargo run --manifest-path "$ACTR_CLI_MANIFEST" --bin actr -- pkg publish \
-    --package "$ACTR_PACKAGE" \
-    --keychain "$SIGNING_KEY" \
-    --endpoint "$ENDPOINT"
-
-echo -e "${GREEN}✅ Package published${NC}"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -137,13 +137,13 @@ provision_publisher_keychain() {
     provision_e2e_publisher
 }
 
-# Build + verify + publish a Rust service .actr package from an already-scaffolded
+# Build and verify a Rust service .actr package from an already-scaffolded
 # service dir. Args: <service_dir> <service_actor_name> <service_version>.
-build_and_publish_service() {
+build_service_package() {
     local service_dir="$1"
     local service_actor="$2"
     local service_version="$3"
-    section "📦 Building and publishing the ${service_actor} server package"
+    section "📦 Building and verifying the ${service_actor} server package"
 
     SERVICE_PACKAGE="$DIST_DIR/${PUBLISHER}-${service_actor}-${service_version}-${HOST_TARGET}.actr"
     (
@@ -156,50 +156,9 @@ build_and_publish_service() {
     [ -f "$SERVICE_PACKAGE" ] || fail "Server package missing: $SERVICE_PACKAGE"
 
     run_actr pkg verify --pubkey "$SERVICE_PUBLIC_KEY" --package "$SERVICE_PACKAGE" >/dev/null
-    run_actr registry publish \
-        --package "$SERVICE_PACKAGE" \
-        --keychain "$SERVICE_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}"
-    success "${service_actor} package published"
+    success "${service_actor} package built and verified"
 }
 
-# Publish a no-compile identity-marker package for a linked client actor type
-# (loran versions that require the actor type to be package-registered).
-# Args: <app_actor_name> <app_version>.
-publish_app_package_identity() {
-    local app_actor="$1"
-    local app_version="$2"
-    section "📦 Publishing ${app_actor} package identity"
-
-    local marker="$RUN_DIR/${app_actor}-identity.bin"
-    local manifest="$RUN_DIR/${app_actor}-package-manifest.toml"
-    local package="$DIST_DIR/${PUBLISHER}-${app_actor}-${app_version}-${HOST_TARGET}.actr"
-    printf 'linked %s identity marker\n' "$app_actor" >"$marker"
-    cat >"$manifest" <<EOF
-edition = 1
-
-[package]
-name = "${app_actor}"
-publisher = "${PUBLISHER}"
-version = "${app_version}"
-description = "Actrium ${app_actor} linked runtime identity marker"
-
-[binary]
-path = "${marker}"
-target = "${HOST_TARGET}"
-EOF
-
-    run_actr build --no-compile \
-        --manifest-path "$manifest" \
-        --key "$PROVISIONED_KEYCHAIN" \
-        --output "$package"
-    run_actr pkg verify --pubkey "$PROVISIONED_PUBLIC_KEY" --package "$package" >/dev/null
-    run_actr registry publish \
-        --package "$package" \
-        --keychain "$PROVISIONED_KEYCHAIN" \
-        --endpoint "http://127.0.0.1:${HTTP_PORT}"
-    success "${app_actor} package identity published"
-}
 
 # Write the package-backed server runtime config and launch `actr run` in the
 # background. Args: <service_package> <client_acl_type> <observability_service_name>.

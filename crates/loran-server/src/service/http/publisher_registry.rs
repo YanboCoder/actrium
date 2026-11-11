@@ -1,6 +1,6 @@
 //! Publisher Registry HTTP Service Implementation
 //!
-//! Provides HTTP API service for Publisher domain verification, Actor package publishing and querying
+//! Provides HTTP API service for Publisher identity and signing-key queries
 
 use crate::service::HttpRouterService;
 use anyhow::Result;
@@ -18,8 +18,6 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct PublisherRegistryService {
     info: ServiceInfo,
-    #[allow(dead_code)]
-    config: LoranConfig,
 }
 
 impl PublisherRegistryService {
@@ -28,10 +26,9 @@ impl PublisherRegistryService {
             info: ServiceInfo::new(
                 "Publisher Registry",
                 ServiceType::PublisherRegistry,
-                Some("HTTPS Publisher identity and Actor package registry".to_string()),
+                Some("HTTPS Publisher identity and signing keys".to_string()),
                 &config,
             ),
-            config,
         }
     }
 }
@@ -50,8 +47,7 @@ impl HttpRouterService for PublisherRegistryService {
         platform::recording::info!("Building Publisher Registry router");
 
         let pool = platform::storage::db::get_database().get_pool().clone();
-        let nonce_retain_secs = self.config.services.publisher_registry.nonce_retain_secs;
-        let manager = PublisherRegistryManager::new(pool).with_nonce_retain_secs(nonce_retain_secs);
+        let manager = PublisherRegistryManager::new(pool);
         let state = PublisherRegistryState {
             manager: Arc::new(manager),
         };

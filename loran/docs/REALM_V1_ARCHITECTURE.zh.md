@@ -461,14 +461,14 @@ Publisher Profile 是 `https://<publisher>/.well-known/actr` 中带签名的可�
 key history。
 
 Loran 获取 descriptor 的重定向与 SSRF 规则与 3.1 相同。`register_publisher` 把一个
-publisher 登记到本 Actr Facility Provider 的 Publisher Registry（此后本 Actr Facility Provider 才为该
-publisher 托管包），与 Realm 管理请求共用同一端点 `POST /actr/realm-management`。它复用
+publisher 登记到本 Actr Facility Provider 的 Publisher Registry（用于验证该
+Publisher 的包签名，包文件托管独立配置），与 Realm 管理请求共用同一端点 `POST /actr/realm-management`。它复用
 3.2 的 Actr 管理信封：以 `publisher` 字段取代 `realm`，由 Publisher Profile 中 `active` 的
 Publisher Profile 签名 key 签名，同样绑定 `provider_id`、5 分钟有效期与 nonce；公开文档中
 不放 challenge。首个 Publisher Profile 固定其 `profile_signing_keys`；之后按与 `realm_signing_keys`
 相同的 §4.4 算法接受（`publisher.profile_pins`），身份变化拒绝，直到运营者重新确认。包签名 key 的 `id` 须为
 `actr-pub-<SHA-256 前 16 hex>`；Publisher Profile 列 1 至 2 把 `active` 包签名 key，两把都可
-发布与证明持有（轮换重叠期），原当前 key 只要仍 `active` 就保持当前；不再 `active` 的 key
+验证包签名（轮换重叠期），原当前 key 只要仍 `active` 就保持当前；不再 `active` 的 key
 归档为 retired，只用于历史包验签；Publisher Profile 不再列出的 key 即吊销（revoked），泄露时
 也可由实例运营者显式 revoke。Loran 不周期刷新 Publisher Profile，key 轮换由 publisher 再次
 发送 `register_publisher` 完成（见第 9 节）。
@@ -483,7 +483,7 @@ Package Resolution、`packages` relation 与 `program_resolver` 已从协议和�
 
 ## 8. 数据与升级
 
-当前 schema v9 使用 SQLite `PRAGMA user_version = 9`。Loran 遇到旧版或未知 schema
+当前 schema v10 使用 SQLite `PRAGMA user_version = 10`。Loran 遇到旧版或未知 schema
 直接拒绝启动，不在启动路径中执行「尝试 ALTER 后忽略错误」。v2 → v3（新增
 `issuer_control_attempt`）、v3 → v4（以 Realm 名取代数值 Realm id）与 v4 → v5（去掉单
 Realm 约束，`realm.status` 改为 `pending | active | retired`，新增 `realm_domain`、
@@ -493,7 +493,8 @@ Realm 约束，`realm.status` 改为 `pending | active | retired`，新增 `real
 改存 key pins，新增 `realm_issuer_key`，`publisher` 新增第二把 `active` 包签名 key 与
 `profile_pins`，删除未用的 `realm.issuer_key_id`）与 v8 → v9（新增 `realm_member`、
 `realm_client_key`、`realm_invite`，`issued_actor_identity` 新增 `member_id`、`client_key_id`，`realm`
-删除 Realm 注册 secret 与 Realm 管理 token 列）都没有离线迁移，需停机后重建数据库。
+删除 Realm 注册 secret 与 Realm 管理 token 列）与 v9 → v10（移除包发布记录表
+`publisher_package` 与发布 nonce 表 `publisher_publish_nonce`）都没有离线迁移，需停机后重建数据库。
 已删除的全局 Issuer key 曾存于数据目录下的 `issuer_keys.db`（更早为 `ais_keys.db`）；Issuer 启动时若发现该文件（及其
 `-wal`、`-shm`）即删除并记日志。Issuer Signer 的 `signer_keys.db` 打开时删除没有名字的 key
 （已删除的 `GenerateSigningKey` 留下的），其余 key 保留。
@@ -580,11 +581,11 @@ Actor Registry 的持久元数据在 Signaling 自己的缓存库 `signaling_cac
 - 已实现 `register_publisher`：读取 authority descriptor 的 `publisher` 成员（第 7 节），
   `/.well-known/actr/publisher.json` 与 challenge 已移除；Publisher Profile 签名 key 按 key pin
   跟随轮换链，身份变化由运营者经 admin 接口重新确认；包签名 key id 由公钥推导，轮换重叠期两把
-  `active` key 均可发布。尚未实现：Publisher Profile 的周期刷新（过期或 key 移除后不自动
+  `active` key 均可验证包签名。尚未实现：Publisher Profile 的周期刷新（过期或 key 移除后不自动
   停用该 publisher）；已登记 Publisher 总数受 `[realm] max_publishers` 限制（默认 1000）；
 - 已实现 `/renew`、`/reissue` 加固：`/renew` 先只读校验 renewal token 再报告 Realm 状态；后继已
   生成的 token 只在 5 分钟内可 `/renew`，且只换回该后继；两者的提交事务内重查 Actor 撤销、Realm
-  状态、包撤销与 publisher 停用；Realm 退役同时删除其 attempt 记录；
+  状态与 publisher 停用；Realm 退役同时删除其 attempt 记录；
 - 按 Realm 的连接、注册、消息与 TURN 配额（TURN 认证已拒绝不可用 Realm 的 credential，Realm
   停用、过期或退役时关闭其已建立的 allocation）；
 - 控制面与本契约的剩余差异：Loran 不是 Actr Facility Provider（未启用 authority 或 Issuer 无 Signer）时，

@@ -137,12 +137,7 @@ ws_path = "/signaling"
 
 ## Publisher Registry
 
-```toml
-[services.publisher_registry]
-nonce_retain_secs = 86400
-```
-
-该值决定已使用或过期发布 nonce 的审计保留期，不改变 nonce 的一次性语义。
+Publisher Registry 不需要单独的服务配置。
 Publisher ID 是域名，通过 HTTPS descriptor 验证域名控制权并以 `register_publisher` 登记，
 见架构契约第 7 节。
 
@@ -209,7 +204,7 @@ credential 与 TURN username 的 `provider`，并由 Signaling、TURN 校验。`
 控制是否提供 `/.well-known/actr`（此时域名须与 `bind.http` 一致），`[authority] links`
 是 descriptor 的 Realm 链接前缀（如 `["/i/"]`），默认不输出。
 
-SQLite schema 不是当前的 v9 时拒绝启动。不提供迁移工具：旧库需停机后重建（见「Realm
+SQLite schema 不是当前的 v10 时拒绝启动。不提供迁移工具：旧库需停机后重建（见「Realm
 provision 与数据」）。
 
 详见[架构契约](REALM_V1_ARCHITECTURE.zh.md)和

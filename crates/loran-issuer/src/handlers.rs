@@ -847,11 +847,7 @@ async fn renew_credential(
 
     // 5. Re-issue access and TURN credentials for the original ActrId. /renew
     // carries no package target, so recheck the one recorded for the actor.
-    let target = AIdIssuer::issued_target(actor_id).await;
-    let mut register_ok = match issuer
-        .issue_credential_for_actor(actor_id, target.as_deref(), &signer)
-        .await
-    {
+    let mut register_ok = match issuer.issue_credential_for_actor(actor_id, &signer).await {
         Ok(ok) => ok,
         Err(err) => {
             platform::recording::error!(
@@ -888,7 +884,6 @@ async fn renew_credential(
         .complete_renewal(
             &lease,
             actor_id,
-            target.as_deref(),
             &prepared,
             &body,
             response_expires_at,
@@ -1139,7 +1134,6 @@ fn aid_error_to_response(err: AidError) -> (u32, String) {
         AidError::Expired => 401,
         AidError::RealmError(_) => 403, // Forbidden
         AidError::PublisherNotVerified => 403,
-        AidError::PackageRevoked => 403,
         AidError::Membership(_) => 403,
 
         // Server errors (5xx)

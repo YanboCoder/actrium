@@ -160,7 +160,7 @@ EOF
 }
 
 # Write a project-local `.actr/config.toml` that pins the publisher keychain
-# path. Used by `actr build` / `actr registry publish`.
+# path. Used by `actr build`.
 write_project_keychain_config() {
     local project_dir="$1"
     local keychain_path="$2"

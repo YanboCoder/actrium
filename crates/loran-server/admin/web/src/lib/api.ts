@@ -364,22 +364,6 @@ export interface PublisherRecord {
   key_expires_at?: number;
 }
 
-export interface ActrPackage {
-  id: number;
-  publisher_id: number;
-  publisher: string;
-  name: string;
-  version: string;
-  type_str: string;
-  target: string;
-  manifest: string;
-  signature: string;
-  proto_files?: string;
-  status: 'active' | 'revoked';
-  published_at: number;
-  revoked_at?: number;
-}
-
 export interface PublisherKeyHistory {
   id: number;
   publisher_id: number;
@@ -405,14 +389,6 @@ export const publisherApi = {
 
   delete: (id: number) =>
     request<void>(`/publishers/admin/${id}`, { method: 'DELETE' }),
-
-  listPackages: (publisher?: string) => {
-    const params = publisher ? `?publisher=${publisher}` : '';
-    return request<ActrPackage[]>(`/publishers/packages${params}`);
-  },
-
-  revokePackage: (id: number) =>
-    request<void>(`/publishers/packages/${id}/revoke`, { method: 'POST' }),
 
   listKeys: (publisherId: number) =>
     request<PublisherKeyHistory[]>(`/publishers/admin/${publisherId}/keys`),

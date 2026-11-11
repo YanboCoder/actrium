@@ -67,9 +67,6 @@ renewal_token_secret = "<独立 Base64 随机值>"
 [services.signaling.server]
 ws_path = "/signaling"
 
-[services.publisher_registry]
-nonce_retain_secs = 86400
-
 [control.admin_ui]
 enabled = true
 password_hash = "<Argon2id PHC hash>"
@@ -148,8 +145,6 @@ renewal_token_secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 [services.signaling.server]
 ws_path = "/signaling"
-
-[services.publisher_registry]
 
 [control.admin_ui]
 enabled = true

@@ -169,18 +169,18 @@ Issuer 签发；`/actr/ice-config` 只返回 ICE URL，不签发 credential。
 
 `/issuer/renew` 与 `/issuer/reissue` 带客户端生成的 16 字节 `attempt_id`（UUID），网络失败时
 客户端用完全相同的请求体重试。同一 attempt 的第一个请求占用它，身份状态变化（renewal token
-轮换；reissue 消耗持有证明与 publisher nonce）与响应在同一事务提交，响应加密后存于
+轮换；reissue 消耗持有证明并重新绑定 Realm 客户端 key）与响应在同一事务提交，响应加密后存于
 `issuer_control_attempt`。之后用同一 `attempt_id`：
 
 - 请求体相同：返回首次的响应原文（成功响应保留到 credential 或 renewal token 到期，拒绝保留
-  5 分钟）；重放成功响应前仍重查 Actor 撤销与 Realm、包、publisher 状态，已不允许则返回该错误；
+  5 分钟）；重放成功响应前仍重查 Actor 撤销与 Realm、publisher 状态，已不允许则返回该错误；
 - 请求体不同：`409`；
 - 超过响应保留期：`410`，客户端应以新 `attempt_id` 重来；
 - 另一个请求仍在处理：`425`，带 `Retry-After`（秒）；
 - `attempt_id` 不是 16 字节：`400`。
 
 这些以 HTTP 状态返回；`/reissue` 的其他结果仍放在 `RegisterResponse` body 中、HTTP 200，只有提交时
-才发现的失败例外：另一个 attempt 先消耗了同一持有证明（`422`）或 publisher nonce（`403`），或存储
+才发现的失败例外：另一个 attempt 先消耗了同一持有证明（`422`），或存储
 出错（`500`）；这时 attempt 被释放，同一 attempt 可以重试。
 `/reissue` 与 `/renew` 先校验客户端证明再看 `attempt_id`；重放已存响应前还检查证明的 key 与 Actor
 的绑定（续期为同一把 key，重签为同一成员）。一个持有证明只能成功 reissue 一次：此后用它
@@ -190,7 +190,7 @@ Issuer 签发；`/actr/ice-config` 只返回 ICE URL，不签发 credential。
 未持有有效 token 的调用方探知不到 Realm 是否停用或退役。renewal token 的后继已存在（它已被
 `/renew` 轮换或被 `/reissue` 消耗）时，`/renew` 只在后继生成后 5 分钟内接受它，且只返回这个
 后继及其到期时间；此后返回 `401`。`/renew` 与 `/reissue` 在提交事务内重查 Actor 撤销、Realm 客户端 key 撤销与成员移除、Realm
-状态、包撤销与 publisher 停用，首次检查之后落地的变更同样阻止签发：此时 attempt 被释放，
+状态与 publisher 停用，首次检查之后落地的变更同样阻止签发：此时 attempt 被释放，
 按该错误返回（`/renew` 以 HTTP 状态，`/reissue` 在 body 中）。
 
 注册请求的 ACL 规则只作用于本 Realm：`source_realm` 可以不填、为 `any_realm`（v1 只匹配本
@@ -254,30 +254,10 @@ Realm 分区，发现、路由候选、ServiceSpec 查询与上线通知只涉�
 公开路由前缀：`/registry`。
 
 - `GET /publishers/{name}/verifying-key`
-- `POST /packages/nonce`
-- `POST /packages/publish`
 
-v1 JSON 统一使用 publisher 术语：
-
-```json
-{"publisher":"apps.example.com"}
-```
-
-发布 body 的身份字段同样为 `publisher`，成功返回的 package 使用
-`publisher_id`、`publisher` 和规范 `type_str`：
-
-```json
-{
-  "publisher_id": 7,
-  "publisher": "apps.example.com",
-  "name": "editor",
-  "version": "1.2.0",
-  "type_str": "apps.example.com/editor@1.2.0"
-}
-```
-
-其他旧 JSON/query 名称不属于 v1 契约；内部 SQLite 列名和 crate 名不构成 API。Publisher
-key id 形如 `actr-pub-<16 hex>`（公钥 SHA-256 的前 16 个十六进制字符）。
+该接口返回 Publisher 包签名公钥；可用 `key_id` 查询历史密钥。Publisher key id 形如
+`actr-pub-<16 hex>`（公钥 SHA-256 的前 16 个十六进制字符）。包注册直接验证
+manifest 与签名，不提供包发布、发布 nonce、包列表或包撤销 API。
 
 Publisher ID 是规范化 DNS 域名。Publisher 以 `register_publisher` 登记（见「Realm 管理请求」）：
 Loran 经同一抓取器取 `https://<publisher>/.well-known/actr`，读取其 `publisher` 成员（Publisher
@@ -288,7 +268,7 @@ Profile，`docs/product/actrium-v1` 12 §2），要求 `domain` 等于该域名�
 `rotations` 轮换链，身份变化拒绝，直到运营者重新确认），相同 Publisher Profile 重复登记不变。
 Publisher Profile 的 `keys` 至多 8 项，`id` 须按上文规则由公钥算出；须有 1 至 2 把 `active` 包签名
 key（`not_after` 为其发布期限，缺省一年；登记时须已过 `not_before`、未到 `not_after`）。两把
-`active` key 都可发布与证明持有（轮换重叠期）；原当前 key 只要仍 `active` 就保持为当前 key，否则
+`active` key 都可验证包签名（轮换重叠期）；原当前 key 只要仍 `active` 就保持为当前 key，否则
 另一把成为当前 key。不再 `active` 的 key 归档为 retired，仍可验证旧包；Publisher Profile 不再列出
 的 retired key 转为 revoked，其签过的包不再通过验证；用过的 key 不能再成为 `active`。响应 `{"publisher", "status", "sequence"}`；`400` 请求无效，
 `403` Publisher Profile 或签名不被接受，`409` Publisher 已停用或并发修改，`429` 已登记的
@@ -307,7 +287,7 @@ Issuer 启动后立即巡检已登记且 active 的 Publisher，此后每轮结�
 Issuer 关闭时取消扫描及尚未完成的抓取。
 
 管理路由前缀：`/admin/api/publishers`，受 Admin JWT 保护：列表、状态、停用/恢复、删除、key
-历史与撤销（含当前 key 的紧急撤销，之后须登记新的 Publisher Profile 才能再发布）、包列表与撤销；
+历史与撤销（含当前 key 的紧急撤销，之后须登记新的 Publisher Profile 才能恢复包验证）；
 没有由管理员登记 Publisher 的入口。包的长期真实性由 publisher key、signature 与 digest 决定，下载 origin/包 registry
 不是信任根。
 
@@ -404,9 +384,9 @@ Admin Web 的 Realms 页与 Publisher Registry 页各有对应的核对与「Acc
 
 ## Schema migration
 
-当前 schema 为 v9（`PRAGMA user_version = 9`），各版本的表结构变化见
+当前 schema 为 v10（`PRAGMA user_version = 10`），各版本的表结构变化见
 [架构契约](REALM_V1_ARCHITECTURE.zh.md)第 8 节。运行时只自动初始化空数据库；其他版本（含未版本化的旧库）
-一律拒绝启动，不提供迁移工具，需停机后重建数据库，再重新创建 Realm、登记 publisher 与包。
+一律拒绝启动，不提供迁移工具，需停机后重建数据库，再重新创建 Realm、登记 Publisher。
 
 完整信任边界与发布门槛见
 [`REALM_V1_ARCHITECTURE.zh.md`](REALM_V1_ARCHITECTURE.zh.md) 和

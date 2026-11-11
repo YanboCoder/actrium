@@ -45,9 +45,6 @@ pub enum AidError {
     #[error("publisher not verified or not registered")]
     PublisherNotVerified,
 
-    #[error("actor package has been revoked")]
-    PackageRevoked,
-
     /// A Realm membership refusal; the message starts with its stable code
     /// (`client_unknown`, `client_revoked`, `member_removed`,
     /// `service_owner_only`).

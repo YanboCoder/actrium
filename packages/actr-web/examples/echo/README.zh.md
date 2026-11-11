@@ -81,7 +81,7 @@ cd packages/actr-web/examples/echo
 ```
 
 `start-mock.sh` launches the `mock-loran` binary (`cargo run -p
-actr-mock-loran --bin mock-loran`), seeds the realm/publisher/packages via
+actr-mock-loran --bin mock-loran`), seeds the realm and Publisher via
 `register-mock.sh` (HTTP `/admin/*`, no `sqlite3`), and then runs the
 puppeteer `test-auto.js` matrix (default `BasicFunction`; pass
 `SUITES='BasicFunction MultiTab'` for the full set) against the web client

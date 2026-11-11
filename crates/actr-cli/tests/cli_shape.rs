@@ -89,23 +89,22 @@ fn pkg_group_exposes_pack_sign_verify_keygen() {
             "sign".to_string(),
             "verify".to_string()
         ],
-        "pkg should expose pack/sign/verify/keygen (build stays top-level, \
-         publish stays under `registry publish`)"
+        "pkg should expose pack/sign/verify/keygen (build stays top-level)"
     );
 }
 
 #[test]
-fn registry_group_has_discover_publish_fingerprint() {
+fn registry_group_has_discover_fingerprint() {
     let mut subs = subcommand_names("registry");
     subs.sort();
     assert_eq!(
         subs,
-        vec![
-            "discover".to_string(),
-            "fingerprint".to_string(),
-            "publish".to_string(),
-        ]
+        vec!["discover".to_string(), "fingerprint".to_string()]
     );
+    let error = cli()
+        .try_get_matches_from(["actr", "registry", "publish"])
+        .expect_err("package publication was removed");
+    assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand);
 }
 
 #[test]
