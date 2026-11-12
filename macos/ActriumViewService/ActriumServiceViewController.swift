@@ -1394,6 +1394,18 @@ final class ServiceReactNativeHost {
         let tabIdShort = String((config["tabId"] as? String ?? entry.internalId).prefix(8))
         ipcLog("🎨 applyConfigToEntry: tab=\(tabIdShort), hasRootView=\(entry.rootView != nil), hasContainerView=\(entry.containerView != nil)")
 
+        // Per-tab `host:service` endpoint (15-B B9). Registered before the
+        // root-view check so bootstrap configs and late configs behave alike;
+        // ActrServiceModule reads it when the Guest issues a service call.
+        if let tabId = config["tabId"] as? String,
+           let serviceCallUrl = config["serviceCallUrl"] as? String {
+            RendererServiceEndpointRegistry.shared.register(
+                tabId: tabId,
+                serviceCallUrl: serviceCallUrl
+            )
+            ipcLog("🔌 Registered service endpoint for tab=\(tabIdShort): \(serviceCallUrl)")
+        }
+
         // If root view not ready yet, create it now (event-driven)
         guard entry.rootView != nil else {
             createRootViewWithConfig(for: entry, config: config)
@@ -1417,6 +1429,8 @@ final class ServiceReactNativeHost {
 
         // Scripts
         if let s = config["unifiedScript"] as? String { tabDict["unifiedScript"] = s }
+        if let s = config["guestExtractedPath"] as? String { tabDict["guestExtractedPath"] = s }
+        if let s = config["guestEntry"] as? String { tabDict["guestEntry"] = s }
         if let s = config["capabilityManifestJSON"] as? String {
             tabDict["capabilityManifestJSON"] = s
         }

@@ -55,6 +55,12 @@ RCT_EXTERN_METHOD(deleteBookmark:(NSString *)bookmarkId)
 
 @end
 
+// MARK: - ActrServiceModule
+//
+// ActrServiceModule is declared next to its Swift implementation in
+// ActrServiceModule.m. RCT_EXTERN_MODULE emits a category implementation, so
+// declaring it here as well would produce duplicate ObjC symbols at link time.
+
 // MARK: - NativeLogger
 
 @interface RCT_EXTERN_MODULE(NativeLogger, NSObject)
