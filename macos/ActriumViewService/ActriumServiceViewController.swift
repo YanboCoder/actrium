@@ -447,6 +447,7 @@ final class ServiceReactNativeHost {
     private var factory: RCTReactNativeFactory?
     private var tabConfigObserver: NSObjectProtocol?
     private var hostCreated = false
+    private var surfaceMountObserverInstalled = false
 
     /// Cached RCTHost instance for event emission (bridgeless mode)
     private var _reactHost: AnyObject?
@@ -1469,6 +1470,26 @@ final class ServiceReactNativeHost {
 
     // MARK: - Root View Creation (Bridgeless Mode)
 
+    /// Install the Fabric mount observer once the RCTHost exists. The
+    /// observer re-commits the matching Renderer surface after mount, which
+    /// is required for reloads that reuse the same CAContext.
+    private func installSurfaceMountObserverIfNeeded() {
+        guard !surfaceMountObserverInstalled else { return }
+        guard let host = reactHost,
+              let presenter = (host as AnyObject).value(
+                forKey: "surfacePresenter"
+              ) as? NSObject else {
+            return
+        }
+
+        presenter.perform(
+            NSSelectorFromString("addObserver:"),
+            with: RendererSurfaceMountObserver.shared
+        )
+        surfaceMountObserverInstalled = true
+        ipcLog("🔧 installed Fabric surface mount observer")
+    }
+
     /// Create a new root view for a specific Tab
     /// Returns RCTSurfaceHostingProxyRootView (bridgeless mode)
     func createRootView(for entry: TabViewControllerEntry, initialProperties: [String: Any]) -> NSView? {
@@ -1492,6 +1513,7 @@ final class ServiceReactNativeHost {
         )
 
         ipcLog("📦 createRootView: got \(type(of: view)) frame=\(view.frame)")
+        installSurfaceMountObserverIfNeeded()
 
         if view.responds(to: NSSelectorFromString("setSizeFlexibility:")) {
             view.setValue(0, forKey: "sizeFlexibility")  // 0 = .none

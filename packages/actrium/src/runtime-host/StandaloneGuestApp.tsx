@@ -81,10 +81,15 @@ export const StandaloneGuestApp: React.FC<Props> = ({
 }) => {
   const [content, setContent] = React.useState<React.ReactElement | null>(null);
   const [error, setError] = React.useState('');
-  const guestScript = tab.guestScript || tab.unifiedScript;
+  const guestScript = tab.unifiedScript || tab.guestScript;
   const hasActorCallPermission = (tab.permissions ?? []).includes('actor.call');
 
   React.useEffect(() => {
+    // A reload must start from a clean state, otherwise a previous load
+    // failure keeps rendering even after the new bundle loads successfully.
+    setError('');
+    setContent(null);
+
     if (!guestScript) {
       setError('The application does not contain a Keel guest bundle.');
       return;
@@ -194,9 +199,11 @@ export const StandaloneGuestApp: React.FC<Props> = ({
   }, [
     // Do not recreate the engine on window resize. The first layout size is
     // enough for the guest bundle, and RN handles later size changes.
+    // reloadKey still forces a clean reload when the package changes.
     guestScript,
     hasActorCallPermission,
     tab.id,
+    tab.reloadKey,
   ]);
 
   if (error) {
@@ -210,7 +217,7 @@ export const StandaloneGuestApp: React.FC<Props> = ({
   }
 
   return (
-    <NativeView style={{ flex: 1 }}>
+    <NativeView collapsable={false} style={{ flex: 1 }}>
       {content ?? (
         <NativeView
           style={{

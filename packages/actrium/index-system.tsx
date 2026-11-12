@@ -178,14 +178,18 @@ const SystemAppRouter: React.FC<SystemAppProps> = (initialProps) => {
     return () => subscription.remove();
   }, []);
 
-  // Wait for the first real layout. Loading the guest with a stale or zero
-  // initial size renders a black tab until the window is resized.
-  if (!layoutSize) {
+  // Prefer the first real layout, but fall back to the initial props when
+  // they already carry a valid size. Waiting for onLayout splits the first
+  // frame into an empty surface followed by a later content commit.
+  const initialWidth = initialProps?.containerWidth ?? 0;
+  const initialHeight = initialProps?.containerHeight ?? 0;
+  const hasInitialSize = initialWidth > 0 && initialHeight > 0;
+  if (!layoutSize && !hasInitialSize) {
     return <View style={styles.container} onLayout={handleLayout} />;
   }
 
-  const containerWidth = layoutSize.width;
-  const containerHeight = layoutSize.height;
+  const containerWidth = layoutSize?.width ?? initialWidth;
+  const containerHeight = layoutSize?.height ?? initialHeight;
 
   // Merge initial props with dynamic updates (except size which comes from onLayout)
   const props = { ...initialProps, ...dynamicProps };

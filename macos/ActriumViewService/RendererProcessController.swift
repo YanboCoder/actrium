@@ -3,6 +3,7 @@ import AppKit
 import Darwin
 import Foundation
 import QuartzCore
+import React
 
 /// Entry-point and lifecycle owner for a manually spawned Renderer Helper.
 @MainActor
@@ -314,6 +315,26 @@ final class RendererProcessController {
         publishAccessibilityTree(tabId: tabId)
     }
 
+    /// Called from the Fabric surface-presenter observer after mount
+    /// instructions are applied. Re-commits the matching tab surface so the
+    /// new CAContext frame reaches the Host instead of waiting for a resize.
+    func commitSurface(forRootTag rootTag: Int) {
+        let surfaceSelector = NSSelectorFromString("surface")
+        let rootTagSelector = NSSelectorFromString("rootTag")
+        for surface in surfaces.values {
+            guard let rootView = surface.entry.rootView else { continue }
+            let rootObject = rootView as AnyObject
+            guard rootObject.responds(to: surfaceSelector) else { continue }
+            guard let surfaceObject = rootObject.value(forKey: "surface") as AnyObject?,
+                  surfaceObject.responds(to: rootTagSelector) else { continue }
+            let tagValue = surfaceObject.value(forKey: "rootTag")
+            let tag = (tagValue as? NSNumber).map { Int(truncating: $0) } ?? (tagValue as? Int)
+            if tag == rootTag {
+                surface.commit()
+            }
+        }
+    }
+
     func publishAccessibilityTree(tabId: String) {
         guard let surface = surfaces[tabId] else { return }
         try? connection.sendAccessibilityTree(surface.accessibilityTree())
@@ -355,6 +376,30 @@ private final class RendererProcessLifetime {
     var controller: RendererProcessController?
 }
 
+/// Fabric mount observer: commit the matching Renderer surface after the
+/// native mount instructions finish, so reload content is published without
+/// waiting for a window resize.
+final class RendererSurfaceMountObserver: NSObject {
+    static let shared = RendererSurfaceMountObserver()
+
+    @objc(didMountComponentsWithRootTag:)
+    func didMountComponents(rootTag: Int) {
+        Task { @MainActor in
+            RendererProcessLifetime.shared.controller?.commitSurface(
+                forRootTag: rootTag
+            )
+        }
+    }
+}
+
+/// A background renderer window must look active to native text controls.
+/// NSTextView uses the key-window state to install its insertion indicator;
+/// activating the helper NSApplication itself would steal focus from the Host.
+private final class RendererWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var isKeyWindow: Bool { true }
+}
+
 /// One Tab root and its remotely hosted CoreAnimation context.
 @MainActor
 private final class RendererTabSurface {
@@ -364,6 +409,7 @@ private final class RendererTabSurface {
     let window: NSWindow
     let context: RendererCAContext
     private var generation: UInt64 = 0
+    private var hasCommitted = false
     private var accessibilityObservers: [NSObjectProtocol] = []
     private var accessibilityPublishWork: DispatchWorkItem?
 
@@ -382,7 +428,7 @@ private final class RendererTabSurface {
         self.container = container
         self.context = context
 
-        window = NSWindow(
+        window = RendererWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless],
             backing: .buffered,
@@ -425,8 +471,16 @@ private final class RendererTabSurface {
 
     func commit() {
         context.layer = container.layer
-        container.needsLayout = true
-        container.layoutSubtreeIfNeeded()
+        // The first commit happens on an empty view tree, so lay it out once.
+        // Later commits rely on AppKit/RN marking the container dirty
+        // (addSubview, surface stage change, resize); Fabric sets frames
+        // directly, so a subtree-only dirty state is intentionally not
+        // remeasured here.
+        if !hasCommitted || container.needsLayout {
+            container.needsLayout = true
+            container.layoutSubtreeIfNeeded()
+            hasCommitted = true
+        }
         CATransaction.flush()
     }
 
@@ -485,7 +539,9 @@ private final class RendererTabSurface {
 
     func dispatch(_ input: Actrium_Ipc_InputEvent) {
         let modifiers = modifierFlags(from: input.modifiers)
-        let location = NSPoint(x: input.x, y: input.y)
+        // IPC coordinates are top-left based, while AppKit window events use
+        // bottom-left based window coordinates.
+        let location = NSPoint(x: input.x, y: container.bounds.height - input.y)
         let timestamp = ProcessInfo.processInfo.systemUptime
 
         switch input.type {
@@ -515,28 +571,45 @@ private final class RendererTabSurface {
                 return
             }
 
+            let hitView = window.contentView?.hitTest(location)
+            // Editable RN controls keep AppKit's native focus path; routing
+            // their clicks through the JS responder revokes first responder.
+            let isNativeTextInput = hitView is RCTUITextView || hitView is NSTextField
+            if input.type == .mouseDown || input.type == .mouseUp, !isNativeTextInput {
+                forwardMouseToGestureRecognizers(event, in: hitView ?? container)
+            }
             if input.type == .mouseDown {
-                let hitView = window.contentView?.hitTest(location)
                 window.makeFirstResponder(hitView ?? container)
             }
             window.sendEvent(event)
+            if input.type == .mouseDown || input.type == .mouseUp {
+                commit()
+            }
 
         case .scroll:
-            guard let cgEvent = CGEvent(
-                scrollWheelEvent2Source: nil,
-                units: .pixel,
-                wheelCount: 2,
-                wheel1: Int32(input.scrollDeltaY.rounded()),
-                wheel2: Int32(input.scrollDeltaX.rounded()),
-                wheel3: 0
-            ) else {
-                return
-            }
-            cgEvent.location = location
-            cgEvent.flags = cgEventFlags(from: input.modifiers)
-            if let event = NSEvent(cgEvent: cgEvent) {
-                window.sendEvent(event)
-            }
+            guard let hitView = window.contentView?.hitTest(location) else { return }
+            let scrollView = sequence(first: hitView, next: \.superview)
+                .compactMap { $0 as? NSScrollView }
+                .first { candidate in
+                    guard let rnScrollView = candidate as? RCTUIScrollView else { return true }
+                    return rnScrollView.isScrollEnabled
+                }
+            guard let scrollView else { return }
+
+            // An offscreen window cannot route a CGEvent-backed NSEvent to its
+            // content. NSClipView scrolling also posts the bounds notification
+            // that drives RN's native scrollViewDidScroll delegate path.
+            let clipView = scrollView.contentView
+            let origin = clipView.bounds.origin
+            let target = NSPoint(
+                x: origin.x - input.scrollDeltaX,
+                y: origin.y - input.scrollDeltaY
+            )
+            let constrainedTarget = clipView.constrainBoundsRect(
+                NSRect(origin: target, size: clipView.bounds.size)
+            ).origin
+            clipView.scroll(to: constrainedTarget)
+            commit()
 
         case .keyDown, .keyUp:
             guard let event = NSEvent.keyEvent(
@@ -554,9 +627,46 @@ private final class RendererTabSurface {
                 return
             }
             window.sendEvent(event)
+            if input.type == .keyDown {
+                commit()
+            }
 
         case .mouseEntered, .mouseExited, .UNRECOGNIZED(_):
             break
+        }
+    }
+
+    private func forwardMouseToGestureRecognizers(_ event: NSEvent, in view: NSView) {
+        // Synthetic events sent to the offscreen window do not reach gesture
+        // recognizers. Drive only the hit view's ancestor chain so unrelated
+        // RN roots cannot claim the same press or move the text focus.
+        var current: NSView? = view
+        while let currentView = current {
+            for recognizer in currentView.gestureRecognizers {
+                switch event.type {
+                case .leftMouseDown:
+                    recognizer.mouseDown(with: event)
+                case .rightMouseDown:
+                    recognizer.rightMouseDown(with: event)
+                case .otherMouseDown:
+                    recognizer.otherMouseDown(with: event)
+                case .leftMouseUp:
+                    recognizer.mouseUp(with: event)
+                case .rightMouseUp:
+                    recognizer.rightMouseUp(with: event)
+                case .otherMouseUp:
+                    recognizer.otherMouseUp(with: event)
+                case .leftMouseDragged:
+                    recognizer.mouseDragged(with: event)
+                case .rightMouseDragged:
+                    recognizer.rightMouseDragged(with: event)
+                case .otherMouseDragged:
+                    recognizer.otherMouseDragged(with: event)
+                default:
+                    break
+                }
+            }
+            current = currentView.superview
         }
     }
 
@@ -567,16 +677,6 @@ private final class RendererTabSurface {
         if encoded & 4 != 0 { result.insert(.option) }
         if encoded & 8 != 0 { result.insert(.command) }
         if encoded & 16 != 0 { result.insert(.capsLock) }
-        return result
-    }
-
-    private func cgEventFlags(from encoded: UInt32) -> CGEventFlags {
-        var result: CGEventFlags = []
-        if encoded & 1 != 0 { result.insert(.maskShift) }
-        if encoded & 2 != 0 { result.insert(.maskControl) }
-        if encoded & 4 != 0 { result.insert(.maskAlternate) }
-        if encoded & 8 != 0 { result.insert(.maskCommand) }
-        if encoded & 16 != 0 { result.insert(.maskAlphaShift) }
         return result
     }
 }

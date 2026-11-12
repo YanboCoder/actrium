@@ -210,7 +210,10 @@ final class RendererSurfaceHostView: NSView {
                 self.recoveryAttempt = 0
                 self.coordinator?.xpcServiceReady = true
                 self.coordinator?.hasConnection = true
-                self.coordinator?.onConnectionEstablished?()
+                // Do not call onConnectionEstablished here. This runs after
+                // every successful config apply, and its persistent closure
+                // captures the tab from the first SwiftUI render, so it would
+                // resend stale unifiedScript/reloadKey over the new config.
             } catch is CancellationError {
                 return
             } catch {
