@@ -7,7 +7,7 @@
 | 层 | 标识 | 证明什么 |
 |---|---|---|
 | Publisher | 规范化域名 | 当前谁控制发布入口 |
-| Program Release | `publisher/program@version` 与固定的 Service、Front 包摘要 | 哪两个归档组成该发布版本 |
+| Program Release | `publisher/program@version` 与固定的归档摘要 | 发布了哪个 Actor 包版本 |
 | Service | ActorId + Actor credential | 当前在与哪个运行实例通信 |
 
 HTTPS 不能证明程序无恶意；Marketplace 审核不能证明网络中的 Actor 身份；Actor credential 也不能证明本地加载的 Guest 是正确版本。
@@ -67,7 +67,7 @@ offline root 是强烈推荐的 Publisher 运维方式，但是否要求硬件/�
 
 域名控制只决定未来发布入口，不得静默改写历史：
 
-- 已安装版本可凭已验证的发布记录和两个固定的包继续离线运行。
+- 已安装版本可凭已接受的包选择和已验证的包继续离线运行。
 - 新 key 与历史 key 无可验证轮换链时，视为 Publisher ownership change；
 - 已安装版本不得因当前域名返回不同包而变化；
 - 新安装或更新必须显示身份变化；
@@ -75,29 +75,20 @@ offline root 是强烈推荐的 Publisher 运维方式，但是否要求硬件/�
 
 ## 3. 包从哪来
 
-Publisher 签名的 Program Release 记录绑定 Front 和 Service 两个包的下载地址、SHA-256 与 Actor 类型。
-Actrium 使用已信任的 Publisher 公钥验证发布记录，并独立验证两个包。见[签名记录示例](12-reference-spec.zh.md#31-签名-program-release-记录)。
-
-- **打开实例。** Realm Profile 的 `package` 固定 Service 包。按该包的 Actor 类型和摘要匹配已验证的
-  Program Release 记录，取得 Front 包。Actrium 可使用已安装记录，或从 Publisher、Marketplace 取得记录。
-  见 [Actr Realm Profile](../../../actr/protocols/realm-profile.zh.md)。
-- **新建实例。** 用户从 Program Catalog、Marketplace 或 Publisher 渠道选定发布版本。
-  本地开发时，Actrium 可按本地信任策略验证并记录用户显式提供的两个归档。
+Publisher 分别签署并分发各包。创建 Realm 时，从 Program Catalog、Marketplace、Publisher 或本地文件选择 Service 和 Front，将精确类型、下载地址和摘要写入 `packages`，由 Realm 签署 Profile。本机 Realm 在设备上保存选择。打开联网实例时使用其[签名 Realm Profile](../../../actr/protocols/realm-profile.zh.md#6-使用-realm)。
 
 ## 4. Service 包与 Front 包
 
 ### 4.1 包的边界
 
-每个 Program Release 绑定两个独立签名的 `actr-package/2` 包。每份清单按
-[Actor Package 协议](../../../actr/protocols/actor-package.zh.md)声明一个 Actor 类型和一个 Workload。
-验证时按发布记录的 `service` 和 `front` 成员确定预期包角色，Host 检查 Workload Profile 是否符合该角色和分发策略。
+每个 `actr-package/2` 包声明一个 Actor 类型和一个 Workload。Host 核对各包的 Workload Profile 是否符合所选角色和分发策略。见 [Actor Package](../../../actr/protocols/actor-package.zh.md)。
 
-- **Service 包。** `[workload]` 选择 Service 可执行文件。Realm Profile 的 `package` 指向该归档。
+- **Service 包。** `[workload]` 选择 Service 可执行文件。Realm Profile 解析的主包 `packages[primary_package]` 指向该归档。
   Marketplace Service 使用 `actr.component/1`。
 - **Front 包。** `[workload]` 以 `keel.guest/1` 选择 Keel Guest。
   `[workload.keel]` 声明其运行时、能力清单和 Keel 契约。
   Product v1 的 Front 清单保留 `service` 依赖别名，并必须声明 `required = true`。
-  `actor` 和 `version` 约束必须与签名发布记录固定的 Service 匹配。
+  `actor` 和 `version` 约束必须与 Realm 选定的 Service 匹配。
 
 每个包的入口使用角色 `workload`。Guest 能力清单使用 `profile`，Keel 和 Proto 契约使用 `contract`，
 图标和静态资源使用 `resource`。
@@ -124,7 +115,7 @@ team-notes-front.actr
     └── service.proto
 ```
 
-每份清单的签名绑定本包载荷的哈希。发布记录将两个包的摘要绑定到 Program Release。
+每个包的 `manifest.sig` 保存 Publisher 对清单的签名，清单列出本包各载荷摘要。
 
 ### 4.3 包内不允许什么
 
@@ -202,7 +193,7 @@ Actr 基础清单提供以下表。
 
 对 Product v1 的配套包，`dependencies.service.contract` 以包内相对路径选定 RPC Proto。
 两个 Host 在配套包验证时，从已验证的 Front manifest 读取此路径。
-Service Host 按签名发布记录取得配套 Front 的清单，保存验证后的路径用于 Attach，
+Service Host 从 `front_package` 对应的包取得 Front 清单，保存验证后的路径用于 Attach，
 再从自身已验证的 Service 归档读取选定的 Proto。
 两个清单必须在该路径登记角色为 `contract` 且 SHA-256 相同的文件。包中包含其他契约文件时，
 也按此路径选择 RPC 契约。Actr Host 按[第 06 章 §2.2](06-runtime-and-protocol.zh.md#22-front-actor-类型)计算 Attach 指纹。
@@ -251,8 +242,8 @@ Privacy Declaration 是静态 allowlist 和安装说明，不是运行时隐私�
 ## 8. 下载与验证流水线
 
 ```text
-Realm Profile package / 用户选定的发布版本
-  → 验证 Program Release 记录及其 Service 包
+Realm Profile 包选择 / 本机选包
+  → 验证 Service 包
   → 验证 Front 包及其 Service 依赖
   → policy + permission review
   → content-addressed cache
@@ -261,15 +252,7 @@ Realm Profile package / 用户选定的发布版本
 
 ### 8.1 检查顺序
 
-先按[第 12 章 §3.1](12-reference-spec.zh.md#31-签名-program-release-记录)验证 Program Release 记录。
-检查 schema、`release_id = service.type`、归属声明 Publisher 的两个不同 Actor 类型，
-以及由已接受 Publisher key 验证的 JCS/Ed25519 签名。
-与已接受记录比较不可变的包和 Privacy Contract 绑定。
-通过 Realm 打开时，还需将 `service.type`、`service.sha256` 与已验证的 Realm Profile 核对。
-
-随后分别对 `service` 和 `front` 成员指定的归档执行以下检查。
-各包的 Actor 类型和 SHA-256 必须匹配对应成员，
-Front 的 `dependencies.service` 以已验证的 Service 包为准解析。
+先验 Realm Profile，再逐包执行以下检查。精确类型和整包 SHA-256 须与对应条目一致。Front 的 `dependencies.service` 须匹配已验证的 Service。
 
 1. 校验 Publisher DNS/IDNA；
 2. TLS 和 hostname；
@@ -279,15 +262,14 @@ Front 的 `dependencies.service` 以已验证的 Service 包为准解析。
 6. `actr-package/2` 格式和 `signature.key-id`。
 7. 清单声明的 Publisher 对应的 Publisher Profile。
 8. Ed25519 签名。
-9. 签名清单中的 Actor 身份和入口，以及 Workload Profile 是否符合发布记录的包角色和第 4.1 节的分发策略。
+9. 签名清单中的 Actor 身份和入口，以及 Workload Profile 是否符合 Realm 选定的包角色和第 4.1 节的分发策略。
 10. ZIP 文件清单、大小和 SHA-256 与 `[[files]]` 精确匹配。
 11. 对 Front 包，检查 Guest 静态依赖和能力清单。
 12. 对 WASM Service 包，检查 WASM imports。
 13. Host API、Keel API，以及 Front 所需契约与 Service 包的兼容性；
 14. 本地/组织安全策略。
 
-声明 Privacy Contract 时，先按签名发布记录验证其原始字节的 SHA-256，
-再核对契约中的发布版本和两个包绑定，随后才能用于授权。
+使用 Privacy Contract 授权前，按 Service 的签名清单验明契约，再对所选包组合评估。见 [14 §4.2](14-privacy-primitives-and-attestation.zh.md#42-program-privacy-contract)。
 
 任何一步失败都不得把部分内容交给 Keel 或 Service runtime。
 
@@ -295,30 +277,16 @@ Front 的 `dependencies.service` 以已验证的 Service 包为准解析。
 
 Keel `Engine.loadBundle(URL)` 只是加载机制，不是安装信任机制。Actrium 必须：
 
-1. 独立验证 Program Release 记录固定的 Front 包。
+1. 独立验证 `front_package` 指向的 Front 包。
 2. 从 content-addressed cache 读取已验证 Guest bytes；
 3. 把本地 bytes/code 交给 Keel；
 4. 禁止 Guest 在启动时指定替代 URL。
 
 ## 9. 版本不可变
 
-Actrium 本地以以下联合键保存：
+首次接受每个精确 `publisher/program@version` 时固定整包摘要。同一类型出现不同摘要即报 `PACKAGE_EQUIVOCATION`。包内容变化须发布新版本。不同 Realm 可为同一 Service 选用不同的兼容 Front。
 
-```text
-(publisher, program, version, service_package_digest)
-```
-
-联合键使用 Service 包 digest，Program Release 记录同时固定 Front 包和所绑定 Privacy Contract 的内容摘要。
-
-规则：
-
-- 第一次接受发布版本时固定两个包的摘要和所声明的 Privacy Contract 绑定。
-- 同一 Program Release 的 Service、Front 或 Privacy Contract 绑定发生变化时报告 `PACKAGE_EQUIVOCATION`。
-- 不能用「Publisher 更新了文件」覆盖缓存；
-- 更新必须使用新 SemVer；
-- Service 实例固定其执行的 Service 包摘要。
-- Service 实例仍引用时，保留 Service、Front 包及绑定的 Privacy Contract 缓存。
-- 每个重新下载的归档都要按其固定摘要重新验证。
+按摘要缓存已验证的归档，直到引用它的实例全部释放。重新下载时再次核对摘要。
 
 本地 first-seen pin 只能保护当前安装；Marketplace 可以帮助多个客户端比对已见 digest。要对所有客户端提供全局 non-equivocation，需要后续引入公开 append-only transparency log。v1 不把单机 pin 夸大成全局透明性。
 
@@ -350,7 +318,7 @@ Marketplace 可以：
 - 记录 Publisher 验证；
 - 静态/动态审核；
 - 风险评级；
-- 记录各 Program Release 已见的 Service 和 Front 包摘要。
+- 记录每个精确 Actor 包类型已见的摘要。
 - 发布撤销和恶意软件情报；
 - 提供缓存或镜像。
 
@@ -395,7 +363,7 @@ v1 升级：
 3. 旧 Service 生成迁移快照；
 4. 显式交接 Workspace lease；
 5. 新 Service 导入并验证；
-6. 用户确认切换，随后以 `publish_profile` 发布 `package` 指向新包的 Realm Profile；
+6. 用户确认切换，随后以 `publish_profile` 发布主包引用指向新 Service 归档的 Realm Profile；
 7. 旧 Service 保留回滚窗口后归档；回滚即再发布一份指回旧包、`sequence` 更高的 Realm Profile。
 
 这样避免 ActorId 中版本与实际 workload 不一致，也让失败回滚可解释。
@@ -434,6 +402,6 @@ cache/extracted/sha256/<digest>/...
 - 原子写入；
 - 未完成下载隔离；
 - 缓存元数据记录 Publisher key 与验证时间；
-- 保存签名发布记录，并按固定内容摘要缓存 Privacy Contract 字节，以便离线重新验证。
+- 保存已接受的 Realm Profile 及其固定的归档，供离线重新验证。
 - Publisher 离线时，本地实例按离线策略使用固定的 Service 和 Front 包运行。
 - Realm 凭据/撤销过期时按离线安全政策处理，不等同于 package 验证失败。

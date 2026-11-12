@@ -1,0 +1,28 @@
+# Shared unsigned template for Host/Issuer registration tests.
+# The packer fills the key id, file sizes and hashes before signing.
+format = "actr-package/2"
+
+[actor]
+publisher = "v2-publisher.example"
+name = "echo"
+version = "1.0.0"
+
+[workload]
+profile = "actr.component/1"
+entry = "workload/echo.wasm"
+
+[host]
+profile = "actr.host/1"
+api = "^1.0.0"
+required-capabilities = []
+
+[signature]
+algorithm = "ed25519"
+key-id = "SIGNING_KEY_ID"
+
+[[files]]
+path = "workload/echo.wasm"
+role = "workload"
+media-type = "application/wasm"
+size = 0
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"

@@ -54,9 +54,9 @@ Tab
 | D-005 | Service 绑定零个或一个 Workspace；需要多 Actor 的程序由 Service 在同一 Realm 内编排。 |
 | D-006 | Actrium 提供原生 Front Host。Publisher 提供 Keel Guest 和 Service Workload，以及各自的资源和声明。 |
 | D-007 | v1 第三方 Front Guest 只开放 Keel JS Guest，并固定使用具备硬超时和堆上限的 QuickJS 后端。 |
-| D-008 | 签名 Program Release 记录绑定独立的 Service 包和 Front 包。每个 `.actr` 使用 `actr-package/2`，声明一个 Actor 类型和一个 Workload。Front 清单声明其 Service 依赖。 |
+| D-008 | 每个 `actr-package/2` 包声明一个 Actor 类型和一个 Workload，Publisher 在包内签署清单。Front 声明必需的 Service 依赖。 |
 | D-009 | 链接只指向实例，且只使用 `actr://<Realm 域名>/<realm_id>` 形式；打开链接只连接该实例，不得失败后偷偷新建。新建实例是 Actrium 内的本地操作，不是链接。 |
-| D-010 | Publisher 身份是无端口的规范化域名。Publisher Profile 提供公钥，用于验证从任意分发渠道取得的发布记录和包。 |
+| D-010 | Publisher 身份是无端口的规范化域名。Publisher Profile 提供验证包签名的受信公钥。 |
 | D-011 | Marketplace 是发现、审核与撤销信息源，不是 Publisher 命名权威；域名与包签名才是来源链。 |
 | D-012 | v1 ActorId 必须包含可验证的 Realm 名（`<realm_id>@<domain>`，如 `notes@acme.com`），程序类型不在 ActorId 中；它是公开地址和密码学身份，不是 bearer token，知道地址不等于有权连接。 |
 | D-013 | Realm 是逻辑信任域，对应一个应用实例，可委派多个信令/TURN 服务；Realm 与某个物理信令进程不是一回事，一个 Actr Facility Provider 承载多个 Realm；Realm 在创建时绑定一个 Actr Facility Provider，此后不可更换。 |
@@ -64,7 +64,7 @@ Tab
 | D-015 | Actor credential 证明 Actor key、身份和 claims，不证明对端实际运行的代码。应用如何据此授权属于应用写法，见[应用开发建议](app-development-guidance.zh.md)。 |
 | D-016 | Service manifest 的 `[workspace]` 声明必需性、申请的访问级别和支持的 Provider。部署或实例创建流程决定准备方式，Host 按实例保存实际绑定和授权。 |
 | D-017 | 删除分为可恢复的 Trashed 与不可恢复的 Purged/Deleted；删除 Workspace 始终是独立动作。 |
-| D-018 | Publisher 与 Realm 域名的 bootstrap 固定使用 HTTPS 443（即 `https://<domain>/.well-known/actr`）；Realm Profile 来自 `realms` 声明的 HTTPS 位置（可带端口），其中固定 Service 包与 Actr Facility Provider 端点（可带端口）。取不到或验不过 Realm Profile 时不得使用 Realm Profile 以外的任何 Actr Facility Provider。 |
+| D-018 | Publisher 与 Realm 域名的 bootstrap 固定使用 HTTPS 443（即 `https://<domain>/.well-known/actr`）；Realm Profile 来自 `realms` 声明的 HTTPS 位置（可带端口），其中固定选用的包与 Actr Facility Provider 端点（可带端口）。取不到或验不过 Realm Profile 时不得使用 Realm Profile 以外的任何 Actr Facility Provider。 |
 | D-019 | 应用保障按无根有效依赖图汇聚；通道有效且 `Ready` 时，展示颜色取全部节点结论的最弱项。Front 只定位，不是图根。 |
 | D-020 | `ActorAssurance` 由验证者签发，`issuer ≠ subject`。Actr Host 可评 Guest、可提供证据，不得自签自己的最终结论。 |
 | D-021 | 顶层只分绿 / 黄 / 红；切面未就绪时显示无法建立，不是第四色。未知不是已确认泄漏，但绝不能显示为绿。 |
@@ -84,6 +84,7 @@ Tab
 | D-035 | 颜色未减弱可自动恢复；变弱则保持阻断并请求风险接受（不改颜色）；通道无效或触碰平台硬底线时用户不能覆盖。 |
 | D-036 | 受信 Verifier 可以把内部 Actor 子图封装为 Certified Privacy Domain，并通过 Assured Actor Edge 提供有 scope、有效期和撤销的 aggregate；自签声明无效。 |
 | D-037 | 审计日志是显式 storage/audit sink，必须声明字段、数据类别、目标、读取主体和 retention；LLM/GPU Attestation 本身不能证明 Server 没有另行留存日志。 |
+| D-038 | Realm 签署本实例的选包配置。`primary_package` 和 `front_package` 分别指向 `packages` 中不同的 Service 和 Front 条目。见 [Realm Profile §4](../../../actr/protocols/realm-profile.zh.md#4-realm-profile-格式)。 |
 
 ## 4. 文档导航
 

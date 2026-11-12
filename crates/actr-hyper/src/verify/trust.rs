@@ -10,8 +10,8 @@
 //!   `(publisher, signing_key_id)`, cached locally.
 //! - [`ChainTrust`] — try a list of providers in order; first success wins.
 //!
-//! Both built-in Ed25519-based providers delegate to [`actr_pack::verify`]
-//! (or its configurable bounded variant), which performs the full signature +
+//! Both built-in Ed25519-based providers delegate to the versioned verifier,
+//! which performs the full signature +
 //! binary-hash + resource-hash chain.
 //! Custom providers (e.g. wasm-side keyless verification, HSM, threshold
 //! signatures) may implement [`TrustProvider`] however they want — the trait
@@ -19,7 +19,7 @@
 
 use std::sync::Arc;
 
-use actr_pack::VerifiedPackage;
+use actr_pack::{ValidatedActorIdentity, VerifiedRuntimePackage};
 use async_trait::async_trait;
 use ed25519_dalek::VerifyingKey;
 
@@ -30,10 +30,10 @@ use crate::verify::cert_cache::PublisherCertCache;
 ///
 /// An implementation fully takes raw package bytes and returns the parsed,
 /// trusted package — or errors. Callers must not use any field of the
-/// returned [`VerifiedPackage`] before calling this.
+/// returned [`VerifiedRuntimePackage`] before calling this.
 #[async_trait]
 pub trait TrustProvider: Send + Sync + std::fmt::Debug {
-    async fn verify_package(&self, bytes: &[u8]) -> HyperResult<VerifiedPackage>;
+    async fn verify_package(&self, bytes: &[u8]) -> HyperResult<VerifiedRuntimePackage>;
 
     /// Verify while limiting decompression of signed package payloads. Hyper's
     /// workload-loading path always calls this method with its configured
@@ -47,7 +47,7 @@ pub trait TrustProvider: Send + Sync + std::fmt::Debug {
         &self,
         bytes: &[u8],
         _max_entry_bytes: usize,
-    ) -> HyperResult<VerifiedPackage> {
+    ) -> HyperResult<VerifiedRuntimePackage> {
         self.verify_package(bytes).await
     }
 }
@@ -60,27 +60,20 @@ pub trait TrustProvider: Send + Sync + std::fmt::Debug {
 pub(crate) fn verify_ed25519_manifest(
     bytes: &[u8],
     pubkey: &VerifyingKey,
-) -> HyperResult<VerifiedPackage> {
-    let verified = actr_pack::verify(bytes, pubkey).map_err(pack_err_to_hyper)?;
-
-    tracing::info!(
-        actr_type = %verified.manifest.actr_type_str(),
-        ".actr package verified"
-    );
-
-    Ok(verified)
+) -> HyperResult<VerifiedRuntimePackage> {
+    verify_ed25519_manifest_bounded(bytes, pubkey, actr_pack::DEFAULT_MAX_VERIFIED_ENTRY_BYTES)
 }
 
 fn verify_ed25519_manifest_bounded(
     bytes: &[u8],
     pubkey: &VerifyingKey,
     max_entry_bytes: usize,
-) -> HyperResult<VerifiedPackage> {
-    let verified =
-        actr_pack::verify_bounded(bytes, pubkey, max_entry_bytes).map_err(pack_err_to_hyper)?;
+) -> HyperResult<VerifiedRuntimePackage> {
+    let verified = actr_pack::verify_runtime_package_bounded(bytes, pubkey, max_entry_bytes)
+        .map_err(pack_err_to_hyper)?;
 
     tracing::info!(
-        actr_type = %verified.manifest.actr_type_str(),
+        actr_type = %verified.manifest.actor_type().to_program_identity(),
         max_entry_bytes,
         ".actr package verified with decompression limits"
     );
@@ -157,7 +150,7 @@ impl StaticTrust {
 
 #[async_trait]
 impl TrustProvider for StaticTrust {
-    async fn verify_package(&self, bytes: &[u8]) -> HyperResult<VerifiedPackage> {
+    async fn verify_package(&self, bytes: &[u8]) -> HyperResult<VerifiedRuntimePackage> {
         verify_ed25519_manifest(bytes, &self.pubkey)
     }
 
@@ -165,7 +158,7 @@ impl TrustProvider for StaticTrust {
         &self,
         bytes: &[u8],
         max_entry_bytes: usize,
-    ) -> HyperResult<VerifiedPackage> {
+    ) -> HyperResult<VerifiedRuntimePackage> {
         verify_ed25519_manifest_bounded(bytes, &self.pubkey, max_entry_bytes)
     }
 }
@@ -218,14 +211,9 @@ impl RegistryTrust {
         &self,
         bytes: &[u8],
         max_entry_bytes: Option<usize>,
-    ) -> HyperResult<VerifiedPackage> {
-        let pack_manifest = actr_pack::read_manifest(bytes).map_err(|e| match e {
-            actr_pack::PackError::ManifestNotFound => HyperError::ManifestNotFound,
-            actr_pack::PackError::ManifestParseError(msg) => HyperError::InvalidManifest(msg),
-            other => HyperError::InvalidManifest(other.to_string()),
-        })?;
-
-        let key_id = pack_manifest.signing_key_id.as_deref().ok_or_else(|| {
+    ) -> HyperResult<VerifiedRuntimePackage> {
+        let pack_manifest = actr_pack::read_runtime_manifest(bytes).map_err(pack_err_to_hyper)?;
+        let key_id = pack_manifest.signing_key_id().ok_or_else(|| {
             HyperError::InvalidManifest(
                 "package manifest missing `signing_key_id`; rebuild with the latest `actr build`"
                     .to_string(),
@@ -237,13 +225,13 @@ impl RegistryTrust {
         // below establishes authenticity. It only ensures the fields are
         // syntactically safe to place into a registry URL / cache key (a bad
         // identity must not trigger a certificate HTTP lookup at all).
-        actr_pack::ValidatedActorIdentity::from_manifest(&pack_manifest)
+        let identity = ValidatedActorIdentity::from_actor_type(pack_manifest.actor_type())
             .map_err(|error| HyperError::InvalidManifest(error.to_string()))?;
         validate_key_id_for_lookup(key_id)?;
 
         let pubkey = self
             .cache
-            .get_or_fetch(&pack_manifest.publisher, Some(key_id))
+            .get_or_fetch(identity.publisher(), Some(key_id))
             .await?;
 
         match max_entry_bytes {
@@ -257,7 +245,7 @@ impl RegistryTrust {
 
 #[async_trait]
 impl TrustProvider for RegistryTrust {
-    async fn verify_package(&self, bytes: &[u8]) -> HyperResult<VerifiedPackage> {
+    async fn verify_package(&self, bytes: &[u8]) -> HyperResult<VerifiedRuntimePackage> {
         self.verify_package_inner(bytes, None).await
     }
 
@@ -265,7 +253,7 @@ impl TrustProvider for RegistryTrust {
         &self,
         bytes: &[u8],
         max_entry_bytes: usize,
-    ) -> HyperResult<VerifiedPackage> {
+    ) -> HyperResult<VerifiedRuntimePackage> {
         self.verify_package_inner(bytes, Some(max_entry_bytes))
             .await
     }
@@ -296,7 +284,7 @@ impl ChainTrust {
 
 #[async_trait]
 impl TrustProvider for ChainTrust {
-    async fn verify_package(&self, bytes: &[u8]) -> HyperResult<VerifiedPackage> {
+    async fn verify_package(&self, bytes: &[u8]) -> HyperResult<VerifiedRuntimePackage> {
         let mut last_err: Option<HyperError> = None;
         for p in &self.providers {
             match p.verify_package(bytes).await {
@@ -313,7 +301,7 @@ impl TrustProvider for ChainTrust {
         &self,
         bytes: &[u8],
         max_entry_bytes: usize,
-    ) -> HyperResult<VerifiedPackage> {
+    ) -> HyperResult<VerifiedRuntimePackage> {
         let mut last_err: Option<HyperError> = None;
         for provider in &self.providers {
             match provider

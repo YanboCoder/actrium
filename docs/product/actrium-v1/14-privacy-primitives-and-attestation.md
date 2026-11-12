@@ -176,18 +176,13 @@ The Contract freezes at least:
 - output/declassification rules;
 - the action to take on unknown or invalid evidence.
 
-The signed Program Release record authenticates the standalone Privacy Contract's exact bytes
-through `privacy_contract.sha256`. The verifier checks this hash before interpreting the contract
-for authorization, then matches its release identity and both package digests to the record.
-The binding and verification rules are defined in [12 §3.1](12-reference-spec.md#31-signed-program-release-record).
+A Service with a Program Privacy Contract includes `contracts/privacy.toml` as a `contract` in its signed manifest. Before granting capabilities, verify the file's size and SHA-256, match `release_id` to the selected Service type, and check the selected Actors against the contract. Bind the authorization decision to the contract digest and both verified archive digests. Re-evaluate it when either selection changes.
 
 ```toml
 [privacy_contract]
 schema_version = 1
 contract_id = "notes.example/team-notes@1.4.2#privacy"
 release_id = "notes.example/team-notes@1.4.2"
-service_package_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-front_package_digest = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
 
 [[privacy_contract.actor_role]]
 role = "service"

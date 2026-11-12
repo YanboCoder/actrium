@@ -76,15 +76,14 @@ Actr Host 打开 `actr://<domain>/<realm_id>[…]`（实例）时：
    Realm Profile；否则按
    [Actr Realm Profile](realm-profile.zh.md) 第 3、5 节取得并验证 `<realm_id>@<domain>` 的
    Realm Profile。
-3. 按 `package` 取得包，核对 `sha256`，再按
-   [Actor Package](actor-package.zh.md) 验证包签名；包中声明的 Actor 类型即该实例的程序。
-4. 启动包中的前台部分，把 path 余下部分、query 和 fragment 交给它。
-5. 经 Realm Profile 指定的 Actr Facility Provider 连接该实例的 Service：本 Realm 内 Actor 类型与包
+3. 在 `packages` 中解析 `primary_package` 和 `front_package`。任一引用无效即停止打开。
+4. 按 [Realm Profile §6](realm-profile.zh.md#6-使用-realm) 验证两个包及 Front 的 Service 依赖和 RPC 契约，再将余下的 path、query 和 fragment 交给选定的 Front。
+5. 经 Realm Profile 指定的 Actr Facility Provider 连接该实例的 Service：本 Realm 内 Actor 类型与 Service 包
    相同的 Actor 恰好一个；找到零个或多于一个都是错误，Actr Host 不做选择。连接需要 Realm
    membership；没有时进入加入流程（例如 Realm 邀请）。
 
 打开 `actr://<domain>/<serial>.<realm_id>[…]`（某个 Actor）时流程相同，只是第 5 步直接连接该
-ActorId，不按类型查找；它的 Actor 类型必须与包相同，否则以 `SERVICE_ACTOR_TYPE_MISMATCH`
+ActorId，不按类型查找；它的 Actor 类型必须与 Service 包相同，否则以 `SERVICE_ACTOR_TYPE_MISMATCH`
 失败。Actor 被替换（例如程序升级）后，这类链接失效；指向实例的链接不受影响。
 
 持有 URI 不授予任何访问权。

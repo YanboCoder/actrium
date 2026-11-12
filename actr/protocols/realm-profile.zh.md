@@ -12,8 +12,7 @@
 Realm 是一个应用实例的信任边界。创建一个应用实例就创建一个新的 Realm。Realm 名写作
 `<realm_id>@<domain>`，例如 `k7m2q9xh@acme.com`，语法见 [Actr URI](uri.zh.md) 第 5.1 节。
 
-Realm Profile 是一份签名的公开文档，说明该实例运行哪个包，以及由哪个 Issuer 和哪个
-Actr Facility Provider 服务该 Realm。它由该 Realm 域名的 Realm 签名 key 签署，因此可以存放在任何地方：域名自己的静态
+Realm Profile 是一份签名的公开文档，公布实例选定的 Service、Front 和辅助包，以及服务该 Realm 的 Issuer 和 Actr Facility Provider。它由该 Realm 域名的 Realm 签名 key 签署，因此可以存放在任何地方：域名自己的静态
 托管、Actr Facility Provider，或内嵌在 Realm 邀请中。取得它的位置不影响其有效性。
 
 Realm 在整个生命周期内只由一个 Actr Facility Provider 服务。Actr Facility Provider 是由某个运营方运行的
@@ -56,8 +55,7 @@ Realm**。只有这种情况下，Actr Host 显示该 Actr Facility Provider 为
 
 Actr Host **MUST NOT** 通过 DNS 解析 `.actr.alt` 名称，也不得把它发给任何 Actr Facility
 Provider。本机 Realm 没有 Realm Profile、没有 Actr Facility Provider，也不使用 Realm 管理请求；
-Actr Host 为每个本机 Realm 保存本地记录，其中至少含实例运行的包（下载地址或本地文件，加
-SHA-256）。本机 Realm 名只在该安装上可用。本文其余部分只
+Actr Host 为每个本机 Realm 保存本地记录，其中包含选定 Service 和 Front 的精确类型、来源（下载地址或本地文件）及整包摘要。本机 Realm 名只在该安装上可用。本文其余部分只
 适用于 DNS Realm 域名。
 
 ## 3. 定位 Realm Profile
@@ -86,48 +84,7 @@ Realm Profile 的验证与通过 HTTPS 取得的完全相同。
 
 Realm Profile 是 UTF-8 JSON object，member 名使用 snake_case。
 
-```json
-{
-  "schema": "actr.realm/v1",
-  "sequence": 31,
-  "realm": {
-    "name": "k7m2q9xh@acme.com",
-    "display_name": "Acme Notes",
-    "status": "active"
-  },
-  "package": {
-    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-    "sha256": "<64 hex>",
-    "type": "notes.example/team-notes@1.4.2"
-  },
-  "issuer": {
-    "url": "https://identity.provider.example/realms/acme.com/k7m2q9xh",
-    "keys": [
-      { "id": "7", "algorithm": "Ed25519", "public_key": "<base64>", "status": "active" }
-    ]
-  },
-  "provider": {
-    "id": "provider.example",
-    "signaling": [
-      {
-        "url": "wss://signal-a.provider.example/ws",
-        "priority": 10,
-        "control_plane_id": "provider.example/v1",
-        "ticket_audience": "signal-a"
-      }
-    ],
-    "ice": [
-      { "urls": ["stun:stun.provider.example:3478"] },
-      { "urls": ["turns:turn.provider.example:5349"], "credential_audience": "turn-pool-1" }
-    ]
-  },
-  "policy": {
-    "membership": "invite-only"
-  },
-  "issued_at": "2026-07-29T00:00:00Z",
-  "signature": { "key_id": "rs-2026-1", "algorithm": "Ed25519", "value": "<base64>" }
-}
-```
+[Echo Realm Profile 完整示例](examples/realm-profile.json)使用演示域名和包摘要。Realm 验签测试公钥为 `MwhxEhQQQtS1V6jX0bfHvy+wPND44QXNlEFg9frdHlc=`。
 
 | Member | 含义 |
 | --- | --- |
@@ -136,9 +93,12 @@ Realm Profile 是 UTF-8 JSON object，member 名使用 snake_case。
 | `realm.name` | Realm 名，**MUST** 与正在解析的名称一致。 |
 | `realm.display_name` | 人类可读名称，不是标识符。 |
 | `realm.status` | `active` 或 `retired`。 |
-| `package.href` | 该实例所运行包的 HTTPS 下载地址，可以在任何位置。 |
-| `package.sha256` | 该包全部字节的 SHA-256（小写十六进制）。 |
-| `package.type` | 该包 manifest 声明的 Actor 类型 `publisher/program@version`，即该实例 Service 的类型。 |
+| `primary_package` | `packages` 中的一个引用名，指定本实例的默认主 Service 包。 |
+| `front_package` | `packages` 中本实例选用的 Front 包引用名。 |
+| `packages` | 本应用实例选定的包引用映射。 |
+| `packages[ref].href` | 该归档的 HTTPS 下载地址，可以在任何位置。 |
+| `packages[ref].sha256` | 该归档全部字节的 SHA-256（64 位小写十六进制）。 |
+| `packages[ref].type` | 该归档 manifest 声明的精确 Actor 类型 `publisher/program@version`。 |
 | `issuer.url` | Issuer 的注册与验证端点。 |
 | `issuer.keys` | 用于验证 Actor credential 的 Realm issuer 公钥，1 至 3 项（第 6.1 节）。 |
 | `provider.id` | Actr Facility Provider ID：Actr Facility Provider 的规范化 DNS authority，在 Realm 生命周期内不变。 |
@@ -148,9 +108,7 @@ Realm Profile 是 UTF-8 JSON object，member 名使用 snake_case。
 | `issued_at` | Realm Profile 的签署时间（RFC 3339），仅供参考；Realm Profile 不过期。 |
 | `signature` | Realm 签名 key 的 detached 签名。 |
 
-`realm.status` 为 `active` 时 **MUST** 包含 `package`。
-
-所有端点 **MUST** 包含非空 host。`package.href` 和 `issuer.url` **MUST** 使用 HTTPS，
+所有端点 **MUST** 包含非空 host。每个 `packages[ref].href` 和 `issuer.url` **MUST** 使用 HTTPS。
 `provider.signaling[].url` **MUST** 使用 WSS。每个 `provider.ice[].urls` 列表
 **MUST** 非空，并包含遵循 [RFC 7064](https://www.rfc-editor.org/rfc/rfc7064) 或
 [RFC 7065](https://www.rfc-editor.org/rfc/rfc7065) 的 STUN/TURN 地址：
@@ -161,19 +119,33 @@ ICE 地址 **MUST NOT** 包含 `//`、userinfo、path 或 fragment。
 Realm Profile **MUST NOT** 包含 secret、私钥、access token、成员列表或用户专属数据。
 Actr Host **MUST** 忽略未知 member。
 
+### 4.1 应用实例的包选择配置
+
+Realm 从 `packages` 中选定本实例的 Service 和 Front。其余条目供获授权的部署按需选用。成员权限、Actor 身份、路由和启动由各自的配置决定。
+
+### 4.2 包选择校验
+
+1. `active` Profile **MUST** 同时提供 `primary_package`、`front_package` 和 `packages`。`retired` Profile 可整体省略包选择。字段不齐时拒绝。
+2. `packages` 是包含 2–32 项的 JSON 对象。键为 1–63 个 ASCII 小写字母、数字或连字符，首尾须为字母或数字。
+3. 提供包选择时，`primary_package` 与 `front_package` **MUST** 精确匹配两个不同的键，且条目的 Actor 类型不同。
+4. 每项 **MUST** 包含 HTTPS `href`、整包 `sha256`（64 位小写十六进制）和精确 `type`（`publisher/program@version`）。同一精确类型只能绑定一个摘要。接收方 **MUST** 拒绝版本范围和 `latest`。
+5. 完整签名 Profile 最多 64 KiB。接收方 **MUST** 拒绝超限文档和重复的 JSON member。
+
 ## 5. 验证
 
 `signature` 是对去掉 `signature` member 后的 Realm Profile 按 RFC 8785 JCS 规范化结果所做
 的 detached Ed25519 签名。Realm 签名 key 持有方 **MUST** 使用 `active` Realm 签名 key。
+两个包引用、`packages` 中的每一项和未知 member 均进入签名 payload。
+接收方保存收到的签名文档，并用其完整 JCS payload 验签。
 
 Actr Host 或 Actr Facility Provider 只在以下条件全部满足时接受 Realm Profile：
 
 1. `schema` 为 `actr.realm/v1`，且 `realm.name` 与正在解析的 Realm 名一致；
 2. `signature.key_id` 指向该 Realm 域名已接受的 `realm_signing_keys` member 中列出的 key
    （Actr Authority Discovery 第 4.4 节），且用该 key 验签通过；
-3. 若此前已接受过该 Realm 的 Realm Profile：
-   - Realm Profile sequence 不低于已接受的最高值，等于时内容必须与已接受的 Realm Profile
-     完全相同；
+3. 包选择满足 §4.2 的字段校验和 §7.2 的更新规则。
+4. 若此前已接受过该 Realm 的 Realm Profile：
+   - Realm Profile sequence 不低于已接受的最高值，相等时完整 JCS payload 必须一致；
    - `provider.id` 与已接受的 Realm Profile 相同；
    - 已接受的 Realm Profile 不是已退役状态。
 
@@ -185,10 +157,12 @@ Provider 不是信任根。
 
 ## 6. 使用 Realm
 
-Actr Host 以不带 credential 的 HTTPS GET 下载 `package.href`，**MUST** 核对
-`package.sha256`，并按 [Actor Package](actor-package.zh.md) 验证包签名，包 manifest 声明的 Actor 类型
-**MUST** 等于 `package.type`；任一失败即不运行。该类型即该实例的程序：实例的 Service 是本 Realm 内 Actor 类型与之
-相同的那个 Actor，恰好一个；零个或多于一个都是错误。
+Host 从 `packages[primary_package]` 取得 Service，从 `packages[front_package]` 取得 Front。
+下载时 **MUST** 以不带凭据的 HTTPS GET 获取 `href`。加载任何归档前，须核对整包 `sha256`，并用 `type` 所属 Publisher 的受信公钥验证包内 `manifest.sig` 对原始 `manifest.toml` 的签名。再核对清单中的精确 Actor 类型、载荷、workload、Host 要求、平台策略和依赖锁。加载前，Front 必需的 Service 依赖与 RPC 契约须与选定 Service 匹配。见 [Actor Package](actor-package.zh.md)。
+
+主包的 Actor 类型标识实例的 Service。Realm 中该类型的 Actor 数量必须恰好为一。
+授权部署配置决定还要运行哪些包、由哪个 Host 启动，以及每个 Actor 的身份和状态。
+停止 Actor、删除状态和撤销凭据均须单独执行。
 
 Actr Host 只通过已接受 Realm Profile 指定的 Issuer 和 Actr Facility Provider 访问 Realm。该 Realm
 的 Actor credential 以该 Realm 名为 issuer，用 `issuer.keys` 中的 Realm issuer key 验证（第 6.1 节）。
@@ -260,13 +234,17 @@ Actr Facility Provider 由 Actr Host、用户或 key 持有方的策略选定。
 
 ### 7.2 更新
 
-sequence 更高的 Realm Profile 可以更改 `package`（升级程序）、Realm issuer key、Actr Facility
-Provider 端点、`display_name` 与 `policy`，**MUST NOT** 更改 `provider.id`。
+变更包选择 **MUST** 同时提交两个引用与完整的 `packages`，整体替换。
+任何变更（含更换下载地址）都须递增 `sequence` 并重新签名。
+主包的 Publisher、程序名及 `provider.id` 固定。Realm 可独立更换兼容的 Front。每个精确 Actor 类型固定一个归档摘要。
+
+Issuer key、端点、`display_name` 和 `policy` 也可在更高序号更新。
+仅变更元数据或轮换密钥时，草稿和签名 Profile **MUST** 保留已接受的包选择。
 
 新 Realm Profile 同样以 `publish_profile` 提交给 Actr Facility Provider（持有方可先用 `draft_profile`
 取得含 Actr Facility Provider 当前 issuer 与端点的草案）；`realms` 位置不在 Actr Facility
 Provider 时，持有方还要把它发布到该位置。对 Actr Facility Provider 域名下的 Realm，由 Actr Facility Provider 按 owner 的
-`update_realm` 请求（Actr Realm Membership 第 4 节）更改 `package` 或 `display_name` 并签署新 Realm Profile。
+`update_realm` 请求（Actr Realm Membership 第 4 节）更改包选择或 `display_name` 并签署新 Realm Profile。
 
 ### 7.3 由 key 持有方授权
 
@@ -304,10 +282,10 @@ Authority Discovery 第 4.3 节）接受以下 Realm 管理请求：
 
 | `op` | 用途 |
 | --- | --- |
-| `create_realm` | 创建 pending Realm，返回其未签名的首个 Realm Profile（其中 `package` 取自请求）。 |
+| `create_realm` | 请求包含两个引用和完整包表。AFP 创建 pending Realm，在未签名的首份草稿中返回该选择。 |
 | `publish_profile` | 在 `profile` 中提交已签名的 Realm Profile：首次提交激活 pending Realm，响应一次性携带 owner 邀请（`owner_invite`）；之后提交 sequence 更高的版本即更新（含退役）。 |
 | `reissue_owner_invite` | 签发新的 owner 邀请（响应 `owner_invite`），并使该 Realm 此前未用的 owner 邀请失效；用于 owner 丢失全部客户端时的恢复（Actr Realm Membership 第 5 节）。 |
-| `draft_profile` | 只用于 Actr Facility Provider 域名以外的 Realm：返回下一份未签名的 Realm Profile 草案。其 sequence 为已接受值加一，`package`、`display_name`、`policy` 取自已接受的 Realm Profile，`issuer` 与 `provider` 为 Actr Facility Provider 的当前值（含轮换中的 Realm issuer key，第 6.1 节）。不改变 Realm。 |
+| `draft_profile` | 对 AFP 域外的 Realm，返回 `sequence` 加一的草稿。未签名草稿沿用已接受的包选择、`display_name` 和 `policy`，使用 AFP 当前的 `issuer` 和 `provider`（§6.1）。发布须单独执行。 |
 
 Realm 管理请求只用于 Actr Facility Provider 域名以外的 Realm（第 7.3 节）。每个请求都是 Actr 管理信封：
 下述 payload 加上该 Realm 域名一把 `active` Realm 签名 key 的签名。
@@ -317,15 +295,30 @@ Realm 管理请求只用于 Actr Facility Provider 域名以外的 Realm（第 7
 ```json
 {
   "op": "create_realm",
-  "realm": "k7m2q9xh@acme.com",
-  "package": { "href": "https://cdn.notes.example/team-notes-1.4.2.actr", "sha256": "<64 hex>", "type": "notes.example/team-notes@1.4.2" },
-  "provider_id": "provider.example",
+  "realm": "echo@realm.example",
+  "primary_package": "echo",
+  "front_package": "ui",
+  "packages": {
+    "echo": {
+      "href": "https://publisher.example/releases/echo/0.1.1/echo.actr",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "type": "publisher.example/echo@0.1.1"
+    },
+    "ui": {
+      "href": "https://publisher.example/releases/echo-ui/0.1.1/echo-ui.actr",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "type": "publisher.example/echo-ui@0.1.1"
+    }
+  },
+  "provider_id": "afp.example",
   "requester": "<opaque member id>",
   "nonce": "<random>",
-  "issued_at": "2026-07-29T00:00:00Z",
-  "expires_at": "2026-07-29T00:05:00Z"
+  "issued_at": "2026-11-12T08:00:00Z",
+  "expires_at": "2026-11-12T08:05:00Z"
 }
 ```
+
+签署首次激活前，调用方 **MUST** 核对草稿中的两个引用和完整包表与请求一致。幂等重试返回已有状态。修改选择使用 §7.2 的更新流程。
 
 其他操作使用同一信封与各自的 `op` 和字段。`requester` 可选：key 持有方的签名服务把它设为
 所代签者的不透明标识。其他规范 **MAY** 以自己的 `op` 复用 Actr 管理信封，例如 Actr
@@ -375,9 +368,8 @@ Authority Discovery 第 4.5 节用它登记 publisher，Actr Realm Membership �
 
 ## 10. 待完成工作
 
-- 为 Realm 管理请求定义机器可读的 JSON Schema 与签名 test vector；Realm Profile 的
-  Schema 与互操作向量已提供于 [`contracts/actr`](../../contracts/actr/README.md#realm-profile)，
-  结构校验不替代签名、信任与后继 Profile 检查；
+- 在 [`contracts/actr`](../../contracts/actr/README.md#realm-profile) 的 Realm Profile Schema 与互操作测试向量中加入包选择，并在 SDK、AFP 和 CLI 实现校验。
+- 为 Realm 管理请求定义 JSON Schema 与签名测试向量。
 - 定义限定 RealmId 前缀与有效期的创建委派 key；
 - Actr Facility Provider 域名下由用户以 Actr Facility Provider 账号（例如 OAuth 2.0 授权码 + PKCE）自助创建与
   管理 Realm，并按账号计配额。

@@ -53,6 +53,12 @@ pub struct ActorDescriptor {
 pub struct WorkloadDescriptor {
     pub profile: String,
     pub entry: String,
+    #[serde(
+        default,
+        rename = "rpc-contract",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rpc_contract: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keel: Option<KeelGuestDescriptor>,
 }
@@ -204,6 +210,61 @@ impl ActorPackageManifest {
             })
     }
 
+    /// Select the signed RPC Proto exported by a native Component.
+    pub fn component_rpc_contract(&self) -> Result<Option<&str>, PackError> {
+        let explicit = self.workload.rpc_contract.as_deref();
+        if self.workload.profile != "actr.component/1" {
+            return if explicit.is_some() {
+                Err(PackError::InvalidPackage(
+                    "workload.rpc-contract requires the actr.component/1 profile".into(),
+                ))
+            } else {
+                Ok(None)
+            };
+        }
+        let mut contracts = self.files.iter().filter_map(|file| {
+            (file.role == "contract" && file.path.ends_with(".proto")).then_some(file.path.as_str())
+        });
+        if let Some(path) = explicit {
+            return if contracts.any(|candidate| candidate == path) {
+                Ok(Some(path))
+            } else {
+                Err(PackError::InvalidPackage(format!(
+                    "workload.rpc-contract `{path}` must name a declared .proto with role `contract`"
+                )))
+            };
+        }
+        let mut local = contracts.filter(|path| {
+            !self
+                .dependencies
+                .values()
+                .any(|dependency| dependency.contract.as_deref() == Some(*path))
+        });
+        let contract = local.next();
+        if local.next().is_some() {
+            return Err(PackError::InvalidPackage(
+                "multiple RPC Proto exports; set workload.rpc-contract to select one".into(),
+            ));
+        }
+        Ok(contract)
+    }
+
+    /// Read a declared entry from the same archive bytes that were verified.
+    pub fn read_declared_file(
+        &self,
+        bytes: &[u8],
+        path: &str,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, PackError> {
+        if !self.files.iter().any(|file| file.path == path) {
+            return Err(PackError::InvalidPackage(format!(
+                "file `{path}` is not declared by the verified manifest"
+            )));
+        }
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes))?;
+        read_zip_entry_bounded(&mut archive, path, max_bytes)
+    }
+
     pub fn validate(&self) -> Result<(), PackError> {
         if self.format != ACTOR_PACKAGE_FORMAT_V2 {
             return Err(PackError::InvalidPackage(format!(
@@ -247,6 +308,10 @@ impl ActorPackageManifest {
                     "workload.keel.runtime must not be empty".to_string(),
                 ));
             }
+        } else if self.workload.keel.is_some() {
+            return Err(PackError::InvalidPackage(
+                "[workload.keel] requires the keel.guest/1 profile".to_string(),
+            ));
         }
 
         if self.files.is_empty() {
@@ -261,10 +326,13 @@ impl ActorPackageManifest {
                 DEFAULT_MAX_VERIFIED_ENTRIES
             )));
         }
-        let mut paths = BTreeSet::new();
+        let mut file_roles = BTreeMap::new();
         for file in &self.files {
             validate_package_path(&file.path)?;
-            if !paths.insert(file.path.as_str()) {
+            if file_roles
+                .insert(file.path.as_str(), file.role.as_str())
+                .is_some()
+            {
                 return Err(PackError::InvalidPackage(format!(
                     "manifest declares duplicate file `{}`",
                     file.path
@@ -279,19 +347,36 @@ impl ActorPackageManifest {
                 workload_file.path
             )));
         }
-        for path in self
-            .workload
-            .keel
-            .iter()
-            .flat_map(|keel| [keel.capabilities.as_deref(), keel.contract.as_deref()])
-            .flatten()
+        if self.workload.profile == "actr.component/1"
+            && self
+                .files
+                .iter()
+                .filter(|file| file.role == "workload")
+                .count()
+                != 1
         {
-            if !paths.contains(path) {
+            return Err(PackError::InvalidPackage(
+                "actr.component/1 requires exactly one file with role `workload`".to_string(),
+            ));
+        }
+        let require_role = |path: Option<&str>, role: &str| {
+            if let Some(path) = path
+                && file_roles.get(path).copied() != Some(role)
+            {
                 return Err(PackError::InvalidPackage(format!(
-                    "profile file `{path}` is not declared in files"
+                    "file `{path}` must be declared with role `{role}`"
                 )));
             }
+            Ok(())
+        };
+        if let Some(keel) = &self.workload.keel {
+            require_role(keel.capabilities.as_deref(), "profile")?;
+            require_role(keel.contract.as_deref(), "contract")?;
         }
+        for dependency in self.dependencies.values() {
+            require_role(dependency.contract.as_deref(), "contract")?;
+        }
+        self.component_rpc_contract()?;
         Ok(())
     }
 }
@@ -410,6 +495,12 @@ pub fn inspect_actor_package_bounded(
     let manifest_source = std::str::from_utf8(&manifest_raw)
         .map_err(|error| PackError::ManifestParseError(error.to_string()))?;
     let manifest = ActorPackageManifest::from_toml(manifest_source)?;
+    if archive.len() != manifest.files.len() + 2 {
+        return Err(PackError::InvalidPackage(
+            "ZIP payload entries do not exactly match manifest files".into(),
+        ));
+    }
+    check_central_directory(bytes, archive.central_directory_start(), archive.len())?;
 
     let declared: BTreeSet<_> = manifest
         .files
@@ -471,11 +562,55 @@ pub fn inspect_actor_package_bounded(
     })
 }
 
+// ZipArchive indexes entries by raw name. Count the records before trusting
+// that index, since identical names would otherwise collapse into one entry.
+fn check_central_directory(
+    bytes: &[u8],
+    offset: u64,
+    unique_entries: usize,
+) -> Result<(), PackError> {
+    const SIGNATURE: &[u8] = b"PK\x01\x02";
+    const HEADER_BYTES: usize = 46;
+    let invalid_directory = || PackError::InvalidPackage("invalid ZIP central directory".into());
+    let mut directory = usize::try_from(offset)
+        .ok()
+        .and_then(|offset| bytes.get(offset..))
+        .ok_or_else(invalid_directory)?;
+    for _ in 0..unique_entries {
+        let header = directory
+            .get(..HEADER_BYTES)
+            .filter(|header| header.starts_with(SIGNATURE))
+            .ok_or_else(invalid_directory)?;
+        // The fixed header stores the lengths of the name, extra field and comment.
+        let variable_bytes = [28, 30, 32]
+            .into_iter()
+            .map(|i| usize::from(u16::from_le_bytes([header[i], header[i + 1]])))
+            .sum::<usize>();
+        directory = directory
+            .get(HEADER_BYTES + variable_bytes..)
+            .ok_or_else(invalid_directory)?;
+    }
+    if directory.starts_with(SIGNATURE) {
+        return Err(PackError::InvalidPackage(
+            "ZIP contains duplicate central directory entries".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub fn verify_actor_package(
     bytes: &[u8],
     public_key: &VerifyingKey,
 ) -> Result<InspectedActorPackage, PackError> {
-    let inspected = inspect_actor_package(bytes)?;
+    verify_actor_package_bounded(bytes, public_key, DEFAULT_MAX_VERIFIED_ENTRY_BYTES)
+}
+
+pub(crate) fn verify_actor_package_bounded(
+    bytes: &[u8],
+    public_key: &VerifyingKey,
+    max_payload_bytes: usize,
+) -> Result<InspectedActorPackage, PackError> {
+    let inspected = inspect_actor_package_bounded(bytes, max_payload_bytes, max_payload_bytes)?;
     let signature_bytes: [u8; 64] = inspected.signature_raw.clone().try_into().map_err(|_| {
         PackError::SignatureVerificationFailed("manifest.sig has invalid length".to_string())
     })?;
@@ -502,18 +637,9 @@ pub fn read_actor_package_file(
     path: &str,
     max_bytes: usize,
 ) -> Result<Vec<u8>, PackError> {
-    if !inspected
+    inspected
         .manifest
-        .files
-        .iter()
-        .any(|file| file.path == path)
-    {
-        return Err(PackError::InvalidPackage(format!(
-            "file `{path}` is not declared by the verified manifest"
-        )));
-    }
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))?;
-    read_zip_entry_bounded(&mut archive, path, max_bytes)
+        .read_declared_file(bytes, path, max_bytes)
 }
 
 pub fn read_actor_workload(
@@ -566,6 +692,7 @@ mod tests {
             workload: WorkloadDescriptor {
                 profile: KEEL_GUEST_PROFILE_V1.to_string(),
                 entry: "workload/guest.js".to_string(),
+                rpc_contract: None,
                 keel: Some(KeelGuestDescriptor {
                     runtime: "js".to_string(),
                     guest_api: KEEL_GUEST_PROFILE_V1.to_string(),
@@ -617,6 +744,49 @@ mod tests {
         assert_eq!(
             read_actor_workload(&package, &verified).unwrap(),
             b"globalThis.echo = true;"
+        );
+    }
+
+    #[test]
+    fn runtime_verification_preserves_signed_source_and_bounds_payloads() {
+        let key = SigningKey::generate(&mut OsRng);
+        let payload = b"globalThis.echo = true;";
+        let mut manifest = manifest();
+        manifest.signature.key_id = crate::compute_key_id(key.verifying_key().as_bytes());
+        manifest.files[0].size = payload.len() as u64;
+        manifest.files[0].sha256 = sha256_hex(payload);
+        let source = format!(
+            "# Keep this signed comment\n\n{}",
+            manifest.to_toml().unwrap()
+        );
+        let signature = key.sign(source.as_bytes()).to_bytes();
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for (path, content) in [
+            ("manifest.toml", source.as_bytes()),
+            ("manifest.sig", signature.as_slice()),
+            (manifest.workload.entry.as_str(), payload.as_slice()),
+        ] {
+            writer.start_file(path, options).unwrap();
+            writer.write_all(content).unwrap();
+        }
+        let package = writer.finish().unwrap().into_inner();
+        let verified =
+            crate::verify_runtime_package_bounded(&package, &key.verifying_key(), payload.len())
+                .unwrap();
+        assert!(matches!(
+            verified.manifest,
+            crate::RuntimePackageManifest::V2(_)
+        ));
+        assert_eq!(verified.manifest_raw, source.as_bytes());
+        assert_eq!(verified.sig_raw, signature);
+        assert!(
+            crate::verify_runtime_package_bounded(
+                &package,
+                &key.verifying_key(),
+                payload.len() - 1
+            )
+            .is_err()
         );
     }
 

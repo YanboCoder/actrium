@@ -44,7 +44,7 @@ In v1, multiple signaling endpoints must belong to the same logical control plan
 
 ### 2.1 A Realm is an instance concept
 
-A Realm is the logical trust and governance domain of one application instance. In Actrium, creating a new instance means creating a new Realm under the chosen domain. The instance's Service, the other Actors it orchestrates, and the Fronts that Attach to it all belong to this Realm. The Realm Profile's `package` pins the Service package.
+A Realm is the logical trust and governance domain of one application instance. In Actrium, creating a new instance means creating a new Realm under the chosen domain. The instance's Service, the other Actors it orchestrates, and the Fronts that Attach to it all belong to this Realm. The signed Realm Profile selects the Service and Front packages.
 
 A Realm does not follow the program: the same `notes.example/team-notes` created once by organization A and once by organization B yields two Realms. Nor is a Realm an organization-level membership domain: an organization runs as many Realms as it runs application instances.
 
@@ -140,7 +140,7 @@ A Realm Profile contains at least:
 - schema (`actr.realm/v1`);
 - `realm.name` (the full Realm name) and a display name;
 - `status`: `active` or `retired`;
-- An `active` Realm must declare `package` with the Service archive's download address, SHA-256, and Actor type.
+- An `active` Profile names the Service and Front with `primary_package` and `front_package`. See [Realm Profile §4](../../../actr/protocols/realm-profile.md#4-profile-format).
 - a monotonic `sequence` and issue time `issued_at` (a Realm Profile does not expire);
 - the issuer URL and Realm issuer keys/key ids (the Actor credential's issuer is the Realm name);
 - the Actr Facility Provider ID, signaling endpoints, STUN/TURN endpoints;
@@ -153,7 +153,7 @@ A Realm Profile uses an RFC 8785 JCS canonical payload with a detached Ed25519 s
 Lifecycle:
 
 - Creation and activation: a Realm management request is `POST`ed to the `realm-management` link of the Actr Facility Provider's own authority descriptor (`https://<provider_id>/.well-known/actr`). `create_realm` requests that the Actr Facility Provider create a pending Realm, and the response returns a Realm Profile payload to sign; the Realm signing key holder signs it and submits it with `publish_profile`, whose response is the activation response and returns an owner invite once (see 7.4; a Realm under the Actr Facility Provider's own domain is created by that Actr Facility Provider's operator, who self-signs and activates it internally and receives the owner invite at creation). The Actr Facility Provider's idempotency key is `(realm, requester)`: a retry by the same requester on its own pending or active Realm returns its state (without an owner invite); a different requester hitting a Realm of the same name, or any request hitting an Actr Facility Provider tombstone, is always a conflict; a repeated `publish_profile` returns a conflict, and a lost or expired owner invite is reissued with `reissue_owner_invite`;
-- Update: under the same Actr Facility Provider, upgrading the program (`package`), rotating the Realm issuer key, changing endpoints, or changing `display_name` or the join policy all publish a new Realm Profile with a higher Realm Profile sequence;
+- Update: under the same Actr Facility Provider, changing package selection (Service, Front or auxiliaries), rotating the Realm issuer key, changing endpoints, or changing `display_name` or the join policy all publish a new Realm Profile with a higher Realm Profile sequence;
 - Retirement: retirement has only one path — the Realm signing key holder publishes a retired Realm Profile with `status = retired` (same `provider.id`, higher sequence), which stays valid forever; the Actr Facility Provider learns of it through periodic refresh and writes an Actr Facility Provider tombstone; if the Actr Facility Provider has shut down, the domain owner points the `realms` href at a storage location it controls and publishes the retired Realm Profile there; when the domain itself belongs to an Actr Facility Provider that has shut down, the Realms under it cannot be retired and can only be rebuilt elsewhere;
 - If every Realm signing key is lost and no usable rotation chain exists, no existing Realm under that Realm domain can get a further Realm Profile. The domain owner can only publish a new Realm signing key (clients treat this as an identity change and must reconfirm trust) and rebuild the instances under new RealmIds.
 
@@ -386,7 +386,7 @@ Membership and instance authorization are two separate layers: Realm membership 
 
 1. The Actr Host generates or reads the Actor's long-term key;
 2. It requests a new ActorId or reclaims an existing ActorId;
-3. The Issuer verifies that the request is signed by a registered, unrevoked Realm client key (Realm membership), the Actor type and allowed claims; Actors of the instance's program (the publisher and program name of `package.type`, in any version) are registered only from the owner's clients; it additionally verifies platform attestation when a managed runtime is required;
+3. The Issuer verifies that the request is signed by a registered, unrevoked Realm client key (Realm membership), the Actor type and allowed claims; Actors of the instance's program (the publisher and program name of `packages[primary_package].type`, in any version) are registered only from the owner's clients; it additionally verifies platform attestation when a managed runtime is required;
 4. The Issuer issues a short-lived Actor credential carrying the ActorId, the Actor type, the member id, the Realm client key id and the role;
 5. The Actor uses the short-lived ticket to connect to signaling;
 6. Signaling verifies the issuer, audience, ActorId and proof.
@@ -505,7 +505,7 @@ Rules:
 |---|---|
 | `actr://` URI (Realm link) | No port allowed |
 | Publisher Profile bootstrap | Fixed at the Publisher domain's HTTPS 443 |
-| `package.href`, Issuer in the Realm Profile | Explicit port allowed, must be HTTPS |
+| `packages[ref].href`, Issuer in the Realm Profile | Explicit port allowed, must be HTTPS |
 | Realm signing key (authority descriptor `/.well-known/actr`) | Fixed at the Realm domain's HTTPS 443 |
 | Realm Profile | The HTTPS location declared by the `realms` relation, explicit port allowed |
 | Signaling WSS | Explicit port allowed |

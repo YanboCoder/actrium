@@ -19,6 +19,13 @@ Actrium must guarantee:
 11. Every network Actor edge's payload is kept confidential from signaling, TURN and ordinary relays, and is bound to the real Actor/runtime.
 12. Private/secret plaintext enters only the execution, storage and compute boundary that the current policy accepts and for which the evidence is fresh.
 
+### 1.1 Package-selection trust boundaries
+
+The Realm signature authenticates the instance's package selection. The Host verifies each loaded
+archive against its pinned digest, Publisher signature, dependency locks and local policy. Registration
+of the primary program requires a valid primary reference and an owner client. Capability grants
+and identity revocation follow their own authorization rules.
+
 ## 2. Trust boundary
 
 ```mermaid
@@ -86,7 +93,7 @@ A trusted Actr Host can still have vulnerabilities; "trusted" means it sits insi
 
 | Threat | Control |
 |---|---|
-| Different package content under the same version | The Realm Profile pins the Service digest, and the signed release record pins both digests. Reject either mismatch. |
+| Different package content under the same version | Reject any archive that differs from the digest pinned for its exact Actor type or from the Realm selection. |
 | CDN/cache tampering | HTTPS + package digest + Ed25519 |
 | Zip slip/zip bomb | Path rejection, limits on file count/total size/compression ratio, atomic extraction |
 | Guest requiring an arbitrary module | Dual allowlist at build and install time, fail-closed runtime resolver |
@@ -105,7 +112,7 @@ A trusted Actr Host can still have vulnerabilities; "trusted" means it sits insi
 | Actor impersonation | Actor credential, Actor key proof, challenge |
 | Realm invitation leak | One-time, expiring, redeemed only with a signature by a new Realm client key and consumed atomically; the issuer can revoke an unused invitation and the owner can remove anyone who got in by mistake; invitations never enter URIs |
 | Lost or stolen client | A separate Realm client key per client, revocable on its own by the member or the owner; revocation immediately refuses new Actor credentials and disconnects its signaling/TURN; an owner who lost all clients recovers through an owner invite issued by the Realm signing key holder or the Actr Facility Provider's operator |
-| Low-privilege member impersonating the Service or rewriting its connection ACL | Actors of the instance's program (the publisher and program name of the Realm Profile's `package.type`, in any version) are registered only from the owner's clients; the connection ACL carried by a registration applies only to the registering Actor's own type |
+| Low-privilege member impersonating the Service or rewriting its connection ACL | Actors of the instance's program (the publisher and program name of the Realm Profile's `packages[primary_package].type`, in any version) are registered only from the owner's clients; the connection ACL carried by a registration applies only to the registering Actor's own type |
 | Forging or rolling back the Realm Profile | The Realm Profile must be signed by the pinned Realm signing key; first trust goes through Web PKI or an enterprise pin; a Realm signing key change requires a valid rotation chain; `sequence` is monotonic, `provider.id` is immutable, a retired Realm is rejected; the Realm Profile never expires and the client refreshes it periodically; when the Realm Profile cannot be fetched, fails verification, or is retired, no Actr Facility Provider other than the one it specifies may be used |
 | A client impersonating the official Actrium Front | The Actor credential does not prove the peer's code; the platform offers optional platform/runtime attestation |
 | A malicious Actor self-reporting "no leak" | The subject being assessed must not self-sign the final `ActorAssurance`; the effective declaration is closed by the Actr Host |

@@ -3,11 +3,13 @@
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <dlfcn.h>
 #import <os/log.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace jsc_sandbox {
@@ -272,12 +274,55 @@ static NSString *safeExceptionMessage(JSValue *exception) {
 
 // MARK: - JSCSandboxContext Implementation
 
+struct JSCSandboxContext::ConversionState {
+  // Host objects on the current conversion path, paired with the guest value
+  // already materialized for them. Identity is compared with
+  // Runtime::strictEquals, so only the same host object matches. Entries are
+  // removed when a subtree completes, mirroring the guest->host converter:
+  // shared (non-cyclic) references stay duplicated, only ancestor cycles are
+  // resolved to the same guest object.
+  std::vector<std::pair<jsi::Object, void *>> objects;
+};
+
+struct JSCSandboxContext::ConversionScope {
+  ConversionState &state;
+  ConversionScope(ConversionState &s, jsi::Runtime &rt, const jsi::Object &obj,
+                  void *guest)
+      : state(s) {
+    state.objects.emplace_back(jsi::Value(rt, obj).asObject(rt), guest);
+  }
+  ~ConversionScope() { state.objects.pop_back(); }
+  ConversionScope(const ConversionScope &) = delete;
+  ConversionScope &operator=(const ConversionScope &) = delete;
+};
+
+struct JSCSandboxContext::PromiseBridge {
+  // Strong references to the guest resolving functions. Both are released as
+  // soon as the Promise settles, so a long-lived sandbox does not root one
+  // pair of callbacks per host Promise forever.
+  JSValue *resolve = nil;
+  JSValue *reject = nil;
+  bool settled = false;
+};
+
+void *JSCSandboxContext::lookupConvertedObject(jsi::Runtime &rt,
+                                               const jsi::Object &obj,
+                                               ConversionState &state) {
+  for (const auto &entry : state.objects) {
+    if (jsi::Object::strictEquals(rt, entry.first, obj)) {
+      return entry.second;
+    }
+  }
+  return nullptr;
+}
+
 JSCSandboxContext::JSCSandboxContext(jsi::Runtime &hostRuntime,
                                      double timeoutMs,
                                      bool enableExecutionTimeLimit)
     : jsContext_(nullptr), contextGroup_(nullptr), hostRuntime_(&hostRuntime),
       timeoutMs_(timeoutMs), timeLimitEnabled_(false), timeLimitDepth_(0),
-      timeLimitFired_(false), disposed_(false) {
+      timeLimitFired_(false), disposed_(false), errorFactory_(nullptr),
+      promiseBridge_(nullptr) {
   // Execution timeout has TWO states:
   // - Default (enableExecutionTimeLimit == false): NOT ENFORCED.
   //   JavaScriptCore's public API has no way to interrupt running JS (no
@@ -362,6 +407,50 @@ JSCSandboxContext::JSCSandboxContext(jsi::Runtime &hostRuntime,
         )";
     [ctx evaluateScript:consoleScript];
 
+    // Capture realm intrinsics while the realm is pristine. Tenant code can
+    // replace globalThis.Error/Promise at any time; conversion and
+    // failure-path helpers must not depend on those mutable globals.
+    errorFactory_ = (__bridge_retained void *)[ctx evaluateScript:
+        @"(function() {"
+        @"  var ctors = { Error: Error, TypeError: TypeError,"
+        @"                RangeError: RangeError, SyntaxError: SyntaxError,"
+        @"                ReferenceError: ReferenceError,"
+        @"                EvalError: EvalError, URIError: URIError };"
+        @"  return function(ctorName, name, message, stack) {"
+        @"    var Ctor = ctors[ctorName] || ctors.Error;"
+        @"    var error = new Ctor(message);"
+        @"    if (name) { error.name = name; }"
+        @"    if (stack) { error.stack = stack; }"
+        @"    return error;"
+        @"  };"
+        @"})()"];
+    promiseBridge_ = (__bridge_retained void *)[ctx evaluateScript:
+        @"(function() {"
+        @"  var P = Promise;"
+        @"  return function() {"
+        @"    var resolve, reject;"
+        @"    var promise = new P(function(res, rej) {"
+        @"      resolve = res; reject = rej;"
+        @"    });"
+        @"    return [promise, resolve, reject];"
+        @"  };"
+        @"})()"];
+    if (ctx.exception || !errorFactory_ || !promiseBridge_) {
+      NSString *reason = ctx.exception ? safeExceptionMessage(ctx.exception)
+                                       : @"intrinsic capture failed";
+      ctx.exception = nil;
+      // This constructor is aborting, so dispose() will not release them.
+      if (errorFactory_) {
+        (void)(__bridge_transfer JSValue *)errorFactory_;
+        errorFactory_ = nullptr;
+      }
+      if (promiseBridge_) {
+        (void)(__bridge_transfer JSValue *)promiseBridge_;
+        promiseBridge_ = nullptr;
+      }
+      throw jsi::JSError(hostRuntime, [reason UTF8String]);
+    }
+
     // WIP, dev-only: opt this sandbox JSContext into Apple's out-of-process
     // Remote Inspector so a developer can attach Safari's Web Inspector to a
     // running JS guest (JSGlobalContextSetInspectable is public SDK API,
@@ -406,6 +495,25 @@ void JSCSandboxContext::dispose() {
 
   if (jsContext_) {
     @autoreleasepool {
+      // Drop outstanding guest resolving functions so their strong references
+      // never outlive the JSContext.
+      for (auto &weakBridge : promiseBridges_) {
+        if (auto bridge = weakBridge.lock()) {
+          bridge->settled = true;
+          bridge->resolve = nil;
+          bridge->reject = nil;
+        }
+      }
+      promiseBridges_.clear();
+      // Release the retained realm intrinsics before the context itself.
+      if (errorFactory_) {
+        (void)(__bridge_transfer JSValue *)errorFactory_;
+        errorFactory_ = nullptr;
+      }
+      if (promiseBridge_) {
+        (void)(__bridge_transfer JSValue *)promiseBridge_;
+        promiseBridge_ = nullptr;
+      }
       // Transfer ownership to ARC and let it release
       (void)(__bridge_transfer JSContext *)jsContext_;
     }
@@ -1023,9 +1131,181 @@ void *JSCSandboxContext::wrapFunctionForSandbox(jsi::Runtime &rt,
   return (__bridge void *)wrapperFn;
 }
 
-// Convert jsi::Value to JSValue*
+// Host errors must become real sandbox Errors. Rebuilding them in the guest
+// realm keeps `instanceof Error`/`instanceof TypeError` and the standard
+// name/message/stack fields working for host capability rejections; the
+// generic own-property copy would hand the guest a plain object instead.
+// Returns nullptr when `obj` is not a host Error.
+void *JSCSandboxContext::tryMakeSandboxError(jsi::Runtime &rt,
+                                             const jsi::Object &obj,
+                                             ConversionState &state) {
+  std::string ctorName = "Error";
+  try {
+    // Cheap own-property probe before the prototype walk: most plain data
+    // objects never carry `message`.
+    if (!obj.hasProperty(rt, "message")) {
+      return nullptr;
+    }
+    // Detect the Error brand through the HOST realm's own prototype chain.
+    // `instanceof` is realm-local here (both operands are host values), so it
+    // cannot be spoofed the way a Symbol.toStringTag tag check can.
+    jsi::Function errorCtor = rt.global().getPropertyAsFunction(rt, "Error");
+    if (!obj.instanceOf(rt, errorCtor)) {
+      return nullptr;
+    }
+    static const char *kErrorSubtypes[] = {"TypeError",   "RangeError",
+                                           "SyntaxError", "ReferenceError",
+                                           "EvalError",   "URIError"};
+    for (const char *subtype : kErrorSubtypes) {
+      jsi::Function ctor = rt.global().getPropertyAsFunction(rt, subtype);
+      if (obj.instanceOf(rt, ctor)) {
+        ctorName = subtype;
+        break;
+      }
+    }
+  } catch (const jsi::JSError &) {
+    return nullptr;
+  }
+
+  // A cycle back to an Error already being converted reuses the guest Error.
+  if (void *existing = lookupConvertedObject(rt, obj, state)) {
+    return existing;
+  }
+
+  // A throwing getter on one field must not drop the Error brand; keep the
+  // fields that are readable.
+  auto readString = [&](const char *key) -> std::string {
+    try {
+      jsi::Value val = obj.getProperty(rt, key);
+      if (val.isString()) {
+        return val.asString(rt).utf8(rt);
+      }
+    } catch (const jsi::JSError &) {
+      // Ignore this field only.
+    }
+    return std::string();
+  };
+  std::string name = readString("name");
+  std::string message = readString("message");
+  std::string stack = readString("stack");
+
+  JSContext *ctx = (__bridge JSContext *)jsContext_;
+  NSString *nsCtorName = [NSString stringWithUTF8String:ctorName.c_str()];
+  NSString *nsName = [NSString stringWithUTF8String:name.c_str()];
+  NSString *nsMessage = [NSString stringWithUTF8String:message.c_str()];
+  NSString *nsStack = [NSString stringWithUTF8String:stack.c_str()];
+  JSValue *factory = (__bridge JSValue *)errorFactory_;
+  JSValue *guestError = factory ? [factory callWithArguments:@[
+    nsCtorName ?: @"Error", nsName ?: @"", nsMessage ?: @"", nsStack ?: @""
+  ]] : nil;
+  if (ctx.exception || !guestError || ![guestError isObject]) {
+    // Never leave a pending guest exception: it would surface on the next
+    // unrelated eval. Fall back to JSC's intrinsic Error constructor (the C
+    // API does not consult the tenant-mutable globalThis.Error).
+    if (ctx.exception) {
+      ctx.exception = nil;
+    }
+    guestError = [JSValue valueWithNewErrorFromMessage:(nsMessage ?: @"")
+                                             inContext:ctx];
+  }
+
+  // Register the rebuilt Error for the duration of its custom-field subtree
+  // so cycles resolve to the same guest object instead of recursing.
+  ConversionScope conversionScope(state, rt, obj,
+                                   (__bridge void *)guestError);
+
+  // Preserve custom own enumerable fields (e.g. `code`) that the generic
+  // converter used to copy. Standard fields always win, and `__proto__` is
+  // skipped so a data field cannot rewrite the guest prototype.
+  if ([guestError isObject]) {
+    try {
+      jsi::Function objectKeys =
+          rt.global()
+              .getPropertyAsObject(rt, "Object")
+              .getPropertyAsFunction(rt, "keys");
+      jsi::Value keysValue = objectKeys.call(rt, obj);
+      jsi::Array keys = keysValue.asObject(rt).asArray(rt);
+      size_t keyCount = keys.size(rt);
+      for (size_t i = 0; i < keyCount; i++) {
+        jsi::Value keyValue = keys.getValueAtIndex(rt, i);
+        if (!keyValue.isString()) {
+          continue;
+        }
+        std::string key = keyValue.asString(rt).utf8(rt);
+        if (key == "name" || key == "message" || key == "stack" ||
+            key == "__proto__") {
+          continue;
+        }
+        NSString *nsKey = [NSString stringWithUTF8String:key.c_str()];
+        if (!nsKey) {
+          continue;
+        }
+        try {
+          jsi::Value fieldValue = obj.getProperty(rt, key.c_str());
+          void *jsField = jsiToJSValueImpl(rt, fieldValue, true, state);
+          if (jsField) {
+            guestError[nsKey] = (__bridge JSValue *)jsField;
+          }
+        } catch (const jsi::JSError &) {
+          // Skip only the unreadable field.
+        }
+      }
+    } catch (const jsi::JSError &) {
+      // Custom fields are best-effort; the rebuilt Error remains valid.
+    }
+  }
+  return (__bridge void *)guestError;
+}
+
+// Convert the value thrown by the host into a sandbox rejection reason.
+// Promise semantics reject with the thrown value as-is: a standard Error keeps
+// its subtype through tryMakeSandboxError, primitives stay primitives, and a
+// thenable is NOT adopted (rejection reasons are never unwrapped).
+void *JSCSandboxContext::sandboxRejectionReason(jsi::Runtime &rt,
+                                                const jsi::JSError &error) {
+  try {
+    return jsiToJSValue(rt, error.value(), /*unwrapThenables=*/false);
+  } catch (const jsi::JSError &) {
+    // Host getters on the thrown value can throw too; still hand the guest a
+    // usable reason instead of letting the conversion failure escape.
+    JSContext *ctx = (__bridge JSContext *)jsContext_;
+    NSString *nsMessage =
+        [NSString stringWithUTF8String:error.getMessage().c_str()];
+    return (__bridge void *)[JSValue valueWithNewErrorFromMessage:
+        (nsMessage ?: @"") inContext:ctx];
+  }
+}
+
+// Settle a sandbox promise via its reject callback. Rejecting an
+// already-settled promise is a no-op, so a thenable that settles and then
+// throws still follows Promise semantics (the first settlement wins).
+void JSCSandboxContext::rejectSandboxPromise(void *rejectFn, void *reason) {
+  JSContext *ctx = (__bridge JSContext *)jsContext_;
+  JSValue *reject = (__bridge JSValue *)rejectFn;
+  if (!reject) {
+    return;
+  }
+  JSValue *nsReason = reason ? (__bridge JSValue *)reason
+                             : [JSValue valueWithUndefinedInContext:ctx];
+  [reject callWithArguments:@[nsReason]];
+  if (ctx.exception) {
+    ctx.exception = nil;
+  }
+}
+
+// Convert jsi::Value to JSValue* (top-level entry: owns the cycle state)
 void *JSCSandboxContext::jsiToJSValue(jsi::Runtime &rt,
-                                      const jsi::Value &value) {
+                                      const jsi::Value &value,
+                                      bool unwrapThenables) {
+  ConversionState state;
+  return jsiToJSValueImpl(rt, value, unwrapThenables, state);
+}
+
+// Convert jsi::Value to JSValue* (recursive: shares the cycle state)
+void *JSCSandboxContext::jsiToJSValueImpl(jsi::Runtime &rt,
+                                          const jsi::Value &value,
+                                          bool unwrapThenables,
+                                          ConversionState &state) {
   JSContext *ctx = (__bridge JSContext *)jsContext_;
 
   if (value.isUndefined()) {
@@ -1104,17 +1384,89 @@ void *JSCSandboxContext::jsiToJSValue(jsi::Runtime &rt,
       }
     }
 
+    // Rebuild host Errors as real sandbox Errors before the generic object
+    // copy below flattens them into plain objects.
+    if (void *sandboxError = tryMakeSandboxError(rt, obj, state)) {
+      return sandboxError;
+    }
+
+    // Preserve thenables as real sandbox promises. Treating a host Promise
+    // as a plain object drops its methods and leaves callers with {}.
+    // Rejection reasons are values, never adopted thenables, so the caller can
+    // disable this branch with unwrapThenables=false.
+    if (unwrapThenables) {
+      // Reading `then` (getter) and invoking it can both throw synchronously.
+      // Such a failure must settle the new guest promise instead of escaping
+      // the conversion: the host-function bridge that called us catches
+      // conversion exceptions and returns nil, which would leave the guest
+      // with no promise and no way to observe the host error.
+      jsi::Value thenValue;
+      try {
+        thenValue = obj.getProperty(rt, "then");
+      } catch (const jsi::JSError &e) {
+        JSValue *factory = (__bridge JSValue *)promiseBridge_;
+        JSValue *bridge = [factory callWithArguments:@[]];
+        rejectSandboxPromise((__bridge void *)bridge[2],
+                             sandboxRejectionReason(rt, e));
+        return (__bridge void *)bridge[0];
+      }
+      if (thenValue.isObject() && thenValue.asObject(rt).isFunction(rt)) {
+        JSValue *factory = (__bridge JSValue *)promiseBridge_;
+        JSValue *bridge = [factory callWithArguments:@[]];
+        jsi::Value resolveProxy = jsi::Value::undefined();
+        jsi::Value rejectProxy = jsi::Value::undefined();
+        auto settlement = makePromiseCallbacks(
+            rt, (__bridge void *)bridge[1], (__bridge void *)bridge[2],
+            resolveProxy, rejectProxy);
+        try {
+          thenValue.asObject(rt).asFunction(rt).callWithThis(
+              rt, obj, {std::move(resolveProxy), std::move(rejectProxy)});
+        } catch (const jsi::JSError &e) {
+          // Lock the settlement before converting the thrown reason: that
+          // conversion can run host getters which re-enter the proxies. If
+          // `then` already settled, beginSettlement returns false and the late
+          // throw is ignored (the first settlement wins).
+          void *rawResolve = nullptr;
+          void *rawReject = nullptr;
+          if (beginSettlement(settlement, &rawResolve, &rawReject)) {
+            JSValue *resolveFn = (__bridge_transfer JSValue *)rawResolve;
+            JSValue *rejectFn = (__bridge_transfer JSValue *)rawReject;
+            (void)resolveFn; // A thrown value is always a rejection.
+            void *reason = sandboxRejectionReason(rt, e);
+            if (rejectFn) {
+              invokeSettlement((__bridge void *)rejectFn, reason);
+            }
+            JSContext *ctx = (__bridge JSContext *)jsContext_;
+            if (ctx.exception) {
+              ctx.exception = nil;
+            }
+          }
+        }
+        return (__bridge void *)bridge[0];
+      }
+    }
+
+    // A cycle back to an object already being converted reuses the guest
+    // value built for it instead of recursing forever.
+    if (void *existing = lookupConvertedObject(rt, obj, state)) {
+      return existing;
+    }
+
     // Handle arrays
     if (obj.isArray(rt)) {
       jsi::Array arr = obj.asArray(rt);
       size_t len = arr.size(rt);
-      NSMutableArray *nsArr = [NSMutableArray arrayWithCapacity:len];
+      // Materialize the guest array before walking elements so a self-cycle
+      // resolves to this same guest array.
+      JSValue *guestArray = [ctx evaluateScript:@"[]"];
+      ConversionScope conversionScope(state, rt, obj,
+                                       (__bridge void *)guestArray);
       for (size_t i = 0; i < len; i++) {
-        JSValue *elem =
-            (__bridge JSValue *)jsiToJSValue(rt, arr.getValueAtIndex(rt, i));
-        [nsArr addObject:elem ?: [NSNull null]];
+        JSValue *elem = (__bridge JSValue *)jsiToJSValueImpl(
+            rt, arr.getValueAtIndex(rt, i), true, state);
+        guestArray[i] = elem ?: [JSValue valueWithNullInContext:ctx];
       }
-      return (__bridge void *)[JSValue valueWithObject:nsArr inContext:ctx];
+      return (__bridge void *)guestArray;
     }
 
     // Handle plain objects
@@ -1124,6 +1476,7 @@ void *JSCSandboxContext::jsiToJSValue(jsi::Runtime &rt,
     // Use JavaScript object directly instead of NSDictionary to preserve
     // functions
     JSValue *jsObj = [ctx evaluateScript:@"({})"];
+    ConversionScope conversionScope(state, rt, obj, (__bridge void *)jsObj);
 
     for (size_t i = 0; i < len; i++) {
       std::string key = propNames.getValueAtIndex(rt, i).asString(rt).utf8(rt);
@@ -1131,7 +1484,8 @@ void *JSCSandboxContext::jsiToJSValue(jsi::Runtime &rt,
       jsi::Value propVal = obj.getProperty(rt, key.c_str());
 
       // Convert all values including functions
-      JSValue *jsVal = (__bridge JSValue *)jsiToJSValue(rt, propVal);
+      JSValue *jsVal = (__bridge JSValue *)jsiToJSValueImpl(
+          rt, propVal, true, state);
       if (jsVal) {
         jsObj[nsKey] = jsVal;
       }
@@ -1140,6 +1494,226 @@ void *JSCSandboxContext::jsiToJSValue(jsi::Runtime &rt,
   }
 
   return (__bridge void *)[JSValue valueWithUndefinedInContext:ctx];
+}
+
+// Store a guest function and return a host proxy that invokes it.
+jsi::Value JSCSandboxContext::makeFunctionProxy(jsi::Runtime &rt, void *fn) {
+  JSContext *ctx = (__bridge JSContext *)jsContext_;
+  JSValue *guestFunction = (__bridge JSValue *)fn;
+
+  static int sandboxFuncCounter = 0;
+  NSString *funcKey = [NSString
+      stringWithFormat:@"__sandbox_fn_%d__", ++sandboxFuncCounter];
+  ctx[funcKey] = guestFunction;
+
+  std::string funcKeyStr = [funcKey UTF8String];
+  auto *self = this;
+
+  return jsi::Function::createFromHostFunction(
+      rt, jsi::PropNameID::forUtf8(rt, "sandboxProxy"),
+      0, // variadic
+      [self, funcKeyStr](jsi::Runtime &rt, const jsi::Value &thisVal,
+                         const jsi::Value *args,
+                         size_t count) -> jsi::Value {
+        (void)thisVal;
+        @autoreleasepool {
+          std::lock_guard<std::recursive_mutex> lock(self->mutex_);
+
+          if (self->disposed_) {
+            throw jsi::JSError(rt, "Context has been disposed");
+          }
+
+          JSContext *ctx = (__bridge JSContext *)self->jsContext_;
+          NSString *funcKey = [NSString stringWithUTF8String:funcKeyStr.c_str()];
+          JSValue *sandboxFunc = ctx[funcKey];
+
+          if (!sandboxFunc || [sandboxFunc isUndefined]) {
+            throw jsi::JSError(rt, "Sandbox function not found");
+          }
+
+          // Convert args to JSValue array
+          NSMutableArray *jsArgs = [NSMutableArray arrayWithCapacity:count];
+          for (size_t i = 0; i < count; i++) {
+            JSValue *jsArg =
+                (__bridge JSValue *)self->jsiToJSValue(rt, args[i]);
+            [jsArgs
+                addObject:jsArg
+                              ?: [JSValue valueWithUndefinedInContext:ctx]];
+          }
+
+          // Host->sandbox function calls execute tenant JS too: same budget
+          // as eval (nested entries keep the outermost deadline).
+          TimeLimitScope timeLimit(*self);
+          JSValue *result = [sandboxFunc callWithArguments:jsArgs];
+
+          if (timeLimit.timedOut()) {
+            ctx.exception = nil;
+            throw jsi::JSError(
+                rt, "JSC sandbox function timed out after " +
+                        std::to_string(
+                            static_cast<long long>(self->timeoutMs_)) +
+                        "ms (execution interrupted)");
+          }
+
+          // Check for exceptions
+          if (ctx.exception) {
+            NSString *errorMsg = safeExceptionMessage(ctx.exception);
+            ctx.exception = nil;
+            throw jsi::JSError(rt, [errorMsg UTF8String]);
+          }
+
+          return self->jsValueToJSI(rt, (__bridge void *)result);
+        }
+      });
+}
+
+bool JSCSandboxContext::invokeSettlement(void *fn, void *arg) {
+  JSContext *ctx = (__bridge JSContext *)jsContext_;
+  // Calling a guest resolver/rejector can synchronously drain guest Promise
+  // reactions, i.e. run tenant code. Keep it inside the same execution budget
+  // as eval and host->sandbox calls.
+  TimeLimitScope timeLimit(*this);
+  [(__bridge JSValue *)fn callWithArguments:@[(__bridge JSValue *)arg]];
+  if (timeLimit.timedOut()) {
+    // The termination exception must not leak into the next unrelated call.
+    ctx.exception = nil;
+    return false;
+  }
+  return true;
+}
+
+bool JSCSandboxContext::beginSettlement(
+    const std::shared_ptr<PromiseBridge> &bridge, void **resolveOut,
+    void **rejectOut) {
+  *resolveOut = nullptr;
+  *rejectOut = nullptr;
+  if (!bridge || bridge->settled) {
+    return false;
+  }
+  // Lock before any conversion: converting the argument can run host getters
+  // that re-enter the peer proxy. The FIRST call must win even though its
+  // conversion has not finished yet.
+  bridge->settled = true;
+  JSValue *resolveFn = bridge->resolve;
+  JSValue *rejectFn = bridge->reject;
+  bridge->resolve = nil;
+  bridge->reject = nil;
+  if (resolveFn) {
+    *resolveOut = (__bridge_retained void *)resolveFn;
+  }
+  if (rejectFn) {
+    // +1: the caller takes ownership with __bridge_transfer and invokes it.
+    // A plain __bridge return would leave a dangling pointer once this frame
+    // released its strong local.
+    *rejectOut = (__bridge_retained void *)rejectFn;
+  }
+  return true;
+}
+
+// One settlement proxy for a guest Promise. A conversion failure must reject
+// the guest Promise: the host `.then(...)` return value is discarded, so an
+// exception escaping this proxy would leave the guest pending forever.
+jsi::Value JSCSandboxContext::makeSettlementProxy(
+    jsi::Runtime &rt, const std::shared_ptr<PromiseBridge> &bridge,
+    bool isReject) {
+  auto *self = this;
+  return jsi::Function::createFromHostFunction(
+      rt,
+      jsi::PropNameID::forUtf8(
+          rt, isReject ? "sandboxPromiseReject" : "sandboxPromiseResolve"),
+      1, [self, bridge, isReject](jsi::Runtime &rt,
+                                  const jsi::Value &thisVal,
+                                  const jsi::Value *args,
+                                  size_t count) -> jsi::Value {
+        (void)thisVal;
+        @autoreleasepool {
+          std::lock_guard<std::recursive_mutex> lock(self->mutex_);
+          if (self->disposed_) {
+            return jsi::Value::undefined();
+          }
+
+          // Lock the first settlement attempt BEFORE converting the argument:
+          // conversion can run host getters that re-enter the peer proxy, and
+          // the first call must still win.
+          void *rawResolve = nullptr;
+          void *rawReject = nullptr;
+          if (!self->beginSettlement(bridge, &rawResolve, &rawReject)) {
+            return jsi::Value::undefined();
+          }
+          JSValue *resolveFn = (__bridge_transfer JSValue *)rawResolve;
+          JSValue *rejectFn = (__bridge_transfer JSValue *)rawReject;
+
+          JSContext *ctx = (__bridge JSContext *)self->jsContext_;
+          void *converted = nullptr;
+          std::string conversionError;
+          jsi::Value undefined;
+          const jsi::Value &arg = count > 0 ? args[0] : undefined;
+          try {
+            converted = self->jsiToJSValue(rt, arg,
+                                           /*unwrapThenables=*/!isReject);
+          } catch (const jsi::JSError &e) {
+            conversionError = e.getMessage();
+          }
+
+          if (converted) {
+            JSValue *fn = isReject ? rejectFn : resolveFn;
+            if (fn && !self->invokeSettlement((__bridge void *)fn, converted) &&
+                !isReject && rejectFn) {
+              // The resolve reaction loop was interrupted: still settle the
+              // guest Promise with a clear timeout error.
+              NSString *message = [NSString
+                  stringWithFormat:@"JSC sandbox function timed out after "
+                                   @"%lldms (execution interrupted)",
+                                   static_cast<long long>(self->timeoutMs_)];
+              JSValue *reason = [JSValue valueWithNewErrorFromMessage:message
+                                                           inContext:ctx];
+              self->invokeSettlement((__bridge void *)rejectFn,
+                                     (__bridge void *)reason);
+            }
+          } else if (rejectFn) {
+            // Still settle: reject with a real Error instead of leaving the
+            // guest Promise pending.
+            NSString *nsMessage =
+                [NSString stringWithUTF8String:conversionError.c_str()];
+            JSValue *reason = [JSValue
+                valueWithNewErrorFromMessage:(nsMessage ?: @"")
+                                   inContext:ctx];
+            self->invokeSettlement((__bridge void *)rejectFn,
+                                   (__bridge void *)reason);
+          }
+
+          if (ctx.exception) {
+            ctx.exception = nil;
+          }
+          return jsi::Value::undefined();
+        }
+      });
+}
+
+std::shared_ptr<JSCSandboxContext::PromiseBridge>
+JSCSandboxContext::makePromiseCallbacks(jsi::Runtime &rt, void *resolve,
+                                        void *reject,
+                                        jsi::Value &resolveProxy,
+                                        jsi::Value &rejectProxy) {
+  auto bridge = std::make_shared<PromiseBridge>();
+  bridge->resolve = (__bridge JSValue *)resolve;
+  bridge->reject = (__bridge JSValue *)reject;
+  resolveProxy = makeSettlementProxy(rt, bridge, false);
+  rejectProxy = makeSettlementProxy(rt, bridge, true);
+
+  // Track in-flight pairs so dispose() can drop their guest references. The
+  // weak list is pruned occasionally to stay bounded.
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  if (promiseBridges_.size() > 64) {
+    promiseBridges_.erase(
+        std::remove_if(promiseBridges_.begin(), promiseBridges_.end(),
+                       [](const std::weak_ptr<PromiseBridge> &entry) {
+                         return entry.expired();
+                       }),
+        promiseBridges_.end());
+  }
+  promiseBridges_.push_back(bridge);
+  return bridge;
 }
 
 // Convert JSValue* to jsi::Value (entry point, creates visited set for cycle detection)
@@ -1242,75 +1816,7 @@ jsi::Value JSCSandboxContext::jsValueToJSI(jsi::Runtime &rt, void *jsValue,
     if ([typeString isEqualToString:@"function"]) {
       // Functions don't recurse into children, safe to remove from visited
       if (addedToVisited) visited->erase(valueRef);
-
-      // Store the sandbox function for later invocation
-      static int sandboxFuncCounter = 0;
-      NSString *funcKey = [NSString
-          stringWithFormat:@"__sandbox_fn_%d__", ++sandboxFuncCounter];
-      ctx[funcKey] = value;
-
-      // Capture what we need for the proxy
-      std::string funcKeyStr = [funcKey UTF8String];
-      auto *self = this;
-
-      // Create a JSI host function that proxies calls to the sandbox function
-      return jsi::Function::createFromHostFunction(
-          rt, jsi::PropNameID::forUtf8(rt, "sandboxProxy"),
-          0, // variadic
-          [self, funcKeyStr](jsi::Runtime &rt, const jsi::Value &thisVal,
-                             const jsi::Value *args,
-                             size_t count) -> jsi::Value {
-            (void)thisVal;
-            @autoreleasepool {
-              std::lock_guard<std::recursive_mutex> lock(self->mutex_);
-
-              if (self->disposed_) {
-                throw jsi::JSError(rt, "Context has been disposed");
-              }
-
-              JSContext *ctx = (__bridge JSContext *)self->jsContext_;
-              NSString *funcKey =
-                  [NSString stringWithUTF8String:funcKeyStr.c_str()];
-              JSValue *sandboxFunc = ctx[funcKey];
-
-              if (!sandboxFunc || [sandboxFunc isUndefined]) {
-                throw jsi::JSError(rt, "Sandbox function not found");
-              }
-
-              // Convert args to JSValue array
-              NSMutableArray *jsArgs = [NSMutableArray arrayWithCapacity:count];
-              for (size_t i = 0; i < count; i++) {
-                JSValue *jsArg =
-                    (__bridge JSValue *)self->jsiToJSValue(rt, args[i]);
-                [jsArgs
-                    addObject:jsArg
-                                  ?: [JSValue valueWithUndefinedInContext:ctx]];
-              }
-
-              // Host->sandbox function calls execute tenant JS too: same
-              // budget as eval (nested entries keep the outermost deadline).
-              TimeLimitScope timeLimit(*self);
-              JSValue *result = [sandboxFunc callWithArguments:jsArgs];
-
-              if (timeLimit.timedOut()) {
-                ctx.exception = nil;
-                throw jsi::JSError(
-                    rt, "JSC sandbox function timed out after " +
-                            std::to_string(
-                                static_cast<long long>(self->timeoutMs_)) +
-                            "ms (execution interrupted)");
-              }
-
-              // Check for exceptions
-              if (ctx.exception) {
-                NSString *errorMsg = safeExceptionMessage(ctx.exception);
-                ctx.exception = nil;
-                throw jsi::JSError(rt, [errorMsg UTF8String]);
-              }
-
-              return self->jsValueToJSI(rt, (__bridge void *)result);
-            }
-          });
+      return makeFunctionProxy(rt, (__bridge void *)value);
     }
 
     // Binary passthrough — MUST come before the generic Object.keys copy,

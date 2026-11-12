@@ -241,6 +241,29 @@ struct ActriumApp: App {
         return nil
     }()
 
+    /// Host-designated package allowed to use the legacy ACTR_CALL bridge.
+    /// Supplied by the trusted launch configuration, never by package data.
+    static let launchLegacyActorBridgePackage: String? = {
+        let args = CommandLine.arguments
+        guard let packageIndex = args.firstIndex(where: {
+            $0 == "--legacy-actor-bridge-package"
+        }), packageIndex + 1 < args.count else {
+            return nil
+        }
+        let path = URL(fileURLWithPath: args[packageIndex + 1])
+            .standardizedFileURL.path
+        NSLog("🚀 Actrium: Legacy actor bridge package: \(path)")
+        return path
+    }()
+
+    /// Whether `url` is the host-designated legacy ACTR_CALL package.
+    static func isLegacyActorBridgePackage(_ url: URL) -> Bool {
+        guard let trustedPath = launchLegacyActorBridgePackage else {
+            return false
+        }
+        return url.standardizedFileURL.path == trustedPath
+    }
+
     /// Debug launch configuration
     static let debugConfig: DebugLaunchConfig = DebugLaunchConfig.parse(CommandLine.arguments)
 

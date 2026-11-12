@@ -533,8 +533,8 @@ impl AIdIssuer {
         let provenance = self.verify_registration_identity(request).await?;
         let development = provenance == Some(Provenance::Development);
 
-        // Generate ActrId. Persist the package target so /renew and /reissue can
-        // later recheck the exact (type_str, target) package row.
+        // Reserve the identity and its optional legacy target. V2 manifests
+        // describe execution through workload/host profiles and have no target.
         let actr_id = self
             .generate_actr_id(
                 &request.actr_type,
@@ -671,8 +671,9 @@ impl AIdIssuer {
 
     /// Verify where a package registration comes from.
     ///
-    /// The signed manifest must name exactly the requested type and target.
-    /// Its `signing_key_id` then decides the provenance: a key of a publisher
+    /// The signed manifest must name exactly the requested type. Unversioned
+    /// packages also bind `binary.target`; v2 must omit the request target.
+    /// Its signing key id then decides the provenance: a key of a publisher
     /// in this Loran's Publisher Registry gives the Publisher's identity; a
     /// publisher name the registry does not hold gives a development identity,
     /// verified with the `signing_public_key` the request carries. A name the
@@ -691,17 +692,6 @@ impl AIdIssuer {
             return Err(AidError::InvalidFormat);
         }
         let type_str = actr_type.to_program_identity();
-        let target = request
-            .target
-            .as_deref()
-            .filter(|target| !target.is_empty())
-            .ok_or_else(|| {
-                platform::recording::warn!(
-                    "Package verification failed: registration requires target; type_str={}",
-                    type_str
-                );
-                AidError::InvalidFormat
-            })?;
         let manifest_bytes = request
             .manifest_raw
             .as_ref()
@@ -713,6 +703,32 @@ impl AIdIssuer {
                 );
                 AidError::InvalidFormat
             })?;
+        // This shared parser selects the full v2 schema when versioned tables
+        // are present. An invalid v2 never retries the legacy/linked path.
+        let manifest = actr_pack::RegistrationManifest::parse(manifest_bytes).map_err(|_| {
+            platform::recording::warn!("Package manifest format rejected: type_str={}", type_str);
+            AidError::InvalidFormat
+        })?;
+        // A valid signed manifest of one type must not register another.
+        if manifest.actor_type() != actr_type {
+            platform::recording::warn!(
+                "Package manifest identity mismatch: manifest={}, request={}",
+                manifest.actor_type().to_program_identity(),
+                type_str
+            );
+            return Err(AidError::PublisherNotVerified);
+        }
+        match (manifest.target(), request.target.as_deref()) {
+            (None, None) => {} // v2: signed profiles, not a binary target triple
+            (None, Some(_)) | (Some(_), None | Some("")) => {
+                return Err(AidError::InvalidFormat);
+            }
+            (Some(expected), Some(actual)) if expected != actual => {
+                return Err(AidError::PublisherNotVerified);
+            }
+            (Some(_), Some(_)) => {}
+        }
+
         let signature = request.publisher_signature.as_ref().ok_or_else(|| {
             platform::recording::warn!(
                 "Package verification failed: registration requires publisher_signature; type_str={}",
@@ -720,61 +736,7 @@ impl AIdIssuer {
             );
             AidError::PublisherNotVerified
         })?;
-
-        // Unparseable manifests must not bypass the identity binding below.
-        let manifest_str = std::str::from_utf8(manifest_bytes.as_ref()).map_err(|_| {
-            platform::recording::warn!("Package manifest_raw is not valid UTF-8");
-            AidError::InvalidFormat
-        })?;
-        let manifest: toml::Value = manifest_str.parse().map_err(|e| {
-            platform::recording::warn!("Package manifest_raw is not valid TOML: {}", e);
-            AidError::InvalidFormat
-        })?;
-        let signing_key_id = manifest
-            .get("signing_key_id")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                platform::recording::warn!(
-                    "Package manifest missing 'signing_key_id'; type_str={}",
-                    type_str
-                );
-                AidError::InvalidFormat
-            })?;
-        let field = |name: &str| manifest.get(name).and_then(|v| v.as_str()).unwrap_or("");
-        // A valid signed manifest of one type must not register another.
-        if field("publisher") != actr_type.publisher
-            || field("name") != actr_type.name
-            || field("version") != actr_type.version
-        {
-            platform::recording::warn!(
-                "Package manifest identity mismatch: manifest={}/{}@{}, request={}",
-                field("publisher"),
-                field("name"),
-                field("version"),
-                type_str
-            );
-            return Err(AidError::PublisherNotVerified);
-        }
-        // The signature binds the target only through binary.target.
-        let manifest_target = manifest
-            .get("binary")
-            .and_then(|b| b.get("target"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                platform::recording::warn!(
-                    "Package manifest missing binary.target; type_str={}",
-                    type_str
-                );
-                AidError::InvalidFormat
-            })?;
-        if manifest_target != target {
-            platform::recording::warn!(
-                "Package manifest target mismatch: manifest={}, request={}",
-                manifest_target,
-                target
-            );
-            return Err(AidError::PublisherNotVerified);
-        }
+        let signing_key_id = manifest.signing_key_id().ok_or(AidError::InvalidFormat)?;
 
         let pool = platform::storage::db::get_database().get_pool().clone();
         let manager = loran_publisher_registry::PublisherRegistryManager::new(pool);
@@ -802,32 +764,21 @@ impl AIdIssuer {
             }
         };
 
-        let valid = loran_publisher_registry::crypto::verify_signature(
-            manifest_bytes,
-            &BASE64_STANDARD.encode(signature),
-            &public_key,
-        )
-        .map_err(|e| {
-            platform::recording::warn!(
-                "Package signature verification error: type_str={}, err={}",
-                type_str,
-                e
-            );
-            AidError::PublisherNotVerified
-        })?;
-        if !valid {
-            platform::recording::warn!(
-                "Package signature verification failed: type_str={}, key_id={}",
-                type_str,
-                signing_key_id
-            );
-            return Err(AidError::PublisherNotVerified);
-        }
+        let key_bytes: [u8; 32] = BASE64_STANDARD
+            .decode(&public_key)
+            .ok()
+            .and_then(|bytes| bytes.try_into().ok())
+            .ok_or(AidError::PublisherNotVerified)?;
+        let public_key =
+            VerifyingKey::from_bytes(&key_bytes).map_err(|_| AidError::PublisherNotVerified)?;
+        manifest
+            .verify_signature(signature, &public_key)
+            .map_err(|_| AidError::PublisherNotVerified)?;
 
         platform::recording::debug!(
-            "Package provenance verified: type_str={}, target={}, key_id={}, provenance={:?}",
+            "Package provenance verified: type_str={}, target={:?}, key_id={}, provenance={:?}",
             type_str,
-            target,
+            manifest.target(),
             signing_key_id,
             provenance
         );

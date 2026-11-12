@@ -9,12 +9,43 @@
 //! lives in [`actr_service_compat::build_service_spec`]; this module is just
 //! the ZIP-extraction adapter.
 
-use actr_pack::PackageManifest;
+use actr_pack::{ActorPackageManifest, PackageManifest};
 use actr_protocol::ServiceSpec;
-use actr_service_compat::{ProtoFile, ServiceSpecInput, build_service_spec};
+use actr_service_compat::{
+    ProtoFile, ServiceSpecInput, build_self_contained_service_spec, build_service_spec,
+};
 use std::io::Read;
 
 use crate::error::{HyperError, HyperResult};
+
+/// Build the v2 spec from the selected signed RPC Proto, if present.
+pub(crate) fn calculate_v2_service_spec(
+    bytes: &[u8],
+    manifest: &ActorPackageManifest,
+    max_bytes: usize,
+) -> HyperResult<Option<ServiceSpec>> {
+    let Some(path) = manifest
+        .component_rpc_contract()
+        .map_err(|e| HyperError::InvalidManifest(e.to_string()))?
+    else {
+        return Ok(None);
+    };
+    let content = manifest
+        .read_declared_file(bytes, path, max_bytes)
+        .map_err(|e| HyperError::InvalidManifest(e.to_string()))?;
+    let content = String::from_utf8(content)
+        .map_err(|e| HyperError::InvalidManifest(format!("read Proto `{path}` as UTF-8: {e}")))?;
+    build_self_contained_service_spec(
+        &manifest.actor.name,
+        ProtoFile {
+            name: path.rsplit('/').next().unwrap_or(path).to_owned(),
+            content,
+            path: None,
+        },
+    )
+    .map(Some)
+    .map_err(|e| HyperError::InvalidManifest(format!("build v2 service spec: {e}")))
+}
 
 /// Build a [`ServiceSpec`] from the package's proto exports.
 ///

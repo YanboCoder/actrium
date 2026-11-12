@@ -1,0 +1,67 @@
+{
+  "schema": "actr.realm/v1",
+  "sequence": 1,
+  "realm": {
+    "name": "echo@realm.example",
+    "display_name": "Echo",
+    "status": "active"
+  },
+  "primary_package": "echo",
+  "front_package": "ui",
+  "packages": {
+    "echo": {
+      "href": "https://publisher.example/releases/echo/0.1.1/echo.actr",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "type": "publisher.example/echo@0.1.1"
+    },
+    "ui": {
+      "href": "https://publisher.example/releases/echo-ui/0.1.1/echo-ui.actr",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "type": "publisher.example/echo-ui@0.1.1"
+    }
+  },
+  "issuer": {
+    "url": "https://afp.example/issuer/realm.example/echo",
+    "keys": [
+      {
+        "id": "1",
+        "algorithm": "Ed25519",
+        "public_key": "7SU9OpD4tH8sgYgF7m2T/Yc6LUvPNYT0waSY4VKDDCY=",
+        "status": "active"
+      }
+    ]
+  },
+  "provider": {
+    "id": "afp.example",
+    "signaling": [
+      {
+        "url": "wss://afp.example/ws",
+        "priority": 10,
+        "control_plane_id": "afp.example/v1",
+        "ticket_audience": "signal-a"
+      }
+    ],
+    "ice": [
+      {
+        "urls": [
+          "stun:afp.example:3478"
+        ]
+      },
+      {
+        "urls": [
+          "turns:afp.example:5349"
+        ],
+        "credential_audience": "actr.turn"
+      }
+    ]
+  },
+  "policy": {
+    "membership": "invite-only"
+  },
+  "issued_at": "2026-11-12T08:00:00Z",
+  "signature": {
+    "key_id": "rs-demo-minimal-1",
+    "algorithm": "Ed25519",
+    "value": "FoqYHyzErsRTxTkWwQjQkvoWxtDVNUrC0rNqA5FmrOdltriAoK44nrNxKh8ZteNIImrwB+yB3japM3RLTGmkBA=="
+  }
+}

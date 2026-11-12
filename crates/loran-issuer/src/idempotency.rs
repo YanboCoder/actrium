@@ -542,14 +542,12 @@ impl ControlAttemptStore {
             .await
             .map_err(AttemptError::Refused)?;
 
-        if prepared.package
-            && let Some(target) = prepared.target.as_deref().filter(|t| !t.is_empty())
-        {
+        if prepared.package {
             sqlx::query(
                 "UPDATE issued_actor_identity SET target = ?1, auth_mode = ?2
                  WHERE realm = ?3 AND serial_number = ?4",
             )
-            .bind(target)
+            .bind(prepared.target.as_deref())
             .bind(actr_protocol::RegisterAuthMode::Package as i32)
             .bind(&actor_id.realm)
             .bind(actor_id.serial_number as i64)

@@ -12,11 +12,12 @@ entry = "workload/guest.js"
 [workload.keel]
 runtime = "js"
 guest-api = "keel.guest/1"
+capabilities = "ui/capability-manifest.json"
 
 [host]
 profile = "actr.host/1"
 api = "^1.0.0"
-required-capabilities = ["ui.render"]
+required-capabilities = ["service"]
 optional-capabilities = []
 
 [extensions.actrium]
@@ -33,5 +34,11 @@ key-id = "placeholder"
 path = "workload/guest.js"
 role = "workload"
 media-type = "text/javascript"
+size = 0
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+[[files]]
+path = "ui/capability-manifest.json"
+role = "profile"
+media-type = "application/json"
 size = 0
 sha256 = "0000000000000000000000000000000000000000000000000000000000000000"

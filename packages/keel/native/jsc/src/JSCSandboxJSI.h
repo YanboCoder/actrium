@@ -73,6 +73,16 @@ private:
     bool armedHere_ = false;
   };
 
+  // Identity-aware conversion state for host->guest conversion. Host objects
+  // on the current conversion path map to the guest value already built for
+  // them, so cycles reuse the same guest object instead of recursing.
+  struct ConversionState;
+  struct ConversionScope;
+  // Shared ownership of one guest Promise's resolving functions. The native
+  // side holds the only reference, so both entries are released as soon as
+  // the Promise settles.
+  struct PromiseBridge;
+
   void *jsContext_;    // JSContext* (opaque)
   void *contextGroup_; // JSContextGroupRef (opaque), owned by jsContext_'s VM
   jsi::Runtime *hostRuntime_;
@@ -90,6 +100,14 @@ private:
   std::atomic<bool> timeLimitFired_;
   bool disposed_;
   std::recursive_mutex mutex_;
+  // Weak references to in-flight guest Promise callback pairs. dispose()
+  // clears their strong guest references so none outlive the JSContext.
+  std::vector<std::weak_ptr<PromiseBridge>> promiseBridges_;
+  // JSValue* (retained) captured while the realm is pristine. Tenant code can
+  // replace globalThis.Error/Promise, so failure-path helpers must keep their
+  // own references instead of consulting guest globals.
+  void *errorFactory_;
+  void *promiseBridge_;
 
   // Callback storage for functions passed from host
   std::unordered_map<std::string, std::shared_ptr<jsi::Function>> callbacks_;
@@ -107,11 +125,45 @@ private:
   // Reserved: callback counter was used for proxy ID assignment.
   // Kept as comment for reference; remove once proxy approach is finalized.
 
-  void *jsiToJSValue(jsi::Runtime &rt, const jsi::Value &value);
+  void *jsiToJSValue(jsi::Runtime &rt, const jsi::Value &value,
+                     bool unwrapThenables = true);
+  void *jsiToJSValueImpl(jsi::Runtime &rt, const jsi::Value &value,
+                         bool unwrapThenables, ConversionState &state);
+  void *lookupConvertedObject(jsi::Runtime &rt, const jsi::Object &obj,
+                              ConversionState &state);
   jsi::Value jsValueToJSI(jsi::Runtime &rt, void *jsValue);
   jsi::Value jsValueToJSI(jsi::Runtime &rt, void *jsValue, int depth,
                           std::unordered_set<const void *> *visited = nullptr);
   void *wrapFunctionForSandbox(jsi::Runtime &rt, jsi::Function &&func);
+  // Store a guest function and return a host proxy that invokes it.
+  jsi::Value makeFunctionProxy(jsi::Runtime &rt, void *fn);
+  // Settlement proxies for one guest Promise. `resolveProxy` adopts
+  // thenables, `rejectProxy` never does. Conversion failures reject the
+  // guest Promise instead of escaping into the ignored host `.then` chain.
+  std::shared_ptr<PromiseBridge> makePromiseCallbacks(
+      jsi::Runtime &rt, void *resolve, void *reject, jsi::Value &resolveProxy,
+      jsi::Value &rejectProxy);
+  jsi::Value makeSettlementProxy(jsi::Runtime &rt,
+                                 const std::shared_ptr<PromiseBridge> &bridge,
+                                 bool isReject);
+  // Invoke a guest resolving function under the sandbox execution budget.
+  // Returns false when the budget fired; the context stays usable.
+  bool invokeSettlement(void *fn, void *arg);
+  // Lock the FIRST settlement attempt before any user-visible conversion.
+  // On success both out parameters receive +1 references (the caller transfers
+  // them with __bridge_transfer); re-entrant calls during conversion must not
+  // win a later settlement. Returns false when already settled.
+  bool beginSettlement(const std::shared_ptr<PromiseBridge> &bridge,
+                       void **resolveOut, void **rejectOut);
+  // Rebuild a host Error as a real sandbox Error. Returns nullptr when `obj`
+  // is not a host Error.
+  void *tryMakeSandboxError(jsi::Runtime &rt, const jsi::Object &obj,
+                            ConversionState &state);
+  // Convert the value thrown by the host into a sandbox rejection reason.
+  // Rejection reasons are values, never thenables to adopt.
+  void *sandboxRejectionReason(jsi::Runtime &rt, const jsi::JSError &error);
+  // Settle a sandbox promise through its reject callback.
+  void rejectSandboxPromise(void *rejectFn, void *reason);
 };
 
 /**

@@ -116,12 +116,19 @@ int main(int argc, const char *argv[]) {
       jsi::Value result =
           runtime->evaluateJavaScript(buffer, "sandbox_test.js");
 
-      // 6. Check result (the JS test returns true/false)
-      if (result.isBool() && result.getBool()) {
-        return 0; // Success
-      } else {
-        return 1; // Test failures
-      }
+      // 6. Run deferred assertions. Returning from the evaluation above hands
+      // control back to the runtime, which drains the host Promise microtasks
+      // that the single synchronous test script cannot observe.
+      auto phase2Buffer = std::make_shared<jsi::StringBuffer>(
+          "typeof __jscSandboxTestPhase2 === 'function'"
+          " ? __jscSandboxTestPhase2() : true");
+      jsi::Value phase2Result =
+          runtime->evaluateJavaScript(phase2Buffer, "sandbox_test_phase2.js");
+
+      // 7. Check results (the JS test returns true/false)
+      bool passed = result.isBool() && result.getBool() &&
+                    phase2Result.isBool() && phase2Result.getBool();
+      return passed ? 0 : 1;
 
     } catch (const jsi::JSError &e) {
       std::cerr << "JavaScript Error: " << e.getMessage() << std::endl;

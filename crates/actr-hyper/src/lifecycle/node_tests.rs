@@ -2048,7 +2048,9 @@ async fn component_explicit_boundary_non_empty_return_falls_back_to_return() {
     let mut inner = Inner::build(
         config,
         workload,
-        Some(component_package_manifest_for_test()),
+        Some(actr_pack::RuntimePackageManifest::Legacy(
+            component_package_manifest_for_test(),
+        )),
         None,
         None,
         100,

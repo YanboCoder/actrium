@@ -176,17 +176,13 @@ Contract 至少冻结：
 - output/declassification 规则；
 - 未知或失效证据的动作。
 
-签名的 Program Release 记录通过 `privacy_contract.sha256` 认证独立 Privacy Contract 的原始字节。
-验证器先校验内容哈希，再解释契约用于授权，并将发布身份和两个包摘要与记录核对。
-绑定和验证规则见[第 12 章 §3.1](12-reference-spec.zh.md#31-签名-program-release-记录)。
+使用 Program Privacy Contract 的 Service 将 `contracts/privacy.toml` 以 `contract` 角色列入包内签名清单。授权前，校验契约文件的大小和 SHA-256，核对 `release_id` 与选定 Service 类型一致，并检查所选 Actor 符合契约。授权决定绑定契约摘要和两个已验证的整包摘要。选包变化时重新评估。
 
 ```toml
 [privacy_contract]
 schema_version = 1
 contract_id = "notes.example/team-notes@1.4.2#privacy"
 release_id = "notes.example/team-notes@1.4.2"
-service_package_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-front_package_digest = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
 
 [[privacy_contract.actor_role]]
 role = "service"

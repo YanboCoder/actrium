@@ -199,12 +199,16 @@ message RegisterRequest {
   // clients via RouteCandidatesResponse so they can connect without a relay.
   optional string ws_address = 6;
 
-  // Raw manifest bytes (original `actr.toml` from the `.actr` package) for Publisher signature verification.
+  // Original manifest.toml bytes from the .actr package, without reserialization.
+  // Supports actr-package/2 ([actor], [workload], [host], [signature]) and
+  // the existing unversioned binary manifest. Explicit versions never fall back.
   optional bytes manifest_raw = 10;
   // Ed25519 signature over the manifest contents produced by the Publisher, 64 bytes.
   optional bytes publisher_signature = 11;
-  // Target platform (e.g. "wasm32-wasip1", "x86_64-unknown-linux-gnu").
-  // Extracted from manifest binary.target for Issuer lookup path verification.
+  // Legacy binary target: required and equal to the signed binary.target for
+  // unversioned manifests. MUST be omitted for actr-package/2 (even an empty
+  // string is rejected); its execution requirements are signed workload/host
+  // profiles and are checked by the Host, not inferred from a target triple.
   optional string target = 13;
   // Explicit authentication source. Omitted/UNSPECIFIED is treated as PACKAGE
   // for backward compatibility with older package clients.
@@ -220,7 +224,8 @@ message RegisterRequest {
   reserved "publisher_auth_signature", "publisher_auth_signed_at", "publisher_auth_nonce";
 
   // Ed25519 public key (32 bytes) that signed manifest_raw. Its key id must equal
-  // the manifest's signing_key_id. Issuer uses it only when that key id does not
+  // signature.key-id (v2), or signing_key_id (unversioned). Issuer uses it only
+  // when that key id does not
   // resolve to a trusted Publisher key; the package then registers as a
   // development identity.
   optional bytes signing_public_key = 18;

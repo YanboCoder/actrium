@@ -85,75 +85,7 @@ https://notes.example/.well-known/actr
 
 ## 3. 包下载
 
-Realm Profile 的 `package` 指定实例的 Service 包（样例见 §6.2）。
-
-```json
-{
-  "package": {
-    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
-    "type": "notes.example/team-notes@1.4.2"
-  }
-}
-```
-
-Actrium 按 [Realm Profile 协议](../../../actr/protocols/realm-profile.zh.md)第 6 节下载 `href`（不带 credential 的 HTTPS GET）、核对 `sha256`，再用 Publisher Profile（§2）中的包签名 key 验证 manifest 签名；manifest 声明的 Actor 类型即该实例的程序。下载地址可以在任何位置（Publisher CDN、Loran 包托管、对象存储），不是信任源。
-
-Actrium 按 Service 包的 Actor 类型和 SHA-256 匹配 Publisher 签名的 Program Release 记录，
-再独立验证该记录固定的 Front 包。
-
-### 3.1 签名 Program Release 记录
-
-发布记录分别标识两个包。以下归档的 SHA-256 和签名均为示例值。
-
-```json
-{
-  "schema": "actrium.program-release/v1",
-  "release_id": "notes.example/team-notes@1.4.2",
-  "service": {
-    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
-    "type": "notes.example/team-notes@1.4.2"
-  },
-  "front": {
-    "href": "https://cdn.notes.example/team-notes-front-1.4.2.actr",
-    "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
-    "type": "notes.example/team-notes-front@1.4.2"
-  },
-  "privacy_contract": {
-    "href": "https://cdn.notes.example/team-notes-1.4.2.privacy.toml",
-    "sha256": "0f9e4a476a26c7d6896f8be66f3dec4ebfb3168addde52d3ff339662e12d2147"
-  },
-  "signature": {
-    "key_id": "actr-pub-3f9a1c0d2b7e4a61",
-    "algorithm": "Ed25519",
-    "value": "<base64>"
-  }
-}
-```
-
-`schema` 为 `actrium.program-release/v1`。`release_id` 是 `publisher/program@version` 形式的
-Service Actor 类型。两个包使用不同的 Actor 类型，均归属该 Publisher。`service` 与 `front` 标识包角色，
-并分别绑定 HTTPS 下载地址、SHA-256 和精确的 Actor 类型。
-同一发布版本固定两个包的类型和摘要，以及是否携带 Privacy Contract 和该契约的摘要。下载地址可变。
-
-Publisher 使用 Publisher Profile 的 `keys` 中状态为 `active` 的包签名 key 签署发布记录。
-签名覆盖去掉 `signature` 成员后按 RFC 8785 JCS 规范化的记录，签名值为 Ed25519 签名的 base64 编码。
-Actrium 按 `signature.key_id` 选择已信任的 Publisher key，并沿用包签名的 key 接受和吊销规则。
-
-Workspace 要求由签名的 Service manifest 中的 `[workspace]` 声明，
-见[第 03 章 §5.3](03-user-experience.zh.md#53-workspace-选择)。
-
-使用 Program Privacy Contract 的发布版本，必须在签名记录的 `privacy_contract` 中提供该文件的
-HTTPS 地址和原始字节的 SHA-256。Actrium 先验证发布记录，再按其摘要校验获取的契约内容，
-随后才能使用其中的授权声明。它还会核对契约的 `release_id` 和两个包摘要是否匹配发布记录。
-契约内容和绑定均验证通过后，Host 才能授予受该契约约束的能力。
-见[第 14 章 §4.2](14-privacy-primitives-and-attestation.zh.md#42-program-privacy-contract)。
-
-Actrium 可使用已验证的本地记录，或从 Publisher、Marketplace 取得记录。打开 Realm 时，
-记录的 `service.type` 和 `service.sha256` 必须匹配 `Realm Profile.package`。
-安装正式发布版本需要已验证且匹配的发布记录。已接受的发布版本出现冲突的包或 Privacy Contract 绑定时，Actrium 必须拒绝。
-包的选择流程见[第 05 章 §3](05-program-package-and-distribution.zh.md#3-包从哪来)。
+从已验证的 Realm Profile 解析 `primary_package` 和 `front_package`。逐包以不带凭据的 HTTPS 获取 `href`，核对整包 SHA-256，并用精确 Actor 类型所属 Publisher 的公钥验证 `manifest.sig`。加载前核对 Front 必需的 Service 依赖和 RPC 契约。完整示例见 [§6.2](#62-realm-profile)。
 
 ## 4. `.actr` Manifest
 
@@ -203,6 +135,13 @@ role = "contract"
 media-type = "text/plain"
 size = 1204
 sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+
+[[files]]
+path = "contracts/privacy.toml"
+role = "contract"
+media-type = "application/toml"
+size = 530
+sha256 = "50037be0a33ed2265fe5a79b3f6a0b36762d81de6bff066ea33c6a9d21f0f171"
 ```
 
 ### 4.2 Front 包
@@ -391,78 +330,7 @@ https://acme.com/.well-known/actr
 
 ### 6.2 Realm Profile
 
-入口为 `realms` relation 的 `href` 加 `realm_id`：
-
-```text
-https://realms.provider.example/acme.com/k7m2q9xh
-```
-
-样例：
-
-```json
-{
-  "schema": "actr.realm/v1",
-  "sequence": 31,
-  "realm": {
-    "name": "k7m2q9xh@acme.com",
-    "display_name": "Acme Notes",
-    "status": "active"
-  },
-  "package": {
-    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
-    "type": "notes.example/team-notes@1.4.2"
-  },
-  "issuer": {
-    "url": "https://identity.provider.example/realms/acme.com/k7m2q9xh",
-    "keys": [
-      {
-        "id": "7",
-        "algorithm": "Ed25519",
-        "public_key": "<base64>",
-        "status": "active"
-      }
-    ]
-  },
-  "provider": {
-    "id": "provider.example",
-    "signaling": [
-      {
-        "url": "wss://signal-a.provider.example/ws",
-        "priority": 10,
-        "control_plane_id": "provider.example/v1",
-        "ticket_audience": "signal-a"
-      },
-      {
-        "url": "wss://signal-b.provider.example:8443/ws",
-        "priority": 20,
-        "control_plane_id": "provider.example/v1",
-        "ticket_audience": "signal-b"
-      }
-    ],
-    "ice": [
-      {
-        "urls": ["stun:stun.provider.example:3478"]
-      },
-      {
-        "urls": ["turns:turn.provider.example:5349"],
-        "credential_audience": "turn-pool-1"
-      }
-    ]
-  },
-  "policy": {
-    "membership": "invite-only"
-  },
-  "issued_at": "2026-07-29T00:00:00Z",
-  "signature": {
-    "key_id": "rs-2026-1",
-    "algorithm": "Ed25519",
-    "value": "<base64>"
-  }
-}
-```
-
-`signature` 由 `realm_signing_keys` 中的 `active` key 签署；Actor credential 的 issuer 即 `realm.name`，存放位置不影响有效性；由后来退役的 key 签发的既有 Realm Profile 在被更高 `sequence` 取代前仍有效。Realm Profile 不设过期时间，回滚保护只靠 `sequence`；`provider.id` 是 Actr Facility Provider 的规范化 DNS authority，在 Realm 生命周期内不可变。多个 signaling endpoint 共享 `control_plane_id`，表示它们是同一 Actr Facility Provider presence/control plane 的副本或故障切换入口，而不是 v1 federation。`package` 固定该实例的 Service 包（§3）。升级程序时发布指向新 Service 包、`sequence` 更高的 Realm Profile。同一 Actr Facility Provider 下轮换 Realm issuer key 或变更端点时同样发布更高 `sequence` 的 Realm Profile；退役时发布 `status` 为 `retired` 的新 Realm Profile，永久有效。
+[Echo 的完整签名示例](../../../actr/protocols/examples/realm-profile.json)用 `primary_package: "echo"` 选择 Service，用 `front_package: "ui"` 选择 Front。Realm 签署整份 Profile，更换选择时递增 `sequence` 并重签。测试公钥和字段定义见 [Realm Profile §4](../../../actr/protocols/realm-profile.zh.md#4-realm-profile-格式)。
 
 ## 7. Service Inventory Record
 

@@ -20,9 +20,9 @@
 | ID | 需求 |
 |---|---|
 | FR-URI-001 | 必须支持 Realm 链接 `actr://<Realm 域名>/<realm_id>[/<页面路径>][?…][#…]`；RealmId 之后的部分原样交给应用。 |
-| FR-URI-002 | 打开 Realm 链接必须验证 Realm Profile、其中指定的 Service 包、匹配的 Program Release 记录及 Front 包。随后在该 Realm 内按 Service 的 Actor 类型找到实例并 Attach。 |
+| FR-URI-002 | 打开 Realm 链接时必须验证签名 Profile 和选中的两个包，核对 Front 的 Service 依赖，再 Attach 到该 Realm 的 Service。 |
 | FR-URI-003 | Attach 失败不得 LB、降级版本、换 Realm 或创建替代实例。 |
-| FR-URI-004 | Service 的 Actor 类型必须与 Realm Profile 所指包声明的 Actor 类型一致。 |
+| FR-URI-004 | Service 的 Actor 类型必须匹配主包的 manifest。 |
 | FR-URI-005 | Realm 链接不得包含 credential、session secret、Workspace secret 或 bearer invite。 |
 | FR-URI-006 | Realm 链接不得含端口；开发来源只通过包地址（localhost、回环地址或私有 CA）区分。 |
 | FR-URI-007 | Realm 链接的输入与分享只能使用 `actr://`；`https://` 输入必须以 `URI_SCHEME_INVALID` 拒绝，不得通过 `links` 转换。 |
@@ -34,19 +34,29 @@
 | ID | 需求 |
 |---|---|
 | FR-PKG-001 | Program Catalog 与 Service Inventory 必须分开。 |
-| FR-PKG-002 | 发布版本必须提供 Publisher 签名记录，绑定两个包的类型和摘要。通过 Realm 打开时，记录中的 Service 包必须匹配 Realm Profile 的 `package`。 |
-| FR-PKG-003 | 每个 Program Release 必须固定 Service 和 Front 两个包的摘要。 |
+| FR-PKG-002 | Realm 必须签署本实例的 Service 和 Front 选择。选中归档的类型与摘要必须符合各自条目。 |
+| FR-PKG-003 | 每个已发布的 Actor 包版本必须固定一个整包摘要。 |
 | FR-PKG-004 | 每份 `.actr` 清单必须声明一个 Actor 类型和一个 Workload，并校验 Publisher key、清单签名和所有文件哈希。 |
 | FR-PKG-005 | 必须拒绝 zip traversal、超限文件数、解压总量和压缩炸弹。 |
 | FR-PKG-006 | 第三方 package 不得包含 Front Host/native plugin。 |
 | FR-PKG-007 | Guest 必须从已验证本地 bytes 加载，不得由 Keel 直接信任远端 URL。 |
-| FR-PKG-008 | 同一 Program Release 的 Service、Front 或 Privacy Contract 绑定发生变化时必须拒绝。 |
-| FR-PKG-009 | Service 实例仍在引用发布版本时，必须保留 Service、Front 包及绑定的 Privacy Contract 缓存。 |
+| FR-PKG-008 | 同一精确 Actor 类型已被接受后，安装不同摘要的归档必须失败。 |
+| FR-PKG-009 | 实例引用的归档及其已验证的契约必须保留在缓存中。 |
 | FR-PKG-010 | Marketplace metadata 不得覆盖 Publisher package identity。 |
 | FR-PKG-011 | Product v1 的本地导入必须支持配套的 Service 与 Front `.actr` 文件。开发来源必须明确标记。 |
 | FR-PKG-012 | 必须支持 Advisory/Block new/Quarantine/Critical block 撤销等级。 |
 | FR-PKG-013 | Publisher bootstrap 必须固定 HTTPS 443；Publisher Profile 必须有规范化签名、序号/时效和回滚保护。 |
-| FR-PKG-014 | 官方发布工具必须构建、验证并签名两个包，发布签名记录，再回读核对两个包的 SHA-256 与签名。 |
+| FR-PKG-014 | 发布工具必须分别签署归档，发布后回读核对整包摘要和清单签名。 |
+| FR-PKG-015 | `primary_package` 和 `front_package` 必须分别指向 `packages` 中不同的 Service 和 Front 条目。 |
+| FR-PKG-016 | 选择字段及归档引用必须通过 Realm Profile §4.2 的结构、数量、大小和一致性校验。 |
+| FR-PKG-017 | 接收方必须拒绝重复 JSON 键，保存已签名的 Profile，并用完整 JCS payload 验签和比较相同 `sequence` 的内容。 |
+| FR-PKG-018 | 生效的 Profile 必须包含两个引用及包表。已退役的 Profile 可整体省略包选择。 |
+| FR-PKG-019 | 所选包必须满足依赖版本、精确锁，以及 Front 为必需 Service 声明的 RPC 契约。 |
+| FR-PKG-020 | 每个执行包独立验证；清单不自动启动、授权或撤销 Actor。 |
+| FR-PKG-021 | 变更选择时必须整体提交两个引用和完整包表，递增 `sequence` 并重签。仅修改元数据或轮换密钥时保留原选择。 |
+| FR-PKG-022 | AFP 必须先解析主包条目。该程序的任意版本都只允许 owner 客户端注册。 |
+| FR-PKG-023 | 创建或更新后，调用方必须核对签名 Profile 中的两个引用及完整包表与请求一致。 |
+| FR-PKG-024 | 主包程序身份保持不变；升级不允许同一不可变发布换摘要，镜像变化仍需重签。 |
 
 ### 1.4 Front/Keel
 
@@ -104,7 +114,7 @@
 | FR-NET-015 | Realm 域名 bootstrap（`https://<domain>/.well-known/actr`）必须固定 HTTPS 443，并以 Realm 签名 key 轮换链与 Realm Profile 序号防回滚（Realm Profile 不设过期时间）。 |
 | FR-NET-016 | Actrium 必须提供域名信任、经 Realm 邀请加入实例 Realm、添加客户端、重新认证、客户端撤销、成员管理（仅 owner）、离开、owner 恢复和 Realm 签名 key 变化处置流程。 |
 | FR-NET-017 | 新建实例必须在所选域名下新建一个 Realm；RealmId 在域名内唯一、创建后不可修改、退役后不复用。 |
-| FR-NET-018 | Service 升级为新 Program Release 时，Realm 必须发布 `package` 指向新包的 Realm Profile，新 Service 必须创建在同一 Realm；迁移到另一个 Realm 必须产生新 ActorId。 |
+| FR-NET-018 | Service 升级时，须在更高 `sequence` 的签名 Profile 中发布含新主包的完整包选择，并在同一 Realm 创建 Service。迁移到其他 Realm 必须产生新 ActorId。 |
 | FR-NET-019 | 取不到、验不过或已退役的 Realm Profile 时，Actrium 不得使用 Realm Profile 以外的任何 Actr Facility Provider（包括 authority descriptor `services` 中的服务）与该 Realm 通信。 |
 | FR-NET-020 | 新建实例所选的 Realm 域名必须已受信，或在新建确认页完成首次信任；没有域名不分配 Realm（本机 Realm 除外）；创建须经该 Realm 域名的 Realm 签名 key 持有方授权：其他 Realm 域名由持有方的签名服务签署 Actr 管理信封，确认页显示信任根为该 Realm 域名；Realm 域名等于或属于 Actr Facility Provider ID 时，v1 只由该 Actr Facility Provider 的运营者创建，用户以其交付的 owner 邀请加入，确认页显示其为信任根。 |
 | FR-NET-021 | 每个联网 Realm 必须恰好一个 owner（创建者或经转让得到者）；owner 转让必须原子完成，原 owner 默认改为 editor；owner 离开前必须先转让，且不能撤销自己最后一个客户端；多 owner 不属于 v1。 |
@@ -161,7 +171,7 @@
 | FR-SEC-043 | Evidence、Attestation Result、Reference Value、Endorsement 或 TCB 状态到期/撤销时必须停止新的敏感数据与 key release，并触发 re-attestation/rekey。 |
 | FR-SEC-044 | 高敏输出跨越 data class 时必须经过显式 declassification/output policy；合法 Actor response 不得成为绕过 egress closure 的隐蔽出口。 |
 | FR-SEC-045 | 绿色必须绑定当前 `ApplicationStateDigest`（`structureDigest` + Principal + Merkle 根）且 `Ready`；不得给 Publisher 或 Program 笼统绿标。 |
-| FR-SEC-046 | Program Privacy Contract 必须静态声明允许的 Actor roles/types/profiles、cardinality、edges、data classes、capabilities、terminals、audit sinks 和 assurance requirements。Host 将其用于授权前，必须按签名 Program Release 记录验证契约原始字节的 SHA-256，并核对发布版本和包绑定。 |
+| FR-SEC-046 | Program Privacy Contract 必须静态声明允许的 Actor roles/types/profiles、cardinality、edges、data classes、capabilities、terminals、audit sinks 和 assurance requirements。授权前，Host 必须按 Service 包内的签名清单验证契约，并对选定的两个包评估。 |
 | FR-SEC-047 | Actr Host 可发放的有效 capability 必须是 Contract、用户/组织 policy、Host policy 和 instance grant 的交集；未声明能力不得获得 handle。 |
 | FR-SEC-048 | 实际 Actor/runtime 图必须是 Contract graph grammar 的实例；所有 mutation 必须先形成 candidate graph，不得直接改变已获批数据图。 |
 | FR-SEC-049 | 初始图必须在释放受保护数据或 DEK 前完成身份、证据、策略和 `ApplicationAssurance` 评估。 |
@@ -292,8 +302,8 @@
 
 ### AC-005：同版本异包
 
-**Given** 本地已固定一个 Program Release 的 Service 和 Front 包摘要<br>
-**When** 同一 Program Release 的任一包出现不同摘要<br>
+**Given** 本地已固定一个精确 Actor 包类型的整包摘要<br>
+**When** 相同 Actor 类型和版本的归档出现不同摘要<br>
 **Then** 以 `PACKAGE_EQUIVOCATION` 阻止安装和运行变更的归档，保留原有摘要供审计。
 
 ### AC-006：Front Guest 越权
@@ -564,7 +574,7 @@
 
 **Given** 用户已信任域名 `team.example`<br>
 **When** 选择 `notes.example/team-notes@1.4.2`，以 `team.example` 为 Realm 域名新建实例并确认<br>
-**Then** 在 `team.example` 下新建一个 Realm（如 `k7m2q9xh@team.example`），其 Realm Profile 的 `package` 指向所选包，地址栏显示 `actr://team.example/k7m2q9xh`；再次新建得到另一个 Realm，而不是复用前者。
+**Then** 在 `team.example` 下新建一个 Realm（如 `k7m2q9xh@team.example`），其 Realm Profile 指定所选 Service 和 Front 包，地址栏显示 `actr://team.example/k7m2q9xh`；再次新建得到另一个 Realm，而不是复用前者。
 
 ### AC-052：Realm 与 Actr Facility Provider 绑定
 
@@ -720,3 +730,16 @@ Linux/通用服务器宿主、云端自动调度、浏览器 Web 版和跨 Realm
 | Workspace 不被 UI/删除误伤 | FR-SVC-005—016、FR-SEC-009 | AC-013—015、AC-023 | P2-B |
 | Guest 可运行但不越界 | FR-FRONT-002—010、NFR-SEC-001—004 | AC-006、AC-007 | P2-A、P4 |
 | 应用实例隐私快照与动态图重评 | FR-SEC-014—059、NFR-SEC-007—014 | AC-024—050 | P0、P1-A、P2、P3-A、P4 |
+
+## 8. 包选择验收
+
+| 场景 | 必须满足的结果 |
+| --- | --- |
+| Service、Front 与辅助包 | 两项清单按引用解析 Service 和 Front。加入辅助包后仍由这两个引用决定角色。 |
+| 无效包选择 | 拒绝缺失、相同或悬空的引用、相同的所选类型、非法条目、重复键、冲突摘要以及数量或大小超限。 |
+| 签名与回滚 | 拒绝条目被篡改、序号回退或同序号内容不同的 Profile。退役是终态。 |
+| 更新 | 仅更换 Front 时，签发序号更高的 Profile，沿用 Service 身份。仅更换端点或轮换密钥时保留两个引用和包表。 |
+| Publisher 验证 | 加载前拒绝被篡改的归档、无效清单签名、不匹配的 Service 依赖或 RPC 契约。复用缓存时复核策略。 |
+| 注册 | 主程序的任意版本仅允许 owner 客户端注册。主引用无效时拒绝注册。成员身份和能力授权单独校验。 |
+| 多 Actor | 按授权配置启动 Service 和两个不同包的辅助 Actor，各自持有独立身份和状态，能完成 RPC。重复部署不产生重复实例。 |
+| Host 支持 | Host 在执行前拒绝不支持的包格式或 workload。 |

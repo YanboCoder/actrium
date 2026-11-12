@@ -47,8 +47,7 @@ An immutable version of a program:
 ProgramReleaseId = publisher/program@version
 ```
 
-The Publisher-signed release record pins the Service and Front package digests. The packages
-carry their respective Workloads, contracts, and Host requirements. The Service manifest declares
+Each Actor package version pins one archive digest. The packages carry their respective Workloads, contracts and Host requirements. The Service manifest declares
 static Workspace requirements in `[workspace]`. Actrium applies provisioning, actual grants,
 quotas, and other instance policies through deployment and authorization.
 
@@ -57,7 +56,7 @@ quotas, and other instance policies through deployment and authorization.
 The instance's Service: exactly one per Realm, created together with the Realm:
 
 - has a durable `ActorId`;
-- always runs the package the Realm Profile's `package` points to;
+- always runs the package the Realm Profile's resolved primary `packages[primary_package]` points to;
 - holds the Workspace capability;
 - holds the instance's configuration and access control;
 - its lifecycle is independent of Tab;
@@ -119,12 +118,14 @@ Realm name = <realm_id>@<domain>                      # networked, e.g. k7m2q9xh
 ```
 
 - The Realm domain belongs to its owner and serves only as a naturally unique, ownership-verifiable name; it carries no infrastructure. A local Realm uses the pseudo-domain `<installation-id>.actr.alt` (generated at random at install time, never resolved via DNS), belonging to that Actrium installation;
-- the domain's Realm signing key is the long-term trust root for every Realm under that domain and signs each Realm Profile. Its `package` records the Service package's download location, SHA-256, and Actor type.
+- the domain's Realm signing key is the long-term trust root for its Realm Profiles and signs each instance's package selection.
 - the RealmId is unique within the domain, immutable after creation, and never reused after retirement;
 - one Actr Facility Provider (Signaling, TURN, Issuer) hosts a large number of Realms; a Realm is bound to one Actr Facility Provider at creation and can never switch afterward;
 - the Actr Facility Provider records the members of a networked Realm: exactly one owner (the creator, transferable), the rest editors or viewers; members join with a one-time Realm invitation, and each client registers one Realm client key. A local Realm has no members.
 
 A Publisher domain names a program (who publishes it); a Realm domain names a deployment (who operates it). The same Program Release can run at `notes@acme.com` and also at `notes@foo.org`.
+
+The Realm selects its Service and Front using `primary_package` and `front_package` in `packages`. Authorized deployment configuration determines which Actors run. See [Realm Profile §4](../../../actr/protocols/realm-profile.md#4-profile-format).
 
 ## 3. The precise definition of "Tab–Service 1:1"
 
@@ -246,7 +247,7 @@ Actrium's local database may have a `record_id` for pure storage purposes, but i
 | Business state | Service | Never held in the Front |
 | Workspace content | Workspace Provider | Accessed via the Service's capability |
 | Workspace binding | Service | Cannot be rebound by the Front |
-| Program Release metadata | Program Catalog | The verified release record pins the Service and Front package digests |
+| Program Release metadata | Program Catalog | Verified Actor type and digest for each archive |
 | Actor long-term private key | Secure storage | Never enters ordinary SQLite |
 | Realm domain trust (Realm signing key pin) | Actrium Realm Manager | Fixed after first confirmation; updated only via the signed rotation chain |
 | Realm client key | Secure storage | Independent per Realm (i.e. per instance); registering it with the Actr Facility Provider constitutes Realm membership; revocable |
@@ -263,9 +264,9 @@ Three actions must be kept separate:
 
 Creating an instance is a local Actrium operation; it is never triggered by a link:
 
-1. the user selects a Program Release or provides both packages for local development. Actrium verifies the Service and Front packages.
+1. Choose Service and Front packages from the catalog or local files. Actrium verifies both.
 2. choose a Realm domain (a local Realm is created by default), generate a random RealmId (the user may explicitly change it to a readable name), and choose a Workspace;
-3. Create a Realm under that domain. A local Realm creates a record on the device. Other Realms require authorization from the Realm signing key holder. The Realm Profile's `package` records the verified Service package's address, SHA-256, and Actor type.
+3. Create the Realm under the chosen domain. A local Realm stores the selection on the device. For a networked Realm, the signing key holder authorizes creation and signs the Profile with both package references.
 4. create the Service inside that Realm and obtain its durable ActorId;
 5. use it to create the Front session; the address bar shows the instance's Realm link.
 
@@ -273,19 +274,17 @@ Steps 3–4 form one transaction keyed by `idempotency_key`, executed strictly i
 
 A new instance always means a new Realm. An upgrade creates a new Service in the same Realm with
 the existing membership and application permissions. Its ActorId changes according to the migration
-rules. After confirming the switch, the Realm publishes a Profile whose `package` points to the new
-Service archive. The matching release record pins its Front package.
+rules. After confirming the switch, the Realm publishes the complete package selection in a newly signed,
+higher-sequence Profile. The primary entry identifies the upgraded Service archive.
 
 ### 6.2 Open instance
 
-To open a Realm link `actr://<domain>/<realm_id>[…]`, verify the Realm Profile and the Service package
-identified by `package`, then verify the Front package pinned by the matching Program Release record.
-Find the Service inside the Realm by the Service package's Actor type and Attach.
+To open a Realm link, verify its Profile and both selected packages. Find the Service in the Realm by its Actor type and Attach from the selected Front.
 
 - no load balancing, no switching to another Realm;
 - never creates a new instance because of offline;
-- there must be exactly one Actor of the package's type in that Realm; zero or more than one is an error, and it never picks among them;
-- an Actor link connects directly to the Actor it names, and is rejected if its type does not match the package;
+- there must be exactly one Actor of the Service package's type in that Realm; zero or more than one is an error, and it never picks among them;
+- an Actor link connects directly to the Actor it names, and is rejected if its type does not match the Service package;
 - if the Realm domain is not yet trusted, ask the user to confirm it; if the user has not yet joined that Realm, go through the Realm invitation/join flow.
 
 Discovery by Actor type is scoped to this Realm; v1 does no cross-Realm discovery.

@@ -245,6 +245,11 @@ STUN/TURN credential、用户 credential 或安装设备信息。
 Profile 可以定义额外的 `[workload.<profile-section>]` 字段，但不能改变基础字段含义。
 Workload entry 必须由 `files` 列表绑定，并且其 role 必须为 `workload`。
 
+`actr.component/1` 可通过 `workload.rpc-contract` 指定对外发布的自包含 RPC Proto。
+该路径必须在签名的 `files` 中声明为 role `contract`，并以 `.proto` 结尾。
+依赖与本地导出可以引用同一文件。省略 `rpc-contract` 时，Host 从未被依赖引用的
+`contract` Proto 中选择唯一的导出。没有候选文件时不发布 RPC 契约，有多个候选文件时必须显式选择。
+
 加载器不支持声明的 Workload Profile 时 **MUST** 返回明确的 unsupported-profile 错误，
 不能将其当作普通资源运行。
 
@@ -540,10 +545,9 @@ Package 只声明 Actr Host contract 和 capability 要求，不以普通 Actor 
 
 ## 10. 分发与依赖组合
 
-用户打开 Realm 链接时，Actr Host 按该 Realm 的 Realm Profile 中 `package` 给出的地址取得根
-`.actr`，核对 SHA-256 后按本规范验证（[Actr Realm Profile](realm-profile.zh.md) 第 6 节）。
+Realm Profile 选定 Service 和 Front。Host 核对每个加载包的整包摘要、包内 `manifest.sig` 和依赖锁。见 [Realm Profile §6](realm-profile.zh.md#6-使用-realm)。
 
-用户可以只取得一个根 `.actr`。Installer 根据其 lock file 递归取得所需 Actor Package：
+独立安装时，Installer 从根包的 lock file 递归获取依赖。下例以 Guest 包 `notes.actr` 为根。
 
 ```text
 notes.actr                 keel.guest/1

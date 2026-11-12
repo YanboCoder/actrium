@@ -11,7 +11,10 @@
 //! file name — matching the convention used by manifest-emitted proto
 //! descriptors across the codebase.
 
-use crate::{Fingerprint, ProtoFile, Result};
+use crate::{CompatibilityError, Fingerprint, ProtoFile, Result};
+use actr_protocol::service_spec::Protobuf;
+use anyhow::{Context, bail};
+use sha2::{Digest, Sha256};
 
 /// Inputs for [`build_service_spec`].
 ///
@@ -51,30 +54,99 @@ pub fn build_service_spec(input: ServiceSpecInput<'_>) -> Result<actr_protocol::
 
     let protobufs = proto_files
         .iter()
-        .map(|pf| {
-            let file_fingerprint = Fingerprint::calculate_proto_semantic_fingerprint(&pf.content)
+        .map(|proto| {
+            let fingerprint = Fingerprint::calculate_proto_semantic_fingerprint(&proto.content)
                 .unwrap_or_else(|_| "error".to_string());
-            actr_protocol::service_spec::Protobuf {
-                package: pf.name.trim_end_matches(".proto").to_string(),
-                content: pf.content.clone(),
-                fingerprint: file_fingerprint,
-            }
+            make_protobuf(proto, fingerprint)
         })
         .collect();
 
+    Ok(assemble_spec(
+        name,
+        description,
+        tags,
+        fingerprint,
+        protobufs,
+    ))
+}
+
+/// Build the spec for one RPC Proto from authenticated package contents.
+/// Imports are rejected before type resolution. Fingerprint the parsed
+/// descriptor directly so only the package's signed source is read.
+pub fn build_self_contained_service_spec(
+    name: &str,
+    proto: ProtoFile,
+) -> Result<actr_protocol::ServiceSpec> {
+    let hash = self_contained_proto_hash(&proto.content).map_err(|source| {
+        CompatibilityError::ProtoParseError {
+            file_name: proto.name.clone(),
+            source,
+        }
+    })?;
+    let fingerprint = format!(
+        "service_semantic:{:x}",
+        Sha256::digest(format!("{}:{hash}", proto.name))
+    );
+    Ok(assemble_spec(
+        name,
+        None,
+        vec![],
+        fingerprint,
+        vec![make_protobuf(&proto, format!("semantic:{hash}"))],
+    ))
+}
+
+fn self_contained_proto_hash(source: &str) -> anyhow::Result<String> {
+    let dependencies = protobuf_parse::pure::parse_dependencies(source)?;
+    if !dependencies.dependency.is_empty() {
+        bail!("the RPC Proto must be self-contained; imports are unsupported");
+    }
+    let dir = tempfile::tempdir()?;
+    let input = dir.path().join("input.proto");
+    std::fs::write(&input, source)?;
+    let descriptors = protobuf_parse::Parser::new()
+        .pure()
+        .include(dir.path())
+        .input(input)
+        .file_descriptor_set()?;
+    let descriptor = descriptors
+        .file
+        .iter()
+        .find(|file| file.name() == "input.proto")
+        .context("missing descriptor for input.proto")?;
+    let canonical = proto_fingerprint::normalize::normalize_file(descriptor);
+    let encoded = serde_json::to_string_pretty(&canonical)?;
+    Ok(format!("{:x}", Sha256::digest(encoded)))
+}
+
+fn make_protobuf(proto: &ProtoFile, fingerprint: String) -> Protobuf {
+    Protobuf {
+        package: proto.name.trim_end_matches(".proto").to_string(),
+        content: proto.content.clone(),
+        fingerprint,
+    }
+}
+
+fn assemble_spec(
+    name: &str,
+    description: Option<String>,
+    tags: Vec<String>,
+    fingerprint: String,
+    protobufs: Vec<Protobuf>,
+) -> actr_protocol::ServiceSpec {
     let published_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()
         .map(|d| d.as_secs() as i64);
 
-    Ok(actr_protocol::ServiceSpec {
+    actr_protocol::ServiceSpec {
         name: name.to_string(),
         description,
         fingerprint,
         protobufs,
         published_at,
         tags,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -92,6 +164,29 @@ mod tests {
         package demo;
         message Pong { string text = 1; }
     "#;
+
+    #[test]
+    fn signed_proto_spec_keeps_the_legacy_fingerprint() {
+        let proto = ProtoFile {
+            name: "ping.proto".to_owned(),
+            content: PROTO_A.to_owned(),
+            path: None,
+        };
+        let legacy = build_service_spec(ServiceSpecInput {
+            name: "echo",
+            description: None,
+            tags: vec![],
+            proto_files: vec![proto.clone()],
+        })
+        .unwrap();
+        let signed = build_self_contained_service_spec("echo", proto.clone()).unwrap();
+        assert_eq!(signed.fingerprint, legacy.fingerprint);
+        assert_eq!(signed.protobufs, legacy.protobufs);
+
+        let mut imported = proto;
+        imported.content.push_str("\nimport \"other.proto\";");
+        assert!(build_self_contained_service_spec("echo", imported).is_err());
+    }
 
     #[test]
     fn builds_spec_with_fingerprints() {

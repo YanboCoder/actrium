@@ -653,6 +653,7 @@ struct MultiProcessTabView: View {
                     url: tab.url?.absoluteString,
                     htmlContent: tab.htmlContent,
                     unifiedScript: tab.unifiedScript,
+                    capabilityManifestJSON: tab.capabilityManifestJSON,
                     leftPanelScript: tab.leftPanelScript,
                     rightPanelScript: tab.rightPanelScript,
                     backgroundColor: tab.backgroundColor,

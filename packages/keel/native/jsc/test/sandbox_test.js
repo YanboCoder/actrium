@@ -383,6 +383,490 @@
     console.log(`  ⚠ Promise tests skipped: ${e.message}`);
   }
 
+  // 24b. Host thenable conversion
+  console.log('\n24b. Host thenable conversion');
+  var thenableCalls = 0;
+  var hostThenable = {
+    value: 42,
+    // biome-ignore lint/suspicious/noThenProperty: intentionally models a host thenable for the bridge regression.
+    then: function (onFulfilled) {
+      thenableCalls++;
+      onFulfilled(this.value);
+    },
+  };
+  ctx.inject('hostThenable', hostThenable);
+  assert(
+    ctx.eval(
+      'hostThenable.then(function(v) { globalThis.resolvedValue = v; }) instanceof Promise'
+    ) === true,
+    'Host thenable becomes a real Guest Promise'
+  );
+  assert(ctx.eval('resolvedValue') === 42, 'Guest resolver receives the fulfilled value');
+  assert(thenableCalls === 1, 'Host thenable keeps its original receiver');
+
+  ctx.inject('realHostPromise', Promise.resolve(42));
+  assert(
+    ctx.eval('realHostPromise instanceof Promise') === true,
+    'Host Promise preserves its prototype through conversion'
+  );
+
+  // 24c. Host thenable failures and rejections
+  console.log('\n24c. Host thenable failures and rejections');
+  var throwingThenable = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally models a host thenable that throws synchronously.
+    then: function () {
+      throw new Error('thenable-boom');
+    },
+  };
+  ctx.inject('throwingThenable', throwingThenable);
+  assert(
+    ctx.eval('throwingThenable instanceof Promise') === true,
+    'Throwing host thenable still becomes a Guest Promise'
+  );
+  ctx.eval(
+    'globalThis.thenableRejection = null; throwingThenable.catch(function(e) { globalThis.thenableRejection = e; });'
+  );
+  assert(
+    ctx.eval('thenableRejection instanceof Error') === true,
+    'Throwing thenable rejects with a Guest Error'
+  );
+  assert(
+    ctx.eval('thenableRejection.message') === 'thenable-boom',
+    'Throwing thenable preserves the rejection message'
+  );
+
+  var hostRejection = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally models a host capability rejecting a guest handler.
+    then: function (onFulfilled, onRejected) {
+      onRejected(new TypeError('host-boom'));
+    },
+  };
+  ctx.inject('hostRejection', hostRejection);
+  assert(
+    ctx.eval('hostRejection instanceof Promise') === true,
+    'Rejected host thenable becomes a Guest Promise'
+  );
+  ctx.eval(
+    'globalThis.hostRejectionResult = null; hostRejection.catch(function(e) { globalThis.hostRejectionResult = e; });'
+  );
+  assert(
+    ctx.eval('hostRejectionResult instanceof Error') === true,
+    'Host rejection reason is rebuilt as a Guest Error'
+  );
+  assert(
+    ctx.eval('hostRejectionResult instanceof TypeError') === true,
+    'Host rejection reason keeps its Error subtype'
+  );
+  assert(
+    ctx.eval('hostRejectionResult ? hostRejectionResult.message : null') === 'host-boom',
+    'Host rejection reason keeps its message'
+  );
+  assert(
+    ctx.eval(
+      'hostRejectionResult && typeof hostRejectionResult.stack === "string" && hostRejectionResult.stack.length > 0'
+    ) === true,
+    'Host rejection reason keeps its stack'
+  );
+
+  // Physical layout of the review scenarios: a throwing `then` getter, a
+  // non-Error thrown value, and settle-then-throw.
+  var throwingGetter = {};
+  Object.defineProperty(throwingGetter, 'then', {
+    get: function () {
+      throw new RangeError('getter-boom');
+    },
+  });
+  ctx.inject('throwingGetter', throwingGetter);
+  ctx.eval(
+    'globalThis.getterRejection = null; throwingGetter.catch(function(e) { globalThis.getterRejection = e; });'
+  );
+  assert(
+    ctx.eval('getterRejection instanceof RangeError') === true,
+    'Throwing then getter keeps the rejection Error subtype'
+  );
+  assert(
+    ctx.eval('getterRejection ? getterRejection.message : null') === 'getter-boom',
+    'Throwing then getter keeps the rejection message'
+  );
+
+  var throwingPrimitive = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally models a host thenable throwing a non-Error value.
+    then: function () {
+      throw 'primitive-boom';
+    },
+  };
+  ctx.inject('throwingPrimitive', throwingPrimitive);
+  ctx.eval(
+    'globalThis.primitiveRejection = null; throwingPrimitive.catch(function(e) { globalThis.primitiveRejection = e; });'
+  );
+  assert(
+    ctx.eval("primitiveRejection === 'primitive-boom'") === true,
+    'Thrown primitive stays the rejection reason'
+  );
+
+  var settleThenThrow = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally models a thenable that settles then throws.
+    then: function (onFulfilled) {
+      onFulfilled(7);
+      throw new Error('late-boom');
+    },
+  };
+  ctx.inject('settleThenThrow', settleThenThrow);
+  ctx.eval(
+    'globalThis.settledValue = null; globalThis.settledRejection = null;' +
+      'settleThenThrow.then(function(v) { globalThis.settledValue = v; }, function(e) { globalThis.settledRejection = e; });'
+  );
+  assert(ctx.eval('settledValue') === 7, 'First settlement wins when then settles then throws');
+  assert(ctx.eval('settledRejection') === null, 'Late throw after settlement is ignored');
+
+  // Tenant code can replace globalThis.Error; the rebuild path must keep its
+  // captured realm intrinsics and must not leave a pending exception behind.
+  ctx.eval('globalThis.__savedError__ = Error; globalThis.Error = undefined;');
+  var throwingWithGuardedError = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally models a host thenable rejected after the guest removed Error.
+    then: function () {
+      throw new Error('guarded-boom');
+    },
+  };
+  ctx.inject('throwingWithGuardedError', throwingWithGuardedError);
+  ctx.eval(
+    'globalThis.guardedRejection = null; throwingWithGuardedError.catch(function(e) { globalThis.guardedRejection = e; });'
+  );
+  assert(
+    ctx.eval('guardedRejection ? guardedRejection.message : null') === 'guarded-boom',
+    'Rejection reason survives a guest-replaced global Error'
+  );
+  assert(
+    ctx.eval('globalThis.afterGuardedInjection = 123; 1 + 1') === 2,
+    'Context stays usable after a guest-replaced global Error'
+  );
+  assert(
+    ctx.eval('afterGuardedInjection') === 123,
+    'No stale guest exception after the guarded path'
+  );
+  ctx.eval('globalThis.Error = globalThis.__savedError__; delete globalThis.__savedError__;');
+
+  // The Error brand is decided by the HOST prototype chain, not by
+  // Symbol.toStringTag, and `name` is copied as data, never used as the type.
+  var spoofedError = { message: 'plain-data', payload: 42 };
+  Object.defineProperty(spoofedError, Symbol.toStringTag, { value: 'Error' });
+  ctx.inject('spoofedError', spoofedError);
+  assert(
+    ctx.eval('spoofedError.payload') === 42 && ctx.eval('spoofedError instanceof Error') === false,
+    'Object spoofing the Error tag stays a plain guest object'
+  );
+
+  var renamedError = new Error('renamed-boom');
+  renamedError.name = 'TypeError';
+  ctx.inject('renamedError', renamedError);
+  assert(
+    ctx.eval('renamedError instanceof Error && !(renamedError instanceof TypeError)') === true,
+    'Renamed base Error keeps its real prototype'
+  );
+  assert(
+    ctx.eval('renamedError.name') === 'TypeError',
+    'Renamed base Error keeps the name field as data'
+  );
+
+  // Custom enumerable Error fields must survive the rebuild instead of being
+  // dropped by the new fast path.
+  var codedRejection = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally rejects with a coded Error.
+    then: function (onFulfilled, onRejected) {
+      onRejected(Object.assign(new TypeError('coded-boom'), { code: 'E_X' }));
+    },
+  };
+  ctx.inject('codedRejection', codedRejection);
+  ctx.eval(
+    'globalThis.codedResult = null; codedRejection.catch(function(e) { globalThis.codedResult = e; });'
+  );
+  assert(
+    ctx.eval('codedResult instanceof TypeError') === true,
+    'Coded rejection keeps its Error subtype'
+  );
+  assert(
+    ctx.eval('codedResult ? codedResult.code : null') === 'E_X',
+    'Coded rejection keeps custom own fields'
+  );
+
+  // A rejection reason that is itself a thenable is a value, not a promise to
+  // adopt: the guest must receive the object with its fields intact.
+  var thenableReasonCalls = 0;
+  var thenableReason = {
+    code: 'E_T',
+    // biome-ignore lint/suspicious/noThenProperty: intentionally models a thenable rejection reason.
+    then: function () {
+      thenableReasonCalls++;
+    },
+  };
+  var rejectingWithThenableReason = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally rejects with a thenable reason.
+    then: function (onFulfilled, onRejected) {
+      onRejected(thenableReason);
+    },
+  };
+  ctx.inject('rejectingWithThenableReason', rejectingWithThenableReason);
+  ctx.eval(
+    'globalThis.thenableReasonResult = null; rejectingWithThenableReason.catch(function(e) { globalThis.thenableReasonResult = e; });'
+  );
+  assert(
+    ctx.eval('thenableReasonResult instanceof Promise') === false,
+    'Thenable rejection reason is not adopted into a Promise'
+  );
+  assert(
+    ctx.eval('thenableReasonResult ? thenableReasonResult.code : null') === 'E_T',
+    'Thenable rejection reason keeps its fields'
+  );
+  assert(thenableReasonCalls === 0, 'Thenable rejection reason is not invoked');
+
+  // 24d. Cyclic host object conversion
+  console.log('\n24d. Cyclic host object conversion');
+  var cyclicError = new TypeError('cycle-boom');
+  cyclicError.self = cyclicError;
+  ctx.inject('cyclicError', cyclicError);
+  assert(ctx.eval('cyclicError instanceof TypeError') === true, 'Cyclic Error keeps its subtype');
+  assert(
+    ctx.eval('cyclicError.self === cyclicError') === true,
+    'Direct Error self-cycle preserves identity'
+  );
+
+  var cyclicErrorA = new Error('cycle-a');
+  var cyclicErrorB = new Error('cycle-b');
+  cyclicErrorA.peer = cyclicErrorB;
+  cyclicErrorB.peer = cyclicErrorA;
+  ctx.inject('cyclicErrorPair', cyclicErrorA);
+  assert(
+    ctx.eval('cyclicErrorPair.peer.peer === cyclicErrorPair') === true,
+    'Indirect Error cycle preserves identity'
+  );
+
+  var cyclicOwner = new Error('owner-boom');
+  var cyclicContainer = { owner: cyclicOwner };
+  cyclicOwner.container = cyclicContainer;
+  ctx.inject('cyclicOwner', cyclicOwner);
+  assert(
+    ctx.eval('cyclicOwner.container.owner === cyclicOwner') === true,
+    'Error -> object -> Error cycle preserves identity'
+  );
+
+  var cyclicPlainA = {};
+  var cyclicPlainB = { back: cyclicPlainA };
+  cyclicPlainA.forward = cyclicPlainB;
+  ctx.inject('cyclicPlain', cyclicPlainA);
+  assert(
+    ctx.eval('cyclicPlain.forward.back === cyclicPlain') === true,
+    'Plain object cycle preserves identity'
+  );
+
+  var cyclicArray = [];
+  cyclicArray.push(cyclicArray);
+  ctx.inject('cyclicArray', cyclicArray);
+  assert(
+    ctx.eval('cyclicArray[0] === cyclicArray') === true,
+    'Array self-cycle preserves identity'
+  );
+
+  // 24e. Re-entrant settlement during conversion
+  console.log('\n24e. Re-entrant settlement during conversion');
+  var savedReject = null;
+  var reentrantResolveValue = {
+    get detail() {
+      if (savedReject) {
+        savedReject('late-reject');
+      }
+      return 'outer-value';
+    },
+  };
+  var reentrantResolveThenable = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally re-enters the reject proxy from a getter.
+    then: function (onFulfilled, onRejected) {
+      savedReject = onRejected;
+      onFulfilled(reentrantResolveValue);
+    },
+  };
+  ctx.inject('reentrantResolve', reentrantResolveThenable);
+  ctx.eval(
+    'globalThis.reentrantResolveOutcome = null; reentrantResolve.then(function(v) { globalThis.reentrantResolveOutcome = v; });'
+  );
+  assert(
+    ctx.eval('reentrantResolveOutcome ? reentrantResolveOutcome.detail : null') === 'outer-value',
+    'Re-entrant reject during resolve conversion is ignored'
+  );
+
+  var savedResolve = null;
+  var reentrantRejectValue = {
+    get detail() {
+      if (savedResolve) {
+        savedResolve('late-resolve');
+      }
+      return 'outer-reject';
+    },
+  };
+  var reentrantRejectThenable = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally re-enters the resolve proxy from a getter.
+    then: function (onFulfilled, onRejected) {
+      savedResolve = onFulfilled;
+      onRejected(reentrantRejectValue);
+    },
+  };
+  ctx.inject('reentrantReject', reentrantRejectThenable);
+  ctx.eval(
+    'globalThis.reentrantRejectOutcome = null; reentrantReject.catch(function(e) { globalThis.reentrantRejectOutcome = e; });'
+  );
+  assert(
+    ctx.eval('reentrantRejectOutcome ? reentrantRejectOutcome.detail : null') === 'outer-reject',
+    'Re-entrant resolve during reject conversion is ignored'
+  );
+
+  var savedThrowReject = null;
+  var syncThrowReason = {
+    get detail() {
+      if (savedThrowReject) {
+        savedThrowReject('late-throw-reject');
+      }
+      return 'throw-reason';
+    },
+  };
+  var syncThrowReentrantThenable = {
+    // biome-ignore lint/suspicious/noThenProperty: intentionally re-enters the reject proxy while the thrown reason converts.
+    then: function (onFulfilled, onRejected) {
+      savedThrowReject = onRejected;
+      throw syncThrowReason;
+    },
+  };
+  ctx.inject('syncThrowReentrant', syncThrowReentrantThenable);
+  ctx.eval(
+    'globalThis.syncThrowOutcome = null; syncThrowReentrant.catch(function(e) { globalThis.syncThrowOutcome = e; });'
+  );
+  assert(
+    ctx.eval('syncThrowOutcome ? syncThrowOutcome.detail : null') === 'throw-reason',
+    'Re-entrant settlement during thrown-reason conversion is ignored'
+  );
+
+  // A real host Promise settles on the host microtask queue, which only
+  // drains after this script returns to the runtime. The runner executes
+  // __jscSandboxTestPhase2 in a second evaluation to observe it.
+  var realRejected = Promise.reject(new TypeError('async-host-boom'));
+  realRejected.catch(function () {});
+  ctx.inject('realRejected', realRejected);
+  ctx.eval('realRejected.catch(function () {});');
+
+  var realThenableReasonCalls = 0;
+  var realThenableReason = {
+    code: 'E_ASYNC_T',
+    // biome-ignore lint/suspicious/noThenProperty: intentionally models an async thenable rejection reason.
+    then: function () {
+      realThenableReasonCalls++;
+    },
+  };
+  var realThenableRejected = Promise.reject(realThenableReason);
+  realThenableRejected.catch(function () {});
+  ctx.inject('realThenableRejected', realThenableRejected);
+  ctx.eval('realThenableRejected.catch(function () {});');
+
+  // Async conversion failures must settle the guest Promise instead of
+  // leaving it pending, and settled Promises must not root callback entries.
+  var throwingDetail = {
+    get detail() {
+      throw new Error('detail-boom');
+    },
+  };
+  var failingResolve = Promise.resolve(throwingDetail);
+  failingResolve.catch(function () {});
+  ctx.inject('failingResolve', failingResolve);
+  ctx.eval('failingResolve.catch(function () {});');
+
+  var failingReject = Promise.reject(throwingDetail);
+  failingReject.catch(function () {});
+  ctx.inject('failingReject', failingReject);
+  ctx.eval('failingReject.catch(function () {});');
+
+  var callbackGlobalsBefore = ctx.eval(
+    'Object.keys(globalThis).filter(function(k) { return k.indexOf("__sandbox_fn_") === 0; }).length'
+  );
+  for (var leakProbe = 0; leakProbe < 5; leakProbe++) {
+    ctx.inject('leakProbe' + leakProbe, Promise.resolve(leakProbe));
+  }
+
+  globalThis.__jscSandboxTestPhase2 = function () {
+    ctx.eval(
+      'globalThis.realRejection = null; realRejected.catch(function(e) { globalThis.realRejection = e; });'
+    );
+    assert(
+      ctx.eval('realRejection instanceof Error') === true,
+      'Real host Promise rejection arrives as a Guest Error'
+    );
+    assert(
+      ctx.eval('realRejection instanceof TypeError') === true,
+      'Real host Promise rejection keeps its Error subtype'
+    );
+    assert(
+      ctx.eval('realRejection ? realRejection.message : null') === 'async-host-boom',
+      'Real host Promise rejection keeps its message'
+    );
+    assert(
+      ctx.eval(
+        'realRejection && typeof realRejection.stack === "string" && realRejection.stack.length > 0'
+      ) === true,
+      'Real host Promise rejection keeps its stack'
+    );
+    ctx.eval(
+      'globalThis.realThenableReasonResult = null; realThenableRejected.catch(function(e) { globalThis.realThenableReasonResult = e; });'
+    );
+    assert(
+      ctx.eval('realThenableReasonResult instanceof Promise') === false,
+      'Real async thenable reason is not adopted into a Promise'
+    );
+    assert(
+      ctx.eval('realThenableReasonResult ? realThenableReasonResult.code : null') === 'E_ASYNC_T',
+      'Real async thenable reason keeps its fields'
+    );
+    assert(realThenableReasonCalls === 0, 'Real async thenable reason is not invoked');
+    ctx.eval(
+      'globalThis.failingResolveResult = "pending"; failingResolve.then(' +
+        'function() { globalThis.failingResolveResult = "fulfilled"; },' +
+        'function(e) { globalThis.failingResolveResult = e; });'
+    );
+    assert(
+      ctx.eval('failingResolveResult !== "pending"') === true,
+      'Async resolve conversion failure settles the guest Promise'
+    );
+    assert(
+      ctx.eval('failingResolveResult instanceof Error') === true,
+      'Async resolve conversion failure rejects with a Guest Error'
+    );
+    ctx.eval(
+      'globalThis.failingRejectResult = "pending"; failingReject.then(' +
+        'function() { globalThis.failingRejectResult = "fulfilled"; },' +
+        'function(e) { globalThis.failingRejectResult = e; });'
+    );
+    assert(
+      ctx.eval('failingRejectResult !== "pending"') === true,
+      'Async reject conversion failure settles the guest Promise'
+    );
+    assert(
+      ctx.eval('failingRejectResult instanceof Error') === true,
+      'Async reject conversion failure rejects with a Guest Error'
+    );
+    var callbackGlobalsAfter = ctx.eval(
+      'Object.keys(globalThis).filter(function(k) { return k.indexOf("__sandbox_fn_") === 0; }).length'
+    );
+    assert(
+      callbackGlobalsAfter === callbackGlobalsBefore,
+      'Settled host Promises leave no global callback entries'
+    );
+    assert(
+      promiseTimeoutCtx.eval('1 + 1') === 2,
+      'Promise settlement stays inside the execution budget'
+    );
+    promiseTimeoutRt.dispose();
+    console.log('\n=== Deferred Test Summary ===');
+    console.log(`Total: ${testsRun}`);
+    console.log(`Passed: ${testsPassed}`);
+    console.log(`Failed: ${testsFailed}`);
+    return testsFailed === 0;
+  };
+
   // 25. JSON serialization
   console.log('\n25. JSON Serialization');
   var jsonObj = { name: 'test', count: 42, active: true, items: [1, 2, 3] };
@@ -502,6 +986,16 @@
     'Flag on + timeout Infinity: unlimited (long loop completes)'
   );
   infinityRt.dispose();
+
+  // Promise settlement drains guest reactions (tenant code) during the host
+  // microtask drain. It must stay inside the same execution budget.
+  var promiseTimeoutRt = sandbox.createRuntime({
+    timeout: 250,
+    enableExecutionTimeLimit: true,
+  });
+  var promiseTimeoutCtx = promiseTimeoutRt.createContext();
+  promiseTimeoutCtx.inject('timeoutPromise', Promise.resolve(42));
+  promiseTimeoutCtx.eval('timeoutPromise.then(function() { while (true) {} });');
 
   console.log('\nBinary values crossing the sandbox boundary');
   // An ArrayBuffer/TypedArray from the sandbox must arrive host-side as REAL

@@ -54,9 +54,9 @@ impl Default for PackageVerificationLimits {
 /// Contains the parsed manifest along with the raw bytes needed for
 /// transparent forwarding to Issuer for signature verification.
 #[derive(Debug, Clone)]
-pub struct VerifiedPackage {
+pub struct VerifiedPackage<M = PackageManifest> {
     /// Parsed package manifest.
-    pub manifest: PackageManifest,
+    pub manifest: M,
     /// Raw `manifest.toml` bytes as stored in the ZIP (the signed payload).
     pub manifest_raw: Vec<u8>,
     /// Raw `manifest.sig` bytes (64-byte Ed25519 signature).

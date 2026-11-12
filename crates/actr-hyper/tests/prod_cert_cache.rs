@@ -105,9 +105,9 @@ async fn production_mode_fetches_publisher_key_and_verifies() {
         .unwrap();
 
     mock.assert_async().await;
-    assert_eq!(verified.manifest.publisher, "acme");
-    assert_eq!(verified.manifest.name, "Sensor");
-    assert_eq!(verified.manifest.version, "1.0.0");
+    assert_eq!(verified.manifest.actor_type().publisher, "acme");
+    assert_eq!(verified.manifest.actor_type().name, "Sensor");
+    assert_eq!(verified.manifest.actor_type().version, "1.0.0");
 }
 
 /// Scenario 2: two consecutive verifications for the same publisher -> second uses cache, no HTTP
@@ -281,8 +281,8 @@ async fn production_mode_independent_caches_per_publisher() {
         .await
         .unwrap();
 
-    assert_eq!(manifest_a.manifest.publisher, "publisher-a");
-    assert_eq!(manifest_b.manifest.publisher, "publisher-b");
+    assert_eq!(manifest_a.manifest.actor_type().publisher, "publisher-a");
+    assert_eq!(manifest_b.manifest.actor_type().publisher, "publisher-b");
 }
 
 /// Standalone PublisherCertCache test: get_from_cache is synchronously readable after prefetch

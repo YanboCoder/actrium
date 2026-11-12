@@ -88,20 +88,18 @@ First launch creates no Realm; each local instance gets its own local Realm when
 
 1. The user opens the program's detail page;
 2. Actrium shows the Publisher, version, both package digests, permissions, Workspace requirements, and Marketplace review status.
-3. Actrium obtains and verifies the Publisher-signed Program Release record.
-4. It verifies both packages against the record, including identities, signatures, digests, compatibility, and archive limits.
-5. Records the Program Release;
-6. Only caches the program; it does not automatically create a Service unless the user clicks "Create instance".
+3. Verify each archive's identity, signature, digest and size limits.
+4. Check the Front's Service dependency and RPC contract, then cache the verified packages. The user can now choose "Create instance".
 
 The download address is not the trust source; Actrium relies on the package signature (verified against the Publisher Profile) and the digest.
 
 ### 4.2 When opening a link
 
-For an uninstalled release, follow [04 §3](04-uri-and-resolution.md). After confirmation, verify the matching release record and both packages. Canceling ends installation before either Actor is created.
+For an uninstalled package, follow [04 §3](04-uri-and-resolution.md). After confirmation, verify the Realm Profile and both selected archives before creating either Actor.
 
 ### 4.3 Local import
 
-Local import accepts the Service and Front `.actr` files as a pair. Match them to the verified release record when importing a published release.
+For local import, select a Service and a Front `.actr` file. Verify both archives and check the Service dependency before recording the selection.
 
 - Each archive must pass structure, hash, and signature checks.
 - If the signing key does not belong to a verified domain, mark it "local development identity";
@@ -122,9 +120,9 @@ sequenceDiagram
     participant S as Service
     participant F as Front Actor
 
-    U->>A: Select a release or import a Service and Front package pair
-    A->>P: Verify the release record and both packages
-    P-->>A: Verified release record and both verified manifests
+    U->>A: Choose Service and Front packages
+    A->>P: Verify both archives and check their RPC contract
+    P-->>A: Verified manifests and archive digests
     A->>U: Confirm permissions, Realm domain and RealmId, and Workspace
     U-->>A: Confirm creation
     A->>M: Create(idempotency_key, verified_release, workspace, domain, realm_id, display_name)
@@ -202,7 +200,7 @@ Creation proceeds in the order "holder authorization → pending Realm → sign 
 
 1. Resolve the Realm link to get the Realm name;
 2. Fetch that domain's Realm signing key and Realm Profile and verify the signature;
-3. Verify the Service package pinned by the Realm Profile and the Front package pinned by the matching release record.
+3. Verify the Service and Front archives selected by the Realm Profile.
 4. Via the Actr Facility Provider in the Realm Profile, find the Service in that Realm whose Actor type matches the Service package.
 5. Complete mutual identity and challenge verification;
 6. Negotiate the Front–Service contract;
@@ -497,7 +495,7 @@ actrium init
 → validate (schema, capability, hash, sandbox compatibility)
 → sign the Front and Service packages
 → generate/update the Publisher Profile
-→ publish both packages and the signed release record that binds their digests
+→ publish each archive with its download URL, type and SHA-256
 → read both packages back and check their digests and signatures
 → optionally submit for Marketplace review
 ```

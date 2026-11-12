@@ -186,7 +186,7 @@ Local creation must use a durable intent:
 CreationIntent
 ├── idempotency_key
 ├── package_sources
-├── program_release
+├── primary_package, front_package, packages
 ├── service_package_digest
 ├── front_package_digest
 ├── privacy_contract_digest (when declared)
@@ -261,12 +261,11 @@ A suggested minimal model:
 
 ```text
 program_release
-  publisher, program, version, service_package_digest, front_package_digest,
-  privacy_contract_digest, release_record, trust_state
+  publisher, program, version, package_digest, trust_state
 
 service
   realm_name, actor_id, actor_id_hash, publisher, program, version, service_package_digest,
-  workspace_id, runtime_location,
+  primary_package, front_package, packages, privacy_contract_digest, workspace_id, runtime_location,
   lifecycle_state, desired_state, reachability, health,
   attachment_state, placement, created_at, last_opened_at
 
@@ -415,7 +414,7 @@ Old Service ActorId + v1 Workspace
   → import/migrate
   → Workspace lease handoff
   → user verification
-  → the Realm Profile's package points to the new Service package
+  → the Realm Profile's resolved primary selects the new Service archive
   → Old archived
 ```
 
@@ -428,9 +427,10 @@ Advantages:
 - the old ActorId is never said to have become the new type.
 
 The upgrade changes the Service's ActorId and carries over the Realm link, membership, and
-application permissions. When another device opens that link, it verifies the new Service package
-pinned by the Realm Profile, finds the Front package through the matching release record, and
-Attaches to the new Service by its Actor type.
+application permissions. On another device, the Host verifies both archives selected by the updated Profile before attaching to the new Service.
+
+To change any package selection, submit both references and the complete map, increase `sequence` and sign again. Identity and Workspace migration,
+process shutdown and state removal require separate deployment actions.
 
 ## 12. Migrating a Service to another device
 

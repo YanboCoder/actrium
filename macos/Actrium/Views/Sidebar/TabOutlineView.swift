@@ -81,6 +81,8 @@ struct CrossWindowTabData: Codable {
     let urlString: String?
     let groupId: String?
     let unifiedScript: String?
+    let capabilityManifestJSON: String?
+    let permissions: [String]?
     let leftPanelScript: String?
     let rightPanelScript: String?
     let guestScript: String?
@@ -390,6 +392,8 @@ struct TabOutlineView: NSViewRepresentable {
                 urlString: tab.url?.absoluteString,
                 groupId: tab.groupId?.uuidString,
                 unifiedScript: tab.unifiedScript,
+                capabilityManifestJSON: tab.capabilityManifestJSON,
+                permissions: tab.permissions,
                 leftPanelScript: tab.leftPanelScript,
                 rightPanelScript: tab.rightPanelScript,
                 guestScript: tab.guestScript,
@@ -485,6 +489,8 @@ struct TabOutlineView: NSViewRepresentable {
                     leftPanelScript: tabData.leftPanelScript,
                     rightPanelScript: tabData.rightPanelScript,
                     unifiedScript: tabData.unifiedScript,
+                    capabilityManifestJSON: tabData.capabilityManifestJSON,
+                    permissions: tabData.permissions ?? [],
                     backgroundColor: tabData.backgroundColor
                 )
 
@@ -757,9 +763,14 @@ struct TabOutlineView: NSViewRepresentable {
                 var data: [String: Any] = [
                     "title": tab.title,
                 ]
+                if let appId = tab.appId { data["appId"] = appId }
+                if tab.legacyActorBridge { data["legacyActorBridge"] = true }
                 if let url = tab.url?.absoluteString { data["urlString"] = url }
                 if let systemType = tab.systemTabType { data["systemTabType"] = systemType.rawValue }
                 if let script = tab.unifiedScript { data["unifiedScript"] = script }
+                if let manifest = tab.capabilityManifestJSON {
+                    data["capabilityManifestJSON"] = manifest
+                }
                 if let script = tab.leftPanelScript { data["leftPanelScript"] = script }
                 if let script = tab.rightPanelScript { data["rightPanelScript"] = script }
                 if let script = tab.guestScript { data["guestScript"] = script }

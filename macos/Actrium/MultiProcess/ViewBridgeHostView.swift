@@ -938,7 +938,13 @@ final class ViewBridgeCoordinator {
                 config[RuntimeBridgeContract.systemAppType] = systemAppType
             }
             if let script = tabConfig.unifiedScript { config["unifiedScript"] = script }
-            if let script = tabConfig.leftPanelScript { config["leftPanelScript"] = script }
+            if let manifest = tabConfig.capabilityManifestJSON {
+                config["capabilityManifestJSON"] = manifest
+            }
+            if let leftPanelScript = tabConfig.leftPanelScript { config["leftPanelScript"] = leftPanelScript }
+            if let serviceCallUrl = tabConfig.serviceCallUrl { config["serviceCallUrl"] = serviceCallUrl }
+            if let appId = tabConfig.appId { config["appId"] = appId }
+            if tabConfig.legacyActorBridge { config["legacyActorBridge"] = true }
             config["leftPanelVisible"] = tabConfig.leftPanelVisible
             config["rightPanelVisible"] = tabConfig.rightPanelVisible
             config["permissions"] = tabConfig.permissions
@@ -2253,18 +2259,22 @@ struct UnifiedReactNativeLayer: View {
             coordinator.isOverviewMode = !isFocused
             coordinator.tabConfig = XPCTabConfig(
                 tabId: tab.id,
+                appId: tab.appId,
+                legacyActorBridge: tab.legacyActorBridge,
                 title: tab.title,
                 backgroundColor: tab.backgroundColor,
                 containerSize: isFocused ? viewportSize : cardSize,
                 systemAppType: tab.systemTabType?.rawValue,
                 unifiedScript: tab.unifiedScript,
+                capabilityManifestJSON: tab.capabilityManifestJSON,
                 leftPanelScript: tab.leftPanelScript,
                 leftPanelVisible: tab.leftPanelDefaultVisible,
                 rightPanelVisible: tab.rightPanelDefaultVisible,
                 permissions: tab.permissions,
                 bookmarks: bookmarks,
                 recentHistory: recentHistory,
-                reloadKey: tab.reloadNonce
+                reloadKey: tab.reloadNonce,
+                serviceCallUrl: tab.serviceCallUrl
             )
             coordinator.currentViewportSize = currentSize
             ipcLog("📱 UnifiedReactNativeLayer.onAppear: tab=\(String(tab.id.uuidString.prefix(8))), systemTabType=\(tab.systemTabType?.rawValue ?? "nil"), isFocused=\(isFocused)")
@@ -2300,18 +2310,22 @@ struct UnifiedReactNativeLayer: View {
             // 🔑 Reload Trigger: Force new sending config(includes reloadKey)
             coordinator.tabConfig = XPCTabConfig(
                 tabId: tab.id,
+                appId: tab.appId,
+                legacyActorBridge: tab.legacyActorBridge,
                 title: tab.title,
                 backgroundColor: tab.backgroundColor,
                 containerSize: isFocused ? viewportSize : cardSize,
                 systemAppType: tab.systemTabType?.rawValue,
                 unifiedScript: tab.unifiedScript,
+                capabilityManifestJSON: tab.capabilityManifestJSON,
                 leftPanelScript: tab.leftPanelScript,
                 leftPanelVisible: tab.leftPanelDefaultVisible,
                 rightPanelVisible: tab.rightPanelDefaultVisible,
                 permissions: tab.permissions,
                 bookmarks: bookmarks,
                 recentHistory: recentHistory,
-                reloadKey: tab.reloadNonce
+                reloadKey: tab.reloadNonce,
+                serviceCallUrl: tab.serviceCallUrl
             )
             coordinator.lastSentConfigSize = nil
             coordinator.lastSentReloadKey = nil
@@ -2342,17 +2356,20 @@ struct UnifiedReactNativeLayer: View {
         if let unifiedScript = tab.unifiedScript {
             config["unifiedScript"] = unifiedScript
         }
-        // 15-B B4: verified-bytes source (digest-addressed extraction dir + entry).
-        // The renderer prefers reading the guest bytes from this cache directory
-        // and falls back to the inline unifiedScript text above.
-        if let extractedPath = tab.guestExtractedPath {
-            config["guestExtractedPath"] = extractedPath
-            if let entry = tab.guestEntry {
-                config["guestEntry"] = entry
-            }
+        if let capabilityManifestJSON = tab.capabilityManifestJSON {
+            config["capabilityManifestJSON"] = capabilityManifestJSON
         }
         if let leftPanelScript = tab.leftPanelScript {
             config["leftPanelScript"] = leftPanelScript
+        }
+        if let serviceCallUrl = tab.serviceCallUrl {
+            config["serviceCallUrl"] = serviceCallUrl
+        }
+        if let appId = tab.appId {
+            config["appId"] = appId
+        }
+        if tab.legacyActorBridge {
+            config["legacyActorBridge"] = true
         }
         return config
     }
@@ -2538,18 +2555,23 @@ struct UnifiedReactNativeLayer: View {
         if let unifiedScript = tab.unifiedScript {
             tabConfig["unifiedScript"] = unifiedScript
         }
-        // 15-B B4: verified-bytes source (digest-addressed extraction dir + entry).
-        if let extractedPath = tab.guestExtractedPath {
-            tabConfig["guestExtractedPath"] = extractedPath
-            if let entry = tab.guestEntry {
-                tabConfig["guestEntry"] = entry
-            }
+        if let capabilityManifestJSON = tab.capabilityManifestJSON {
+            tabConfig["capabilityManifestJSON"] = capabilityManifestJSON
         }
         if let systemTabType = tab.systemTabType {
             tabConfig[RuntimeBridgeContract.systemAppType] = systemTabType.rawValue
         }
         if !tab.permissions.isEmpty {
             tabConfig["permissions"] = tab.permissions
+        }
+        if let serviceCallUrl = tab.serviceCallUrl {
+            tabConfig["serviceCallUrl"] = serviceCallUrl
+        }
+        if let appId = tab.appId {
+            tabConfig["appId"] = appId
+        }
+        if tab.legacyActorBridge {
+            tabConfig["legacyActorBridge"] = true
         }
 
         // Add system app data (for StartPageApp)

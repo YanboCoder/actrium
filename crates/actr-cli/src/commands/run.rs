@@ -126,17 +126,16 @@ impl RunCommand {
         let package_bytes = tokio::fs::read(&package_path).await.map_err(|e| {
             ActrCliError::command_error(format!("Failed to read package file: {}", e))
         })?;
-        let package = WorkloadPackage::new(package_bytes.clone());
+        let package = WorkloadPackage::new(package_bytes);
 
         // 3. Parse package manifest
-        let manifest = actr_pack::read_manifest(&package_bytes).map_err(|e| {
+        let manifest = package.manifest().map_err(|e| {
             ActrCliError::command_error(format!("Failed to parse package manifest: {}", e))
         })?;
         let package_info = self.build_package_info(&manifest);
 
         // 4. Load runtime configuration
-        let config =
-            actr_config::ConfigParser::from_runtime_file(&config_path, package_info.clone())?;
+        let config = actr_config::ConfigParser::from_runtime_file(&config_path, package_info)?;
 
         info!("📡 Signaling server: {}", config.signaling_url.as_str());
         info!("🔐 Trust anchors: {} configured", config.trust.len());
@@ -236,18 +235,22 @@ impl RunCommand {
 
     fn build_package_info(
         &self,
-        manifest: &actr_pack::PackageManifest,
+        manifest: &actr_pack::RuntimePackageManifest,
     ) -> actr_config::PackageInfo {
+        let actr_type = manifest.actor_type();
+        let (description, license) = match manifest {
+            actr_pack::RuntimePackageManifest::V2(_) => (None, None),
+            actr_pack::RuntimePackageManifest::Legacy(manifest) => (
+                manifest.metadata.description.clone(),
+                manifest.metadata.license.clone(),
+            ),
+        };
         actr_config::PackageInfo {
-            name: manifest.name.clone(),
-            actr_type: actr_protocol::ActrType {
-                publisher: manifest.publisher.clone(),
-                name: manifest.name.clone(),
-                version: manifest.version.clone(),
-            },
-            description: manifest.metadata.description.clone(),
+            name: actr_type.name.clone(),
+            actr_type,
+            description,
             authors: vec![],
-            license: manifest.metadata.license.clone(),
+            license,
         }
     }
 

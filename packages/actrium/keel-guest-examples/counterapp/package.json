@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "bun ../../../keel/src/cli/bin.ts build src/unified-app.tsx -o workload/guest.js --footer ../../../actrium-app-sdk/src/cli/keel-guest-footer.js --no-minify --dev",
+    "build": "bun ../../../keel/src/cli/bin.ts build src/unified-app.tsx -o workload/guest.js --no-minify --dev --contract ../../src/runtime-host/contract.ts --v1-capability-manifest ui/capability-manifest.json",
     "build:package": "cargo run --manifest-path ../../../../Cargo.toml -p actr-cli -- pkg pack --manifest-path manifest.toml --payload-root . --key ../../../../examples/actr/rust/package-echo/dev-key.json --output dist/actrium-counter-1.0.0.actr",
     "build:actr": "bun run build && bun run build:package",
     "dev": "./run-macos.sh",

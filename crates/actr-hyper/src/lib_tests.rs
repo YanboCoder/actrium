@@ -66,16 +66,16 @@ async fn verify_package_rejects_non_actr_format() {
 }
 
 /// A custom [`crate::verify::TrustProvider`] that returns a fixed
-/// [`VerifiedPackage`] without doing real verification — used to prove Hyper
+/// [`VerifiedRuntimePackage`] without doing real verification — used to prove Hyper
 /// re-validates the identity at the trust boundary regardless of the provider.
 #[derive(Debug)]
 struct FakeTrust {
-    verified: VerifiedPackage,
+    verified: VerifiedRuntimePackage,
 }
 
 #[async_trait::async_trait]
 impl crate::verify::TrustProvider for FakeTrust {
-    async fn verify_package(&self, _bytes: &[u8]) -> HyperResult<VerifiedPackage> {
+    async fn verify_package(&self, _bytes: &[u8]) -> HyperResult<VerifiedRuntimePackage> {
         Ok(self.verified.clone())
     }
 }
@@ -86,7 +86,12 @@ async fn verify_package_rejects_invalid_identity_from_custom_provider() {
     let mut bad = fake_manifest();
     // A signed-but-malicious identity: traversal attempt in the version field.
     bad.manifest.version = "../../victim".to_string();
-    let config = HyperConfig::new(dir.path(), Arc::new(FakeTrust { verified: bad }));
+    let config = HyperConfig::new(
+        dir.path(),
+        Arc::new(FakeTrust {
+            verified: bad.into(),
+        }),
+    );
     let hyper = Hyper::new(config).await.unwrap();
     let result = hyper
         .verify_package(&WorkloadPackage::new(b"anything".to_vec()))
@@ -269,7 +274,7 @@ async fn registration_test_node(dir: &TempDir, package: bool) -> Node<Attached> 
         .await
         .unwrap();
     if package {
-        node.attachment.as_mut().unwrap().verified = Some(fake_manifest());
+        node.attachment.as_mut().unwrap().verified = Some(fake_manifest().into());
     }
     node
 }
@@ -356,6 +361,74 @@ async fn preregistered_credentials_keep_the_workload_recovery_context() {
             _ => panic!("pre-registration must preserve the workload's auth mode"),
         }
     }
+}
+
+/// Exercise the actual Host request/context builder with public material from
+/// the same v2 packer/verifier and fixture consumed by the real Issuer tests.
+#[tokio::test]
+async fn v2_registration_preserves_original_material_for_credential_recovery() {
+    use crate::lifecycle::credential_manager::RegistrationContext;
+    use actr_pack::{ActorPackOptions, ActorPackageManifest};
+    use std::collections::BTreeMap;
+
+    let key = SigningKey::generate(&mut OsRng);
+    let source = include_str!("../../actr-pack/tests/fixtures/registration-v2.toml");
+    let package = actr_pack::pack_actor_package(&ActorPackOptions {
+        manifest: ActorPackageManifest::from_toml(source).unwrap(),
+        payloads: BTreeMap::from([("workload/echo.wasm".into(), b"\0asm\x0d\0\x01\0".to_vec())]),
+        signing_key: key.clone(),
+    })
+    .unwrap();
+    let verified = actr_pack::verify_runtime_package_bounded(
+        &package,
+        &key.verifying_key(),
+        actr_pack::DEFAULT_MAX_VERIFIED_ENTRY_BYTES,
+    )
+    .unwrap();
+    let mut server = mockito::Server::new_async().await;
+    let received = Arc::new(std::sync::Mutex::new(None));
+    let captured = received.clone();
+    let mock = server
+        .mock("POST", "/register")
+        .match_request(move |request| {
+            let request = RegisterRequest::decode(request.body().unwrap().as_slice()).unwrap();
+            *captured.lock().unwrap() = Some(request);
+            true
+        })
+        .with_status(200)
+        .with_header("content-type", "application/x-protobuf")
+        .with_body(fake_register_response_bytes())
+        .expect(1)
+        .create_async()
+        .await;
+    let dir = TempDir::new().unwrap();
+    let mut attached = registration_test_node(&dir, false).await;
+    attached.attachment.as_mut().unwrap().verified = Some(verified.clone());
+    attached.attachment.as_mut().unwrap().package_bytes = package.into();
+    let registered = attached.register(&server.url()).await.unwrap();
+    mock.assert_async().await;
+    let node = registered.attachment.unwrap().node;
+    let Some(RegistrationContext::Package { request: saved }) =
+        node.preregistered_registration_context
+    else {
+        panic!("v2 package must retain package-mode recovery context");
+    };
+    assert_eq!(saved, received.lock().unwrap().take().unwrap());
+    assert_eq!(saved.actr_type, verified.manifest.actor_type());
+    assert_eq!(
+        saved.manifest_raw.as_deref(),
+        Some(verified.manifest_raw.as_slice())
+    );
+    assert_eq!(
+        saved.publisher_signature.as_deref(),
+        Some(verified.sig_raw.as_slice())
+    );
+    assert_eq!(
+        saved.signing_public_key.as_deref(),
+        Some(key.verifying_key().as_bytes().as_slice())
+    );
+    assert_eq!(saved.target, None);
+    assert_eq!(saved.auth_mode, Some(RegisterAuthMode::Package as i32));
 }
 
 #[tokio::test]
@@ -590,7 +663,7 @@ async fn bootstrap_package_uses_manifest_auth() {
     let manifest = fake_manifest();
     let result = hyper
         .bootstrap_credential(
-            &manifest,
+            &manifest.clone().into(),
             &server.url(),
             "test@example.com",
             test_service_spec(),
@@ -607,7 +680,8 @@ async fn bootstrap_package_uses_manifest_auth() {
     );
 
     // Verify no legacy PSK keys are written to ActorStore.
-    let namespace = storage_namespace_for(&manifest.manifest).unwrap();
+    let namespace =
+        storage_namespace_for(&RuntimePackageManifest::Legacy(manifest.manifest)).unwrap();
     let root = SecureStorageRoot::new(hyper.config().storage_root())
         .await
         .unwrap();
@@ -647,7 +721,7 @@ async fn bootstrap_issuer_error_propagates() {
     let manifest = fake_manifest();
     let result = hyper
         .bootstrap_credential(
-            &manifest,
+            &manifest.clone().into(),
             &server.url(),
             "test@example.com",
             test_service_spec(),
@@ -694,7 +768,7 @@ async fn bootstrap_issuer_rejection_creates_no_database() {
     let manifest = fake_manifest();
     let result = hyper
         .bootstrap_credential(
-            &manifest,
+            &manifest.clone().into(),
             &server.url(),
             "test@example.com",
             test_service_spec(),
@@ -705,7 +779,8 @@ async fn bootstrap_issuer_rejection_creates_no_database() {
     assert!(matches!(result, Err(HyperError::IssuerBootstrapFailed(_))));
 
     // The would-be database path must not exist after a rejected registration.
-    let namespace = storage_namespace_for(&manifest.manifest).unwrap();
+    let namespace =
+        storage_namespace_for(&RuntimePackageManifest::Legacy(manifest.manifest)).unwrap();
     let root = SecureStorageRoot::new(hyper.config().storage_root())
         .await
         .unwrap();

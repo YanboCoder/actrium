@@ -27,6 +27,11 @@
 9. per-instance storage；
 10. 移动端诚实的生命周期。
 
+### Realm 包选择
+
+先实现 Schema 和 SDK，再实现 AFP 和 CLI 管理接口，最后支持 Host 部署和客户端。
+分别验收 Profile 校验、Service 加载和业务就绪。
+
 ## 2. 关键依赖图
 
 ```mermaid
@@ -64,7 +69,7 @@ flowchart LR
 
 - `actr://` Realm 链接的测试向量；
 - Publisher Profile schema；
-- 签名 Program Release 记录的验签向量与线上发现接口。
+- Realm 选包和包签名验证向量。
 - Realm 签名 key（authority descriptor 的 `realm_signing_keys` 成员与 core relation `realms`，已在 Actr Authority Discovery §4.3–4.4 定义）与 Realm Profile schema；
 - persistent Actor identity lifecycle ADR；
 - Front–Service session proto；
@@ -129,7 +134,7 @@ flowchart LR
 - domain/IDNA normalizer；
 - key history/rotation store；
 - package digest pinning；
-- 绑定 Front 和 Service 包的签名 Program Release 记录。
+- Realm 签名 Profile 中的 Service 和 Front 选择。
 - Guest、契约和资源由签名的 `[[files]]` 文件表绑定。
 - content-addressed cache；
 - zip safety policy；
@@ -141,15 +146,15 @@ flowchart LR
 - `actor.publisher` 保存规范化 Publisher 域名。
 - Service 与 Front 各使用一份 `actr-package/2` 清单，分别描述一个 Workload。
 - 读取器和打包器支持 Service manifest 的 `[workspace]`，Host 在 Ready 前检查必需绑定。
-- 验证器检查各自的包清单和绑定两个包的发布记录。
-- 验证器按签名发布记录中的 `privacy_contract.sha256` 认证 Privacy Contract 字节。
+- 验证所选包的清单签名和 Front 的 Service 依赖。
+- 按 Service 包内的签名清单验证可选 Privacy Contract。
 - 加载器验证每个包的 Workload Profile 后装载其入口。
 - `[[files]]` 绑定 Guest、契约、资源和随包分发的依赖锁。
 - `signature.key-id` 对接 Publisher Profile。
 
 ### 退出条件
 
-- Realm Profile 固定 Service 包。匹配的签名发布记录确定独立验证的 Front 包。
+- Realm Profile 指定本实例的 Service 和 Front。
 - 同版本异包被稳定检测；
 - 离线缓存可重新验证；
 - package 中无法替换 Front Host。

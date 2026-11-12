@@ -88,20 +88,18 @@ Actrium 首次启动完成以下配置：
 
 1. 用户打开程序详情；
 2. Actrium 显示 Publisher、版本、两个包的摘要、权限、Workspace 要求和市场审核状态。
-3. Actrium 取得并验证 Publisher 签名的 Program Release 记录。
-4. 按发布记录验证两个包的身份、签名、摘要、兼容性和压缩包限制。
-5. 记录 Program Release；
-6. 只缓存程序，不自动创建 Service，除非用户点击「创建实例」。
+3. 分别校验归档的身份、签名、摘要和大小限制。
+4. 核对 Front 的 Service 依赖和 RPC 契约，再缓存已验证的包。用户可点击「创建实例」。
 
 下载地址不是信任源；Actrium 以包签名（经 Publisher Profile 验证）和 digest 为准。
 
 ### 4.2 打开链接时
 
-发布版本尚未安装时按 [04 §3](04-uri-and-resolution.zh.md) 处理。用户确认后，验证匹配的发布记录和两个包。用户取消时，在创建 Actor 前结束安装。
+包尚未安装时按 [04 §3](04-uri-and-resolution.zh.md) 处理。用户确认后，验证 Realm Profile 和选定的两个归档，再创建 Actor。
 
 ### 4.3 本地导入
 
-本地导入接受配套的 Service 与 Front `.actr` 文件。导入已发布的版本时，两个包必须匹配已验证的发布记录。
+本地导入时选择 Service 和 Front 的 `.actr` 文件。分别验包并检查 Service 依赖后，保存所选组合。
 
 - 每个归档都必须通过结构、哈希和签名检查。
 - 签名 key 不属于已验证域名时标记为「本地开发身份」；
@@ -122,9 +120,9 @@ sequenceDiagram
     participant S as Service
     participant F as Front Actor
 
-    U->>A: 选择发布版本或导入配套的 Service 和 Front 包
-    A->>P: 验证发布记录和两个包
-    P-->>A: 已验证的发布记录和两份清单
+    U->>A: 选取 Service 和 Front 包
+    A->>P: 分别验包并核对 RPC 契约
+    P-->>A: 已验证的清单和整包摘要
     A->>U: 权限、Realm 域名与 RealmId、Workspace 确认
     U-->>A: 确认创建
     A->>M: Create(idempotency_key, verified_release, workspace, domain, realm_id, display_name)
@@ -202,7 +200,7 @@ Host 按实例保存选定的 Provider、位置、实际授权和租约。
 
 1. 解析 Realm 链接，得到 Realm 名；
 2. 获取该域名的 Realm 签名 key 与 Realm Profile 并验证签名；
-3. 验证 Realm Profile 固定的 Service 包，以及匹配的发布记录固定的 Front 包。
+3. 验证 Realm Profile 选定的 Service 和 Front 包。
 4. 经 Realm Profile 指定的 Actr Facility Provider，在该 Realm 内找到 Actor 类型与 Service 包匹配的 Service。
 5. 完成双方身份和 challenge 验证；
 6. 协商 Front–Service contract；
@@ -497,7 +495,7 @@ actrium init
 → validate（schema、capability、hash、沙箱兼容性）
 → 分别签名 Front 包和 Service 包
 → 生成/更新 Publisher Profile
-→ 发布两个包及绑定其摘要的签名发布记录
+→ 分别发布归档，提供下载地址、类型与 SHA-256
 → 回读两个包并核对 digest 与签名
 → 可选提交 Marketplace 审核
 ```

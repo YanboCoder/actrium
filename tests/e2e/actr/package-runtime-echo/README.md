@@ -44,6 +44,24 @@ bash tests/e2e/actr/package-runtime-echo/run.sh "Hello"
 MODE=rotation bash tests/e2e/actr/package-runtime-echo/run.sh
 ```
 
+## Signed v2 Component
+
+The combined Host/Issuer matrix and reproduction commands are in
+[JOINT-ACCEPTANCE.md](JOINT-ACCEPTANCE.md). Its joint runner also checks real
+Issuer renewal/reissue using the Component bytes from the successful RPC run.
+
+With Issuer support for `actr-package/2` and the Rust `wasm32-wasip2` target
+installed, run:
+
+```bash
+bash tests/e2e/actr/package-runtime-echo/run.sh --backend v2-component
+```
+
+The runner builds the existing Rust Echo Component against the current Workload
+ABI, packs and verifies its signed v2 archive, and launches it through
+`actr run`. It verifies that the Issuer records package-mode registration
+without a target before sending the Echo RPC from the separate client Actor.
+
 ## Signed Realm creation matrix (PR #305)
 
 ```bash

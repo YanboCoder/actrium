@@ -4,3 +4,4 @@
 workload/guest.js
 workload/*.png
 dist/
+ui/capability-manifest.json

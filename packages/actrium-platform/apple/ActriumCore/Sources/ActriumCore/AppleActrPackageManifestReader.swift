@@ -10,6 +10,8 @@ public struct AppleActrPackageManifestInfo {
     public let contractName: String?
     public let contractVersion: Int?
     public let permissions: [String]
+    public let capabilities: String?
+    public let capabilityManifestJSON: String?
     public let leftPanelDefaultVisible: Bool
     public let rightPanelDefaultVisible: Bool
     public let leftPanelScript: String?
@@ -55,8 +57,30 @@ public enum AppleActrPackageManifestReader {
         }
         let source = try String(contentsOf: manifestURL, encoding: .utf8)
         let manifest = try parseActrPackageManifest(source: source)
+        let packageRoot = manifestURL.deletingLastPathComponent()
         let plan = try createActrIntegrityPlan(manifestToml: source)
-        try verifyPayloads(fromRoot: manifestURL.deletingLastPathComponent(), plan: plan)
+        try verifyPayloads(fromRoot: packageRoot, plan: plan)
+
+        let capabilities = manifest.capabilities
+        let capabilityManifestJSON: String?
+        if let capabilities {
+            guard plan?.files.contains(where: { $0.path == capabilities }) == true else {
+                throw packageError(
+                    code: 6,
+                    message: "capability manifest is not a declared payload: \(capabilities)"
+                )
+            }
+            let capabilityManifestURL = try resolvedPayloadURL(
+                root: packageRoot,
+                path: capabilities
+            )
+            capabilityManifestJSON = try String(
+                contentsOf: capabilityManifestURL,
+                encoding: .utf8
+            )
+        } else {
+            capabilityManifestJSON = nil
+        }
 
         return AppleActrPackageManifestInfo(
             name: manifest.name,
@@ -67,6 +91,8 @@ public enum AppleActrPackageManifestReader {
             contractName: manifest.contractName,
             contractVersion: manifest.contractVersion.map(Int.init),
             permissions: manifest.permissions,
+            capabilities: capabilities,
+            capabilityManifestJSON: capabilityManifestJSON,
             leftPanelDefaultVisible: manifest.leftPanelDefaultVisible,
             rightPanelDefaultVisible: manifest.rightPanelDefaultVisible,
             leftPanelScript: nil,

@@ -148,6 +148,8 @@ pub mod dispatch;
 // ServiceSpec derivation from a verified package (native-only; pulls
 // actr-service-compat/proto-fingerprint).
 #[cfg(not(target_arch = "wasm32"))]
+mod package_runtime;
+#[cfg(not(target_arch = "wasm32"))]
 mod service_spec;
 
 // WASM actor execution engine (optional, native-only)
@@ -171,7 +173,10 @@ pub(crate) mod resource;
 // Re-exports: Cross-platform
 // ═══════════════════════════════════════════════════════════════════════════════
 
-pub use actr_pack::{PackageManifest, ValidatedActorIdentity, VerifiedPackage};
+pub use actr_pack::{
+    PackageManifest, RuntimePackageManifest, ValidatedActorIdentity, VerifiedPackage,
+    VerifiedRuntimePackage,
+};
 pub use config::HyperConfig;
 pub use error::HyperError;
 pub(crate) use error::HyperResult;
@@ -339,8 +344,6 @@ use std::path::Path;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 #[cfg(not(target_arch = "wasm32"))]
-use std::str::FromStr;
-#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -439,7 +442,8 @@ struct Attachment {
     /// metadata attached. In that case `Node::register*` falls back to the
     /// runtime config's actor metadata instead of package-derived
     /// registration inputs.
-    verified: Option<VerifiedPackage>,
+    verified: Option<VerifiedRuntimePackage>,
+    v2_service_spec: Option<ServiceSpec>,
     package_bytes: bytes::Bytes,
 }
 
@@ -579,8 +583,8 @@ impl WorkloadPackage {
     /// This reads the manifest TOML embedded in the `.actr` ZIP without checking
     /// the signature. Use [`Hyper::verify_package`] to obtain a verified manifest.
     /// Re-parses on every call — cache externally if you need it hot.
-    pub fn manifest(&self) -> HyperResult<actr_pack::PackageManifest> {
-        actr_pack::read_manifest(&self.bytes)
+    pub fn manifest(&self) -> HyperResult<RuntimePackageManifest> {
+        actr_pack::read_runtime_manifest(&self.bytes)
             .map_err(|e| HyperError::InvalidManifest(e.to_string()))
     }
 }
@@ -591,8 +595,10 @@ pub(crate) struct LoadedWorkload {
     /// Verified package retained for downstream bootstrap and storage
     /// operations — carries the parsed manifest plus the raw manifest bytes
     /// and signature needed for transparent forwarding to Issuer.
-    pub verified: VerifiedPackage,
-    /// Binary kind detected from `verified.manifest.binary.target`.
+    pub verified: VerifiedRuntimePackage,
+    pub packaged_lock: Option<actr_config::lock::LockFile>,
+    pub v2_service_spec: Option<ServiceSpec>,
+    /// Backend selected from the signed workload profile or legacy target.
     pub binary_kind: BinaryKind,
     /// Ready-to-attach runtime workload.
     pub workload: crate::workload::Workload,
@@ -699,12 +705,14 @@ impl Hyper {
     /// Delegates entirely to the configured [`crate::verify::TrustProvider`];
     /// the provider decides how to authenticate the package (static key,
     /// registry lookup, keyless transparency log, etc).
-    pub async fn verify_package(&self, package: &WorkloadPackage) -> HyperResult<VerifiedPackage> {
+    pub async fn verify_package(
+        &self,
+        package: &WorkloadPackage,
+    ) -> HyperResult<VerifiedRuntimePackage> {
         verify_package_for_hyper(&self.inner, package.bytes()).await
     }
 
-    /// Verify a package, select the execution backend from `binary.target`,
-    /// and prepare a runtime workload from it.
+    /// Verify a package, select its execution backend, and prepare the workload.
     ///
     /// Internal helper used by attachment flow and test-support shims.
     #[cfg(feature = "test-utils")]
@@ -914,7 +922,7 @@ impl Node<Init> {
     /// `Node<Attached>`.
     /// Attach a packaged workload (`wasm` / `dyn lib`) to this node.
     pub async fn attach(self, package: &WorkloadPackage) -> HyperResult<Node<Attached>> {
-        let runtime_config = self
+        let mut runtime_config = self
             .pending_runtime_config
             .expect("Node<Init> without pending runtime config");
         let conflict_keys = self.pending_conflict_keys;
@@ -922,31 +930,11 @@ impl Node<Init> {
         let test_faults = self.pending_test_faults;
         let hyper_inner = self.hyper;
         let loaded = load_workload_package_inner(&hyper_inner, package).await?;
-        // Only consume the lock entry when the verified manifest authenticates
-        // it. An attacker may otherwise append an unsigned ZIP entry with the
-        // conventional name after the manifest has been signed.
-        let packaged_lock = if let Some(lock_file) = &loaded.verified.manifest.lock_file {
-            actr_pack::read_lock_file_bounded(
-                package.bytes(),
-                &lock_file.path,
-                hyper_inner
-                    .config
-                    .resolved_wasm_limits()
-                    .max_component_bytes,
-            )
-            .map_err(|e| HyperError::Runtime(e.to_string()))?
-        } else {
-            None
+        if matches!(&loaded.verified.manifest, RuntimePackageManifest::V2(_)) {
+            let actor_type = loaded.verified.manifest.actor_type();
+            runtime_config.package.name.clone_from(&actor_type.name);
+            runtime_config.package.actr_type = actor_type;
         }
-        .map(|bytes| {
-            let raw = std::str::from_utf8(&bytes).map_err(|e| {
-                HyperError::Runtime(format!("manifest.lock.toml is not valid UTF-8: {e}"))
-            })?;
-            actr_config::lock::LockFile::from_str(raw).map_err(|e| {
-                HyperError::Runtime(format!("failed to parse manifest.lock.toml: {e}"))
-            })
-        })
-        .transpose()?;
         let mailbox_backpressure_threshold =
             hyper_inner.config.resolved_mailbox_backpressure_threshold();
         let credential_expiry_warning = hyper_inner.config.credential_expiry_warning;
@@ -956,7 +944,7 @@ impl Node<Init> {
             runtime_config,
             loaded.workload,
             Some(loaded.verified.manifest.clone()),
-            packaged_lock,
+            loaded.packaged_lock,
             None,
             mailbox_backpressure_threshold,
             credential_expiry_warning,
@@ -980,6 +968,7 @@ impl Node<Init> {
             attachment: Some(Attachment {
                 node: node_inner,
                 verified: Some(loaded.verified),
+                v2_service_spec: loaded.v2_service_spec,
                 package_bytes: package.bytes.clone(),
             }),
             pending_runtime_config: None,
@@ -1048,6 +1037,7 @@ impl Node<Init> {
             attachment: Some(Attachment {
                 node: node_inner,
                 verified: None,
+                v2_service_spec: None,
                 package_bytes: bytes::Bytes::new(),
             }),
             pending_runtime_config: None,
@@ -1164,11 +1154,18 @@ impl Node<Attached> {
             .attachment
             .as_ref()
             .expect("Node<Attached> without attachment");
-        match attachment.verified.as_ref() {
-            Some(verified) => crate::service_spec::calculate_service_spec_from_package(
-                &attachment.package_bytes,
-                &verified.manifest,
-            ),
+        match attachment
+            .verified
+            .as_ref()
+            .map(|package| &package.manifest)
+        {
+            Some(RuntimePackageManifest::V2(_)) => Ok(attachment.v2_service_spec.clone()),
+            Some(RuntimePackageManifest::Legacy(manifest)) => {
+                crate::service_spec::calculate_service_spec_from_package(
+                    &attachment.package_bytes,
+                    manifest,
+                )
+            }
             None => Ok(None),
         }
     }
@@ -1230,6 +1227,14 @@ impl Node<Attached> {
         issuer_endpoint: &str,
         service_spec: Option<ServiceSpec>,
     ) -> HyperResult<Node<Registered>> {
+        if let Some(verified) = self.attachment.as_ref().and_then(|a| a.verified.as_ref())
+            && matches!(&verified.manifest, RuntimePackageManifest::V2(_))
+            && service_spec != self.derived_service_spec()?
+        {
+            return Err(HyperError::InvalidManifest(
+                "v2 ServiceSpec must come from the signed package contract".into(),
+            ));
+        }
         self.register_with_inner(issuer_endpoint, service_spec)
             .await
     }
@@ -1360,7 +1365,7 @@ impl Hyper {
     /// Resolve the storage namespace path for a verified manifest.
     ///
     /// The path is fixed here; all subsequent storage operations are isolated based on this path.
-    pub fn resolve_storage_path(&self, manifest: &PackageManifest) -> HyperResult<PathBuf> {
+    pub fn resolve_storage_path(&self, manifest: &RuntimePackageManifest) -> HyperResult<PathBuf> {
         resolve_storage_path_for(&self.inner, manifest)
     }
 
@@ -1388,7 +1393,7 @@ impl Hyper {
     ///   proof
     pub async fn bootstrap_credential(
         &self,
-        verified: &VerifiedPackage,
+        verified: &VerifiedRuntimePackage,
         issuer_endpoint: &str,
         realm: &str,
         service_spec: Option<ServiceSpec>,
@@ -1428,8 +1433,10 @@ impl Hyper {
 /// (CWE-22 / CWE-73). Shared by the direct-filesystem branch
 /// ([`ActorStore::open_under`]) and the platform branch (`secret_store`).
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn storage_namespace_for(manifest: &PackageManifest) -> HyperResult<StorageNamespace> {
-    let identity = actr_pack::ValidatedActorIdentity::from_manifest(manifest)
+pub(crate) fn storage_namespace_for(
+    manifest: &RuntimePackageManifest,
+) -> HyperResult<StorageNamespace> {
+    let identity = ValidatedActorIdentity::from_actor_type(manifest.actor_type())
         .map_err(|error| HyperError::InvalidManifest(error.to_string()))?;
     Ok(StorageNamespace::actr_v1(
         identity.namespace_id().into_bytes(),
@@ -1439,7 +1446,7 @@ pub(crate) fn storage_namespace_for(manifest: &PackageManifest) -> HyperResult<S
 #[cfg(not(target_arch = "wasm32"))]
 fn resolve_storage_path_for(
     inner: &HyperInner,
-    manifest: &PackageManifest,
+    manifest: &RuntimePackageManifest,
 ) -> HyperResult<PathBuf> {
     let namespace = storage_namespace_for(manifest)?;
     // Platform-backed nodes have no local SecureStorageRoot; this diagnostic
@@ -1454,7 +1461,7 @@ fn resolve_storage_path_for(
 
 /// Single internal entry that verifies a package AND enforces the identity
 /// trust boundary, closing the hole where a custom [`TrustProvider`] returns a
-/// [`VerifiedPackage`] whose manifest identity was never validated.
+/// [`VerifiedRuntimePackage`] whose manifest identity was never validated.
 ///
 /// Both `Hyper::verify_package` and `load_workload_package_inner` must use this
 /// so a malicious or buggy provider cannot smuggle an unsafe identity into
@@ -1463,7 +1470,7 @@ fn resolve_storage_path_for(
 async fn verify_package_for_hyper(
     inner: &HyperInner,
     bytes: &[u8],
-) -> HyperResult<VerifiedPackage> {
+) -> HyperResult<VerifiedRuntimePackage> {
     let max_entry_bytes = inner.config.resolved_wasm_limits().max_component_bytes;
     let verified = inner
         .config
@@ -1471,7 +1478,7 @@ async fn verify_package_for_hyper(
         .verify_package_bounded(bytes, max_entry_bytes)
         .await?;
 
-    ValidatedActorIdentity::from_manifest(&verified.manifest)
+    ValidatedActorIdentity::from_actor_type(verified.manifest.actor_type())
         .map_err(|error| HyperError::InvalidManifest(error.to_string()))?;
 
     Ok(verified)
@@ -1487,88 +1494,129 @@ pub(crate) async fn load_workload_package_inner(
 ) -> HyperResult<LoadedWorkload> {
     let bytes = package.bytes();
     let verified = verify_package_for_hyper(inner, bytes).await?;
-    let binary_kind = detect_binary_kind(&verified.manifest)?;
-    let workload = match binary_kind {
-        BinaryKind::Wasm => load_wasm_workload_inner(inner, bytes, &verified.manifest).await?,
-        BinaryKind::DynClib => load_dynclib_workload_inner(inner, bytes, &verified.manifest)?,
+    let max_bytes = inner.config.resolved_wasm_limits().max_component_bytes;
+    let (binary_kind, workload, packaged_lock, v2_service_spec) = match &verified.manifest {
+        RuntimePackageManifest::Legacy(manifest) => {
+            let binary_kind = detect_binary_kind(manifest)?;
+            let packaged_lock = if let Some(lock_file) = &manifest.lock_file {
+                actr_pack::read_lock_file_bounded(bytes, &lock_file.path, max_bytes)
+                    .map_err(|e| HyperError::InvalidManifest(e.to_string()))?
+                    .map(|bytes| package_runtime::parse_lock(&bytes))
+                    .transpose()?
+            } else {
+                None
+            };
+            let workload = match binary_kind {
+                BinaryKind::Wasm => load_wasm_workload_inner(inner, bytes, manifest).await?,
+                BinaryKind::DynClib => load_dynclib_workload_inner(inner, bytes, manifest)?,
+            };
+            (binary_kind, workload, packaged_lock, None)
+        }
+        RuntimePackageManifest::V2(manifest) => {
+            package_runtime::validate_component_host(manifest)?;
+            let packaged_lock = package_runtime::read_v2_lock(bytes, manifest, max_bytes)?;
+            let service_spec = service_spec::calculate_v2_service_spec(bytes, manifest, max_bytes)?;
+            let wasm_bytes = manifest
+                .read_declared_file(bytes, &manifest.workload.entry, max_bytes)
+                .map_err(|e| HyperError::InvalidManifest(e.to_string()))?;
+            let workload = instantiate_wasm_component(
+                inner,
+                wasm_bytes,
+                &manifest.workload.entry,
+                manifest.actor_type(),
+            )
+            .await?;
+            (BinaryKind::Wasm, workload, packaged_lock, service_spec)
+        }
     };
     Ok(LoadedWorkload {
         verified,
         binary_kind,
         workload,
+        packaged_lock,
+        v2_service_spec,
     })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn load_wasm_workload_inner(
-    _inner: &HyperInner,
+    inner: &HyperInner,
     bytes: &[u8],
     manifest: &PackageManifest,
 ) -> HyperResult<crate::workload::Workload> {
-    #[cfg(feature = "wasm-engine")]
-    {
-        // Refuse legacy core-module packages before attempting to compile
-        // them — `Component::from_binary` already rejects them downstream
-        // with an opaque "unknown binary format" error, so catching the
-        // case here produces a migration-pointing message instead.
-        if matches!(
-            manifest.binary.resolved_kind(),
-            actr_pack::BinaryKind::CoreModule
-        ) {
-            return Err(HyperError::InvalidManifest(format!(
-                "package `{}` uses the legacy core wasm module format, which was retired in Phase 1. \
+    // Refuse legacy core-module packages before attempting to compile
+    // them — `Component::from_binary` already rejects them downstream
+    // with an opaque "unknown binary format" error, so catching the
+    // case here produces a migration-pointing message instead.
+    if matches!(
+        manifest.binary.resolved_kind(),
+        actr_pack::BinaryKind::CoreModule
+    ) {
+        return Err(HyperError::InvalidManifest(format!(
+            "package `{}` uses the legacy core wasm module format, which was retired in Phase 1. \
                  Rebuild with actr 0.2+ (`actr build`, target wasm32-wasip2 + wasm-component-ld 0.5.22+) \
                  to produce a Component Model binary, and set `binary.kind = \"component\"` in manifest.toml.",
-                manifest.actr_type_str()
-            )));
-        }
+            manifest.actr_type_str()
+        )));
+    }
 
-        let limits = _inner.config.resolved_wasm_limits();
+    let wasm_bytes = actr_pack::load_binary_bounded(
+        bytes,
+        inner.config.resolved_wasm_limits().max_component_bytes,
+    )
+    .map_err(|e| {
+        HyperError::Runtime(format!(
+            "failed to extract package binary `{}` for target `{}`: {e}",
+            manifest.binary.path, manifest.binary.target
+        ))
+    })?;
+    instantiate_wasm_component(
+        inner,
+        wasm_bytes,
+        &manifest.binary.target,
+        manifest.actr_type_str(),
+    )
+    .await
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn instantiate_wasm_component(
+    inner: &HyperInner,
+    wasm_bytes: Vec<u8>,
+    entry: &str,
+    actr_type: String,
+) -> HyperResult<crate::workload::Workload> {
+    #[cfg(feature = "wasm-engine")]
+    {
+        let limits = inner.config.resolved_wasm_limits();
         limits.validate()?;
-        let wasm_bytes = actr_pack::load_binary_bounded(bytes, limits.max_component_bytes)
-            .map_err(|e| {
-                HyperError::Runtime(format!(
-                    "failed to extract package binary `{}` for target `{}`: {e}",
-                    manifest.binary.path, manifest.binary.target
-                ))
-            })?;
         // issue #346: resource limits (fuel/epoch/memory/aggregate) drive the
         // engine config + per-store limiter + per-entry re-seed; the byte cap
         // also rejects oversized components before compilation.
-        let target = manifest.binary.target.clone();
         let host = tokio::task::spawn_blocking(move || {
             crate::wasm::WasmHost::compile_with_limits(&wasm_bytes, &limits)
         })
         .await
+        .map_err(|e| HyperError::Runtime(format!("WASM compiler task failed for `{entry}`: {e}")))?
         .map_err(|e| {
-            HyperError::Runtime(format!(
-                "WASM compiler task failed for target `{target}`: {e}"
-            ))
-        })?
-        .map_err(|e| {
-            HyperError::Runtime(format!(
-                "failed to compile WASM package target `{}`: {e}",
-                target
-            ))
+            HyperError::Runtime(format!("failed to compile WASM component `{entry}`: {e}"))
         })?;
         let mut instance = host.instantiate().await.map_err(|e| {
             HyperError::Runtime(format!(
-                "failed to instantiate WASM package target `{}`: {e}",
-                manifest.binary.target
+                "failed to instantiate WASM component `{entry}`: {e}"
             ))
         })?;
         instance
             .init(&actr_framework::guest::dynclib_abi::InitPayloadV1 {
                 version: actr_framework::guest::dynclib_abi::version::V1,
-                actr_type: manifest.actr_type_str(),
+                actr_type,
                 credential: Vec::new(),
                 actor_id: Vec::new(),
                 realm: String::new(),
             })
             .map_err(|e| {
                 HyperError::Runtime(format!(
-                    "failed to initialize WASM package target `{}`: {e}",
-                    manifest.binary.target
+                    "failed to initialize WASM component `{entry}`: {e}"
                 ))
             })?;
         Ok(crate::workload::Workload::Wasm(instance))
@@ -1576,7 +1624,7 @@ async fn load_wasm_workload_inner(
 
     #[cfg(not(feature = "wasm-engine"))]
     {
-        let _ = (bytes, manifest);
+        let _ = (inner, wasm_bytes, entry, actr_type);
         Err(HyperError::Runtime(
             "package target requires the `wasm-engine` feature, but it is not enabled".to_string(),
         ))
@@ -1635,7 +1683,7 @@ struct CredentialBootstrapRequest<'a> {
 #[cfg(not(target_arch = "wasm32"))]
 async fn bootstrap_credential_inner(
     inner: &HyperInner,
-    verified: &VerifiedPackage,
+    verified: &VerifiedRuntimePackage,
     request: CredentialBootstrapRequest<'_>,
 ) -> HyperResult<register_response::RegisterOk> {
     let CredentialBootstrapRequest {
@@ -1646,8 +1694,9 @@ async fn bootstrap_credential_inner(
         client_key,
     } = request;
     let manifest = &verified.manifest;
+    let actr_type = manifest.actor_type().to_program_identity();
     info!(
-        actr_type = manifest.actr_type_str(),
+        actr_type,
         issuer_endpoint, realm, "starting credential bootstrap with Issuer"
     );
 
@@ -1668,7 +1717,7 @@ async fn bootstrap_credential_inner(
     }
 
     info!(
-        actr_type = manifest.actr_type_str(),
+        actr_type,
         "registering with Issuer using publisher manifest"
     );
 
@@ -1680,7 +1729,7 @@ async fn bootstrap_credential_inner(
         Some(register_response::Result::Success(ok)) => ok,
         Some(register_response::Result::Error(e)) => {
             error!(
-                actr_type = manifest.actr_type_str(),
+                actr_type,
                 error_code = e.code,
                 error_message = %e.message,
                 "Issuer registration returned error"
@@ -1691,10 +1740,7 @@ async fn bootstrap_credential_inner(
             )));
         }
         None => {
-            error!(
-                actr_type = manifest.actr_type_str(),
-                "Issuer response missing result field"
-            );
+            error!(actr_type, "Issuer response missing result field");
             return Err(HyperError::IssuerBootstrapFailed(
                 "Issuer response missing result field".to_string(),
             ));
@@ -1734,13 +1780,13 @@ async fn bootstrap_credential_inner(
         .await
         .map_err(|e| HyperError::Storage(format!("failed to store signing key: {e}")))?;
     debug!(
-        actr_type = manifest.actr_type_str(),
+        actr_type,
         signing_key_id = ok.signing_key_id,
         "Issuer signing public key persisted to ActorStore"
     );
 
     info!(
-        actr_type = manifest.actr_type_str(),
+        actr_type,
         credential_len = ok.credential.encode_to_vec().len(),
         "Issuer credential bootstrap succeeded"
     );
@@ -1778,18 +1824,13 @@ async fn bootstrap_linked_credential_inner(
 
 #[cfg(not(target_arch = "wasm32"))]
 fn build_package_register_request(
-    verified: &VerifiedPackage,
+    verified: &VerifiedRuntimePackage,
     realm: &str,
     service_spec: Option<ServiceSpec>,
     acl: Option<Acl>,
 ) -> RegisterRequest {
-    let manifest = &verified.manifest;
     RegisterRequest {
-        actr_type: ActrType {
-            publisher: manifest.publisher.clone(),
-            name: manifest.name.clone(),
-            version: manifest.version.clone(),
-        },
+        actr_type: verified.manifest.actor_type(),
         realm: realm.to_string(),
         service_spec,
         acl,
@@ -1797,7 +1838,10 @@ fn build_package_register_request(
         ws_address: None,
         manifest_raw: Some(verified.manifest_raw.clone().into()),
         publisher_signature: Some(verified.sig_raw.clone().into()),
-        target: Some(manifest.binary.target.clone()),
+        target: match &verified.manifest {
+            RuntimePackageManifest::V2(_) => None,
+            RuntimePackageManifest::Legacy(manifest) => Some(manifest.binary.target.clone()),
+        },
         auth_mode: Some(RegisterAuthMode::Package as i32),
         signing_public_key: Some(verified.signing_public_key.to_vec().into()),
     }

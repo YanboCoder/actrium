@@ -38,6 +38,12 @@ flowchart TB
     CB -->|"Typed Service capability"| SW
 ```
 
+### 1.1 包选择与运行实例
+
+部署配置从 Profile 选择包引用，为各 Actor 提供独立身份、状态和启动参数；读取清单不自动执行全部包。
+每包先验签并检查平台/Host/ABI；注册成功不等于业务 Ready。主 Service 仍限 owner 注册。
+包选择不替代部署授权或业务依赖，也不自动迁移身份、停止进程或删除数据。
+
 ## 2. Front Actor
 
 ### 2.1 原生 Front Host 与 Keel Guest Workload
@@ -57,7 +63,7 @@ Front 的 Actor 类型由已验证的 Front 包声明。Team Notes 的 Front 使
 notes.example/team-notes-front@1.4.2
 ```
 
-Service 按已验证 Program Release 记录中的 Front 包类型校验该类型。Attach 时由 Actr Host 提供以下字段。
+Attach 时，Service 按已接受的 `packages[front_package].type` 校验对端 Front 类型。Actr Host 提供以下字段。
 
 - Program Release；
 - Service 包的 digest；

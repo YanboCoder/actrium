@@ -54,9 +54,9 @@ But it depends on three foundational capabilities that must be completed first:
 | D-005 | A Service binds zero or one Workspace; a program that needs multiple Actors has them orchestrated by the Service within the same Realm. |
 | D-006 | Actrium provides the native Front Host. The Publisher supplies the Keel Guest and Service Workloads with their resources and declarations. |
 | D-007 | In v1, third-party Front Guests only support the Keel JS Guest, and it is fixed to a QuickJS backend with a hard timeout and heap cap. |
-| D-008 | A signed Program Release record binds separate Service and Front packages. Each `.actr` uses `actr-package/2` and declares one Actor type and one Workload. The Front manifest declares its Service dependency. |
+| D-008 | Each `actr-package/2` archive declares one Actor type and Workload. Its Publisher signs the manifest inside the archive. The Front declares its required Service dependency. |
 | D-009 | A link only points to an instance and uses the `actr://<Realm domain>/<realm_id>` form; opening a link only connects to that instance and must not silently create a new one on failure. Creating an instance is a local operation inside Actrium, not a link. |
-| D-010 | Publisher identity is a normalized domain without a port. The Publisher Profile supplies keys for verifying release records and packages obtained through any distribution channel. |
+| D-010 | Publisher identity is a normalized domain without a port. Its Publisher Profile supplies the trusted keys for package verification. |
 | D-011 | Marketplace is a source of discovery, review and revocation information, not a Publisher naming authority; the domain and the package signature are the provenance chain. |
 | D-012 | A v1 ActorId must contain a verifiable Realm name (`<realm_id>@<domain>`, e.g. `notes@acme.com`); the program type is not in the ActorId. It is a public address and cryptographic identity, not a bearer token: knowing the address does not grant the right to connect. |
 | D-013 | A Realm is a logical trust domain corresponding to one application instance, and may delegate multiple signaling/TURN services; a Realm is not the same thing as a physical signaling process — one Actr Facility Provider hosts many Realms; a Realm is bound to an Actr Facility Provider when it is created and can never switch afterward. |
@@ -64,7 +64,7 @@ But it depends on three foundational capabilities that must be completed first:
 | D-015 | An Actor credential proves the Actor key, identity and claims; it does not prove what code the other side is actually running. How an application authorizes on that basis is up to the application; see [Application development guidance](app-development-guidance.md). |
 | D-016 | A Service manifest's `[workspace]` declares requirement, requested access, and supported Providers. The deployment or instance-creation flow determines provisioning, and the Host stores the actual binding and grant per instance. |
 | D-017 | Deletion is split into recoverable Trashed and unrecoverable Purged/Deleted; deleting the Workspace is always a separate action. |
-| D-018 | Publisher and Realm domain bootstrap always uses HTTPS 443 (i.e. `https://<domain>/.well-known/actr`); the Realm Profile comes from the HTTPS location declared by `realms`, and it pins the Service package and the Actr Facility Provider endpoints (which may carry ports). When the Realm Profile cannot be fetched or fails verification, no Actr Facility Provider other than the Realm Profile's own may be used. |
+| D-018 | Publisher and Realm domain bootstrap always uses HTTPS 443 (i.e. `https://<domain>/.well-known/actr`); the Realm Profile comes from the HTTPS location declared by `realms`, and it pins the selected packages and the Actr Facility Provider endpoints (which may carry ports). When the Realm Profile cannot be fetched or fails verification, no Actr Facility Provider other than the Realm Profile's own may be used. |
 | D-019 | Application assurance is aggregated over a rootless effective-dependency graph; when the channel is valid and `Ready`, the displayed color takes the weakest of all node conclusions. Front only locates, it is not the graph root. |
 | D-020 | `ActorAssurance` is issued by a verifier, `issuer ≠ subject`. The Actr Host may evaluate the Guest and provide evidence, but must not self-sign its own final conclusion. |
 | D-021 | The top level has only green / yellow / red; when a facet is not ready, the display shows "cannot be established," not a fourth color. Unknown is not a confirmed leak, but it must never be displayed as green. |
@@ -84,6 +84,7 @@ But it depends on three foundational capabilities that must be completed first:
 | D-035 | Color can auto-recover when it has not weakened; when it weakens, blocking is maintained and risk acceptance is requested (this does not change the color); the user cannot override an invalid channel or a platform hard floor. |
 | D-036 | A trusted Verifier may package an internal Actor subgraph as a Certified Privacy Domain and provide it through an Assured Actor Edge with scope, validity and revocation; a self-signed declaration is invalid. |
 | D-037 | Audit logs are an explicit storage/audit sink and must declare fields, data class, target, reading party and retention; LLM/GPU attestation by itself cannot prove that the server keeps no separate log. |
+| D-038 | The Realm signs its Service and Front selection. `primary_package` and `front_package` name two distinct entries in `packages`. [Realm Profile §4](../../../actr/protocols/realm-profile.md#4-profile-format) |
 
 ## 4. Document navigation
 

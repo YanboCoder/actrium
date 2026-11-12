@@ -12,6 +12,7 @@ class TabXPCConfig: NSObject, NSSecureCoding {
     let url: String?
     let htmlContent: String?
     let unifiedScript: String?
+    let capabilityManifestJSON: String?
     let leftPanelScript: String?
     let rightPanelScript: String?
     let backgroundColor: String
@@ -28,6 +29,7 @@ class TabXPCConfig: NSObject, NSSecureCoding {
         url: String? = nil,
         htmlContent: String? = nil,
         unifiedScript: String? = nil,
+        capabilityManifestJSON: String? = nil,
         leftPanelScript: String? = nil,
         rightPanelScript: String? = nil,
         backgroundColor: String = "#1f1f1f",
@@ -43,6 +45,7 @@ class TabXPCConfig: NSObject, NSSecureCoding {
         self.url = url
         self.htmlContent = htmlContent
         self.unifiedScript = unifiedScript
+        self.capabilityManifestJSON = capabilityManifestJSON
         self.leftPanelScript = leftPanelScript
         self.rightPanelScript = rightPanelScript
         self.backgroundColor = backgroundColor
@@ -66,6 +69,7 @@ class TabXPCConfig: NSObject, NSSecureCoding {
         self.url = coder.decodeObject(of: NSString.self, forKey: "url") as String?
         self.htmlContent = coder.decodeObject(of: NSString.self, forKey: "htmlContent") as String?
         self.unifiedScript = coder.decodeObject(of: NSString.self, forKey: "unifiedScript") as String?
+        self.capabilityManifestJSON = coder.decodeObject(of: NSString.self, forKey: "capabilityManifestJSON") as String?
         self.leftPanelScript = coder.decodeObject(of: NSString.self, forKey: "leftPanelScript") as String?
         self.rightPanelScript = coder.decodeObject(of: NSString.self, forKey: "rightPanelScript") as String?
         self.backgroundColor = backgroundColor
@@ -88,6 +92,7 @@ class TabXPCConfig: NSObject, NSSecureCoding {
         coder.encode(url as NSString?, forKey: "url")
         coder.encode(htmlContent as NSString?, forKey: "htmlContent")
         coder.encode(unifiedScript as NSString?, forKey: "unifiedScript")
+        coder.encode(capabilityManifestJSON as NSString?, forKey: "capabilityManifestJSON")
         coder.encode(leftPanelScript as NSString?, forKey: "leftPanelScript")
         coder.encode(rightPanelScript as NSString?, forKey: "rightPanelScript")
         coder.encode(backgroundColor as NSString, forKey: "backgroundColor")
@@ -116,6 +121,9 @@ class TabXPCConfig: NSObject, NSSecureCoding {
         if let url = url { dict["url"] = url }
         if let html = htmlContent { dict["htmlContent"] = html }
         if let unified = unifiedScript { dict["unifiedScript"] = unified }
+        if let capabilityManifestJSON = capabilityManifestJSON {
+            dict["capabilityManifestJSON"] = capabilityManifestJSON
+        }
         if let left = leftPanelScript { dict["leftPanelScript"] = left }
         if let right = rightPanelScript { dict["rightPanelScript"] = right }
         if let contractName = contractName, let contractVersion = contractVersion {
@@ -168,6 +176,7 @@ class TabXPCConfig: NSObject, NSSecureCoding {
             url: dict["url"] as? String,
             htmlContent: dict["htmlContent"] as? String,
             unifiedScript: dict["unifiedScript"] as? String,
+            capabilityManifestJSON: dict["capabilityManifestJSON"] as? String,
             leftPanelScript: dict["leftPanelScript"] as? String,
             rightPanelScript: dict["rightPanelScript"] as? String,
             backgroundColor: dict["backgroundColor"] as? String ?? "#1f1f1f",

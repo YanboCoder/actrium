@@ -525,6 +525,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 leftPanelScript: leftPanelScript,
                 rightPanelScript: rightPanelScript,
                 unifiedScript: unifiedScript,
+                capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
                 contractName: manifestInfo.contractName,
                 contractVersion: manifestInfo.contractVersion,
                 permissions: manifestInfo.permissions,
@@ -781,11 +782,13 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 tabs[index].title = systemType.title
                 // Clear web/RN content
                 tabs[index].unifiedScript = nil
+                tabs[index].capabilityManifestJSON = nil
                 tabs[index].leftPanelScript = nil
                 tabs[index].rightPanelScript = nil
                 tabs[index].guestScript = nil
                 tabs[index].htmlContent = nil
                 tabs[index].contractName = nil
+                tabs[index].legacyActorBridge = false
                 objectWillChange.send()
                 persistBrowserPageSession()
                 return
@@ -849,11 +852,13 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             tabs[index].title = url.host ?? url.absoluteString
             // Clear RN Relevant
             tabs[index].unifiedScript = nil
+            tabs[index].capabilityManifestJSON = nil
             tabs[index].leftPanelScript = nil
             tabs[index].rightPanelScript = nil
             tabs[index].guestScript = nil
             tabs[index].systemTabType = nil
             tabs[index].contractName = nil
+            tabs[index].legacyActorBridge = false
             objectWillChange.send()
             persistBrowserPageSession()
         } else {
@@ -1120,6 +1125,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             tabs[tabIndex].title = tabTitle
             tabs[tabIndex].url = appURL
             tabs[tabIndex].appId = manifestInfo.appId
+            tabs[tabIndex].legacyActorBridge = ActriumApp.isLegacyActorBridgePackage(resolvedURL)
             tabs[tabIndex].systemTabType = nil
             tabs[tabIndex].htmlContent = nil
 
@@ -1144,6 +1150,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             tabs[tabIndex].contractName = manifestInfo.contractName
             tabs[tabIndex].contractVersion = manifestInfo.contractVersion
             tabs[tabIndex].permissions = manifestInfo.permissions
+            tabs[tabIndex].capabilityManifestJSON = manifestInfo.capabilityManifestJSON
             tabs[tabIndex].leftPanelDefaultVisible = manifestInfo.leftPanelDefaultVisible
             tabs[tabIndex].rightPanelDefaultVisible = manifestInfo.rightPanelDefaultVisible
 
@@ -1685,6 +1692,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             tabs[index].contractName = manifestInfo.contractName
             tabs[index].contractVersion = manifestInfo.contractVersion
             tabs[index].permissions = manifestInfo.permissions
+            tabs[index].capabilityManifestJSON = manifestInfo.capabilityManifestJSON
             tabs[index].leftPanelDefaultVisible = manifestInfo.leftPanelDefaultVisible
             tabs[index].rightPanelDefaultVisible = manifestInfo.rightPanelDefaultVisible
             leftPanelVisibility[tabs[index].id] = manifestInfo.leftPanelDefaultVisible
@@ -1854,6 +1862,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     contractName: manifestInfo.contractName,
                     contractVersion: manifestInfo.contractVersion,
                     permissions: manifestInfo.permissions,
+                    capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
                     leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
                     rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
                     themeColor: manifestInfo.themeColor,
@@ -1889,6 +1898,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     contractName: manifestInfo.contractName,
                     contractVersion: manifestInfo.contractVersion,
                     permissions: manifestInfo.permissions,
+                    capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
                     leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
                     rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
                     themeColor: manifestInfo.themeColor,
@@ -1905,8 +1915,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     contractName: manifestInfo.contractName,
                     contractVersion: manifestInfo.contractVersion,
                     permissions: manifestInfo.permissions,
-                    themeColor: manifestInfo.themeColor,
-                    replacingTabId: replacingTabId
+                    capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
+                    themeColor: manifestInfo.themeColor
                 )
             } else {
                 // No script, display application information page
@@ -2121,9 +2131,106 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let handle = try await self.serviceInstanceStore.serviceRecover(
-                    actorId: actorId,
-                    expectedPackageDigest: expectedDigest
+                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+                try unzipActrPackage(archive: resolvedURL, to: tempDir)
+            } catch {
+                logger.error(" .actr Loading failed:\(error.localizedDescription)")
+                return
+            }
+            rootDir = tempDir
+        }
+
+        do {
+            let manifestInfo = try readPackageManifest(fromRoot: rootDir)
+            let tabTitle = manifestInfo.name ?? resolvedURL.deletingPathExtension().lastPathComponent
+
+            let guestScript = readGuestScript(fromRoot: rootDir)
+
+            var unifiedScript: String? = nil
+            if let unifiedFileName = manifestInfo.unifiedScript {
+                unifiedScript = readScript(fromRoot: rootDir, fileName: unifiedFileName)
+            }
+
+            var leftPanelScript: String? = nil
+            var rightPanelScript: String? = nil
+            if let leftFileName = manifestInfo.leftPanelScript {
+                leftPanelScript = readScript(fromRoot: rootDir, fileName: leftFileName)
+            }
+            if let rightFileName = manifestInfo.rightPanelScript {
+                rightPanelScript = readScript(fromRoot: rootDir, fileName: rightFileName)
+            }
+
+            // Update UI on main thread
+            DispatchQueue.main.async { [weak self] in
+                if let unified = unifiedScript {
+                    self?.appendRuntimeTab(
+                        title: tabTitle,
+                        sourceURL: resolvedURL,
+                        appId: manifestInfo.appId,
+                        unifiedScript: unified,
+                        contractName: manifestInfo.contractName,
+                        contractVersion: manifestInfo.contractVersion,
+                        permissions: manifestInfo.permissions,
+                        capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
+                        leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
+                        rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
+                        themeColor: manifestInfo.themeColor
+                    )
+                } else if leftPanelScript != nil || rightPanelScript != nil {
+                    self?.appendRuntimeTab(
+                        title: tabTitle,
+                        sourceURL: resolvedURL,
+                        appId: manifestInfo.appId,
+                        leftPanelScript: leftPanelScript,
+                        rightPanelScript: rightPanelScript,
+                        contractName: manifestInfo.contractName,
+                        contractVersion: manifestInfo.contractVersion,
+                        permissions: manifestInfo.permissions,
+                        capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
+                        leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
+                        rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
+                        themeColor: manifestInfo.themeColor
+                    )
+                } else if let script = guestScript {
+                    self?.appendRuntimeTab(
+                        title: tabTitle,
+                        sourceURL: resolvedURL,
+                        appId: manifestInfo.appId,
+                        guestScript: script,
+                        contractName: manifestInfo.contractName,
+                        contractVersion: manifestInfo.contractVersion,
+                        permissions: manifestInfo.permissions,
+                        capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
+                        themeColor: manifestInfo.themeColor
+                    )
+                } else {
+                    let html = self?.renderACTRInfoHTML(
+                        name: manifestInfo.name ?? "Unknown App",
+                        version: manifestInfo.version ?? "0.0.0",
+                        description: manifestInfo.description ?? "No description provided.",
+                        sourcePath: resolvedURL.path
+                    ) ?? ""
+                    self?.appendRuntimeTab(
+                        title: tabTitle,
+                        sourceURL: resolvedURL,
+                        appId: manifestInfo.appId,
+                        htmlContent: html
+                    )
+                }
+            }
+        } catch {
+            logger.error(" .actr Loading failed:\(error.localizedDescription)")
+            DispatchQueue.main.async { [weak self] in
+                let fallbackHTML = self?.renderACTRInfoHTML(
+                    name: resolvedURL.deletingPathExtension().lastPathComponent,
+                    version: "unknown",
+                    description: "Loading failed:\(error.localizedDescription)",
+                    sourcePath: resolvedURL.path
+                ) ?? ""
+                self?.appendRuntimeTab(
+                    title: resolvedURL.deletingPathExtension().lastPathComponent,
+                    sourceURL: resolvedURL,
+                    htmlContent: fallbackHTML
                 )
                 let archiveURL = ActrPackageCache.archiveURL(forDigest: handle.packageDigest)
                 guard FileManager.default.fileExists(atPath: archiveURL.path) else {
@@ -2218,6 +2325,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                         contractName: manifestInfo.contractName,
                         contractVersion: manifestInfo.contractVersion,
                         permissions: manifestInfo.permissions,
+                        capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
                         leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
                         rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
                         themeColor: manifestInfo.themeColor
@@ -2232,6 +2340,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                         contractName: manifestInfo.contractName,
                         contractVersion: manifestInfo.contractVersion,
                         permissions: manifestInfo.permissions,
+                        capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
                         leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
                         rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
                         themeColor: manifestInfo.themeColor
@@ -2245,6 +2354,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                         contractName: manifestInfo.contractName,
                         contractVersion: manifestInfo.contractVersion,
                         permissions: manifestInfo.permissions,
+                        capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
                         themeColor: manifestInfo.themeColor
                     )
                 } else {
@@ -2330,6 +2440,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         contractName: String? = nil,
         contractVersion: Int? = nil,
         permissions: [String] = [],
+        capabilityManifestJSON: String? = nil,
         leftPanelDefaultVisible: Bool = true,
         rightPanelDefaultVisible: Bool = false,
         themeColor: String? = nil,
@@ -2379,13 +2490,13 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             title: title,
             url: appURL,
             appId: appId,
+            legacyActorBridge: ActriumApp.isLegacyActorBridgePackage(sourceURL),
             htmlContent: htmlContent,
             guestScript: guestScript,
             leftPanelScript: leftPanelScript,
             rightPanelScript: rightPanelScript,
             unifiedScript: unifiedScript,
-            guestExtractedPath: guestExtractedPath,
-            guestEntry: guestEntry,
+            capabilityManifestJSON: capabilityManifestJSON,
             contractName: contractName,
             contractVersion: contractVersion,
             permissions: permissions,

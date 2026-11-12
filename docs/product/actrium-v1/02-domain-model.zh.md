@@ -47,8 +47,7 @@ notes.example/team-notes
 ProgramReleaseId = publisher/program@version
 ```
 
-Publisher 签名的发布记录固定 Service 和 Front 两个包的摘要。两个包分别声明自己的
-Workload、契约和 Host 要求。Service manifest 的 `[workspace]` 声明静态 Workspace 要求。
+每个 Actor 包版本固定一个归档摘要。各包声明自己的 Workload、契约和 Host 要求。Service manifest 的 `[workspace]` 声明静态 Workspace 要求。
 Actrium 通过部署与授权应用准备方式、实际授权、配额等实例策略。
 
 ### 2.3 Service
@@ -56,7 +55,7 @@ Actrium 通过部署与授权应用准备方式、实际授权、配额等实例
 实例的 Service：每个 Realm 恰好一个，随 Realm 创建：
 
 - 有持久 `ActorId`；
-- 固定运行 Realm Profile `package` 所指的包；
+- 固定运行 Realm Profile 主包引用 `packages[primary_package]` 所指的包；
 - 持有 Workspace capability；
 - 持有实例配置和访问控制；
 - 生命周期独立于 Tab；
@@ -120,14 +119,15 @@ Realm 名 = <realm_id>@<domain>                      # 联网，如 k7m2q9xh@acm
 
 - Realm 域名归域名所有者，只用作天然唯一、归属可验证的名字，不承载基础设施；本机 Realm 使用
   伪域名 `<installation-id>.actr.alt`（安装时随机生成，永不经 DNS 解析），归该 Actrium 安装；
-- 域名的 Realm 签名 key 是该域名下所有 Realm 的长期信任根，逐个签发 Realm Profile。
-  Realm Profile 的 `package` 写明 Service 包的下载地址、SHA-256 与 Actor 类型。
+- 域名的 Realm 签名 key 是该域名下 Realm Profile 的长期信任根，签署每个实例的包选择。
 - RealmId 在域名内唯一、创建后不可修改、退役后永不复用；
 - 一个 Actr Facility Provider（信令、TURN、Issuer）承载大量 Realm；Realm 在创建时绑定一个 Actr Facility Provider，此后不可更换；
 - 联网 Realm 的成员由 Actr Facility Provider 记录：恰好一个 owner（创建者，可转让），其余为 editor 或 viewer；成员凭一次性 Realm 邀请加入，每个客户端登记一把 Realm 客户端 key。本机 Realm 没有成员。
 
 Publisher 域名命名程序（谁发布），Realm 域名命名部署（谁运营）；同一 Program
 Release 可以运行在 `notes@acme.com`，也可以运行在 `notes@foo.org`。
+
+Realm 用 `primary_package` 和 `front_package` 从 `packages` 中选择 Service 和 Front。获授权的部署配置决定运行哪些 Actor。见 [Realm Profile §4](../../../actr/protocols/realm-profile.zh.md#4-realm-profile-格式)。
 
 ## 3. 「Tab–Service 1:1」的精确定义
 
@@ -249,7 +249,7 @@ Actrium 本地数据库可以有纯存储用途的 `record_id`，但它不是网
 | 业务状态 | Service | 不放在 Front |
 | Workspace 内容 | Workspace Provider | 由 Service capability 访问 |
 | Workspace 绑定 | Service | Front 不可重绑 |
-| Program Release metadata | Program Catalog | 已验证的发布记录固定 Service 和 Front 两个包的摘要 |
+| Program Release metadata | Program Catalog | 各包已验证的 Actor 类型和摘要 |
 | Actor 长期私钥 | 安全存储 | 不进入普通 SQLite |
 | Realm 域名信任（Realm 签名 key pin） | Actrium Realm Manager | 首次确认后固定，按签名轮换链更新 |
 | Realm 客户端 key | 安全存储 | 按 Realm（即按实例）独立；在 Actr Facility Provider 注册后即为 Realm membership，可撤销 |
@@ -266,27 +266,25 @@ Actrium 本地数据库可以有纯存储用途的 `record_id`，但它不是网
 
 新建实例是 Actrium 的本地操作，不由链接触发：
 
-1. 用户选定 Program Release，或为本地开发提供两个包。Actrium 验证 Service 和 Front 包。
+1. 从目录或本地文件选择 Service 和 Front，由 Actrium 验证两个包。
 2. 选择 Realm 域名（默认创建本机 Realm）、生成随机 RealmId（用户可显式改为可读名）并选择 Workspace；
-3. 在该 Realm 域名下新建 Realm。本机 Realm 在设备上建立本地记录。其他 Realm 需要 Realm 签名 key 持有方授权。Realm Profile 的 `package` 记录已验证 Service 包的地址、SHA-256 与 Actor 类型。
+3. 在所选域名下创建 Realm。本机 Realm 在设备上保存选包结果。联网 Realm 由签名 key 持有方授权创建并签署包含两个包引用的 Profile。
 4. 在该 Realm 内创建 Service，获得持久 ActorId；
 5. 用它创建 Front 会话，地址栏显示该实例的 Realm 链接。
 
 第 3–4 步是一个以 `idempotency_key` 为幂等键的事务，严格按序执行：取得持有方授权 → Actr Facility Provider 创建 pending Realm → 签名 Realm Profile 并以 `publish_profile` 提交 → Realm 变为 active → 兑换 owner 邀请，成为 owner → 创建 Service 并取得 ActorId。Actr Facility Provider 域名下的 Realm 在 v1 由其运营者代建，Actrium 从兑换 owner 邀请开始。任一步失败都不创建 Service；pending Realm 过期由 Actr Facility Provider 自动清理；随机 RealmId 只生成一次，用同一 `idempotency_key` 重试时沿用它；Actr Facility Provider 幂等键为 `(realm, 请求方)`，继续同一个 pending Realm，不重复创建；不同请求方同名或命中已有 active Realm 或 Actr Facility Provider tombstone 时返回冲突。本机 Realm 只有本地 record 与 Service 两步。
 
 新实例总是新 Realm。Service 升级为新 Program Release 时，在同一 Realm 创建新 Service，成员与应用权限延续，
-ActorId 按迁移规则变化。确认切换后，Realm 发布 `package` 指向新 Service 包的 Realm Profile。
-匹配的发布记录固定配套的 Front 包。
+ActorId 按迁移规则变化。确认切换后，Realm 在更高 `sequence` 的签名 Profile 中发布完整包选择，主包条目指向升级后的 Service 包。
 
 ### 6.2 打开实例
 
-打开 Realm 链接 `actr://<domain>/<realm_id>[…]` 时，验证 Realm Profile 和 `package` 指定的 Service 包，
-再验证匹配的 Program Release 记录固定的 Front 包。按 Service 包的 Actor 类型在该 Realm 内找到 Service 并 Attach。
+打开 Realm 链接时，验证 Profile 和选定的两个包，按 Service 的 Actor 类型在该 Realm 内找到实例，由选定的 Front Attach。
 
 - 不做 LB，不换到其他 Realm；
 - 不因为 offline 而创建新实例；
-- 该 Realm 内与包同类型的 Actor 必须恰好一个，零个或多个都是错误，不做选择；
-- Actor 链接直接连接所指 Actor，其类型与包不一致时拒绝；
+- 该 Realm 内与 Service 包同类型的 Actor 必须恰好一个，零个或多个都是错误，不做选择；
+- Actor 链接直接连接所指 Actor，其类型与 Service 包不一致时拒绝；
 - Realm 域名尚未信任时，请求用户确认；尚未加入该 Realm 时，走 Realm 邀请/加入流程。
 
 按 Actor 类型发现只限本 Realm；v1 不做跨 Realm 发现。

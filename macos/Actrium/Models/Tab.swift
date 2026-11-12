@@ -86,6 +86,10 @@ struct Tab: Identifiable {
     var title: String
     var url: URL?
     var appId: String?
+    /// Per-tab Service actor endpoint supplied after Attach.
+    var serviceCallUrl: String?
+    /// Host-designated permission to use the legacy ACTR_CALL bridge.
+    var legacyActorBridge: Bool = false
     var htmlContent: String?
 
     /// System tab type (nil for regular tabs, set for built-in pages like History/Bookmarks)
@@ -106,14 +110,8 @@ struct Tab: Identifiable {
     /// v2.0 unified script (unified-app.js) for the single-engine architecture.
     var unifiedScript: String?
 
-    /// Verified-bytes source for the renderer (15-B B4, 05 §8.2): digest-addressed
-    /// extraction directory of the package this tab renders. The renderer prefers
-    /// reading the guest bytes from this cache directory and falls back to the
-    /// inline `unifiedScript` text below.
-    var guestExtractedPath: String?
-
-    /// Workload entry (relative to `guestExtractedPath`) from the package manifest.
-    var guestEntry: String?
+    /// Raw capability manifest from the verified package payload.
+    var capabilityManifestJSON: String?
 
     /// Phase 1 contracts used for host prompts and version compatibility.
     var contractName: String?
@@ -141,6 +139,8 @@ struct Tab: Identifiable {
         title: String,
         url: URL? = nil,
         appId: String? = nil,
+        serviceCallUrl: String? = nil,
+        legacyActorBridge: Bool = false,
         htmlContent: String? = nil,
         systemTabType: SystemTabType? = nil,
         groupId: UUID? = nil,
@@ -148,8 +148,7 @@ struct Tab: Identifiable {
         leftPanelScript: String? = nil,
         rightPanelScript: String? = nil,
         unifiedScript: String? = nil,
-        guestExtractedPath: String? = nil,
-        guestEntry: String? = nil,
+        capabilityManifestJSON: String? = nil,
         contractName: String? = nil,
         contractVersion: Int? = nil,
         permissions: [String] = [],
@@ -162,6 +161,8 @@ struct Tab: Identifiable {
         self.title = title
         self.url = url
         self.appId = appId
+        self.serviceCallUrl = serviceCallUrl
+        self.legacyActorBridge = legacyActorBridge
         self.htmlContent = htmlContent
         self.systemTabType = systemTabType
         self.groupId = groupId
@@ -169,8 +170,7 @@ struct Tab: Identifiable {
         self.leftPanelScript = leftPanelScript
         self.rightPanelScript = rightPanelScript
         self.unifiedScript = unifiedScript
-        self.guestExtractedPath = guestExtractedPath
-        self.guestEntry = guestEntry
+        self.capabilityManifestJSON = capabilityManifestJSON
         self.contractName = contractName
         self.contractVersion = contractVersion
         self.permissions = permissions

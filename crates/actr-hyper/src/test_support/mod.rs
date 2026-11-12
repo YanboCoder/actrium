@@ -11,7 +11,7 @@ use crate::{BinaryKind, Hyper, WorkloadPackage};
 use crate::{HostAbiFn, InvocationContext};
 #[cfg(any(feature = "wasm-engine", feature = "dynclib-engine"))]
 use actr_framework::guest::dynclib_abi::InitPayloadV1;
-use actr_pack::PackageManifest;
+use actr_pack::RuntimePackageManifest;
 use actr_protocol::{AIdCredential, ActrId};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -742,11 +742,11 @@ impl Default for TestDedupState {
 #[derive(Debug, Clone)]
 pub struct LoadedWorkloadSummary {
     pub binary_kind: BinaryKind,
-    manifest: PackageManifest,
+    manifest: RuntimePackageManifest,
 }
 
 impl LoadedWorkloadSummary {
-    pub fn manifest(&self) -> &PackageManifest {
+    pub fn manifest(&self) -> &RuntimePackageManifest {
         &self.manifest
     }
 }

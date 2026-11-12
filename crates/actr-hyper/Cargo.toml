@@ -92,6 +92,7 @@ getrandom = { version = "0.2", features = ["js"] }
 # Native-only dependencies (not available on wasm32)
 # ═══════════════════════════════════════════════════════════════════════════════
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+semver = "1"
 # actr-config is always available on native (overrides optional from [dependencies])
 actr-config = { workspace = true }
 actr-runtime-mailbox.workspace = true

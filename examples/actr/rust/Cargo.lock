@@ -154,6 +154,7 @@ dependencies = [
  "rustls-native-certs",
  "rustls-pki-types",
  "rustls-webpki",
+ "semver",
  "serde",
  "serde_json",
  "sha1 0.10.6",
@@ -329,8 +330,11 @@ dependencies = [
  "anyhow",
  "chrono",
  "proto-fingerprint",
+ "protobuf-parse",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 

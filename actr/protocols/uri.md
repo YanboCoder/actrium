@@ -94,21 +94,17 @@ When an Actr Host opens `actr://<domain>/<realm_id>[…]` (an instance), it:
    Profile; otherwise obtains and validates the Realm Profile of
    `<realm_id>@<domain>` as in [Actr Realm Profile](realm-profile.md),
    Sections 3 and 5.
-3. Gets the package named by `package`, checks `sha256`, and verifies the
-   package signature as in [Actor Package](actor-package.zh.md) (Chinese
-   only); the Actor type declared in the package
-   is the instance's program.
-4. Starts the foreground part of the package and passes it the rest of the
-   path, the query, and the fragment.
+3. Resolves `primary_package` and `front_package` in `packages`. A missing or invalid reference stops opening.
+4. Verifies both archives and the Front's Service dependency and RPC contract under [Realm Profile §6](realm-profile.md#6-using-a-realm), then passes the remaining path, query and fragment to the selected Front.
 5. Connects to the instance's Service through the Actr Facility Provider named in the
    Realm Profile: there is exactly one Actor in this Realm whose Actor type
-   equals the package's; finding none or more than one is an error, and the
+   equals the Service package's; finding none or more than one is an error, and the
    Actr Host does not choose. Connecting requires Realm membership; without
    it, the Actr Host starts a join flow (for example a Realm invitation).
 
 Opening `actr://<domain>/<serial>.<realm_id>[…]` (one Actor) follows the same
 procedure, except that step 5 connects to that ActorId directly instead of
-looking up by type; its Actor type must equal the package's, otherwise the
+looking up by type; its Actor type must equal the Service package's, otherwise the
 open fails with `SERVICE_ACTOR_TYPE_MISMATCH`. Such a link stops working once
 the Actor is replaced (for example by a program upgrade); links to the
 instance are not affected.

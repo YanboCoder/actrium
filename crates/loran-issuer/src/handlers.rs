@@ -845,8 +845,8 @@ async fn renew_credential(
         .await;
     }
 
-    // 5. Re-issue access and TURN credentials for the original ActrId. /renew
-    // carries no package target, so recheck the one recorded for the actor.
+    // 5. Re-issue access and TURN credentials for the original ActrId, after
+    // rechecking its recorded identity, provenance and current authorization.
     let mut register_ok = match issuer.issue_credential_for_actor(actor_id, &signer).await {
         Ok(ok) => ok,
         Err(err) => {

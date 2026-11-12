@@ -46,7 +46,7 @@ async fn static_trust_accepts_valid_package() {
 
     let trust = StaticTrust::new(vk.to_bytes()).unwrap();
     let verified = trust.verify_package(&pkg).await.unwrap();
-    assert_eq!(verified.manifest.publisher, "test-publisher");
+    assert_eq!(verified.manifest.actor_type().publisher, "test-publisher");
 }
 
 #[tokio::test]
@@ -89,7 +89,7 @@ async fn chain_first_match_wins() {
 
     let chain = ChainTrust::of(wrong, right);
     let verified = chain.verify_package(&pkg).await.unwrap();
-    assert_eq!(verified.manifest.publisher, "test-publisher");
+    assert_eq!(verified.manifest.actor_type().publisher, "test-publisher");
 }
 
 #[tokio::test]

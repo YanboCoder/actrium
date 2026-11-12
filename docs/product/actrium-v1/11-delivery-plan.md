@@ -27,6 +27,11 @@ What is really missing are product-level invariants and several key semantics:
 9. per-instance storage;
 10. an honest lifecycle on mobile.
 
+### Realm package selection
+
+Implement the schema and SDK first, then AFP and CLI management, followed by Host deployment and
+client support. Verify Profile validation, Service loading and application readiness separately.
+
 ## 2. Key dependency graph
 
 ```mermaid
@@ -64,7 +69,7 @@ Turn this document's product semantics into a cross-repository, testable contrac
 
 - test vectors for the `actr://` Realm link;
 - Publisher Profile schema;
-- signed Program Release record verification vectors and an online discovery interface.
+- Realm selection and package signature verification vectors.
 - the Realm signing key (the authority descriptor's `realm_signing_keys` member and the core `realms` relation, already defined in Actr Authority Discovery §4.3–4.4) and the Realm Profile schema;
 - persistent Actor identity lifecycle ADR;
 - Front–Service session proto;
@@ -129,7 +134,7 @@ Turn this document's product semantics into a cross-repository, testable contrac
 - domain/IDNA normalizer;
 - key history/rotation store;
 - package digest pinning;
-- signed Program Release records that pair Front and Service packages.
+- Service and Front selection in the signed Realm Profile.
 - Guest, contract, and assets covered by the signed `[[files]]` table.
 - content-addressed cache;
 - zip safety policy;
@@ -141,15 +146,15 @@ Turn this document's product semantics into a cross-repository, testable contrac
 - `actor.publisher` carries a normalized Publisher domain.
 - Service and Front each use an `actr-package/2` manifest for one Workload.
 - Readers and packagers support the Service manifest's `[workspace]`, and the Host enforces required bindings before Ready.
-- The verifier checks each manifest and the release record that pairs the packages.
-- The verifier authenticates Privacy Contract bytes against `privacy_contract.sha256` in the signed release record.
+- Verify each selected archive's manifest signature and the Front's Service dependency.
+- Validate the optional Privacy Contract against the signed Service manifest.
 - The loader validates each package's Workload Profile before loading its entry.
 - `[[files]]` binds the files for the Guest, contracts, assets, and any dependency lock.
 - `signature.key-id` ties into the Publisher Profile.
 
 ### Exit criteria
 
-- the Realm Profile pins the Service package. The matching signed release record identifies the independently verified Front package.
+- the Realm Profile identifies the Service and Front for this instance.
 - a mismatched package for the same version is reliably detected;
 - an offline cache can be re-verified;
 - the Front Host cannot be replaced from within a package.

@@ -74,7 +74,9 @@ Actr Host 以 HTTPS `POST <issuer.url>/membership` 发送 membership 请求（pr
 | `set_role` | `member_id`、`role`（`editor`/`viewer`） | owner（不能是自己） | 只改角色 |
 | `transfer_owner` | `member_id`、可选 `previous_owner_role`（缺省 `editor`） | owner | 原子地把 owner 交给另一 active 且至少有一把未撤销客户端 key 的成员，原 owner 改为指定角色 |
 | `leave` | 无 | 非 owner 成员 | 移除自己，效果同 `remove_member` |
-| `update_realm` | 可选 `package`、`display_name`，或 `status: "retired"` | owner；只用于 Actr Facility Provider 域名下的 Realm | Actr Facility Provider 签署并发布 sequence 更高的 Realm Profile（Realm Profile 第 7.2、7.4 节）；响应 `{realm, sequence}` |
+| `update_realm` | 按需提交完整包选择（`primary_package`、`front_package` 和 `packages`）、`display_name` 或 `status: "retired"` | owner，仅限 AFP 域名下的 Realm | AFP 校验并签署更高 sequence 的 Profile，返回 `{realm, sequence}`（Realm Profile §7.2、§7.4）。 |
+
+提交包选择后，调用方验证 AFP 签发的 Profile，并核对两个引用和完整包表。见 [Realm Profile §7.2](realm-profile.zh.md#72-更新)。
 
 `join` 请求中 `signature.key_id` **MUST** 等于由 `public_key` 算出的 `key_id`，签名即持有证明。其他请求的签名
 key **MUST** 是该 Realm 已登记、未撤销、属于 `active` 成员的 Realm 客户端 key。
@@ -151,8 +153,11 @@ Issuer 只在以下条件都满足时签发：
 1. 签名 key 已在该 Realm 登记、未撤销，所属成员为 `active`；
 2. 续期时，签名 key 是该 Actor 当前绑定的 key；重签时，签名 key 属于该 Actor 所属的成员，重签成功后 Actor
    改绑到这把 key（成员可凭 Actor 私钥把自己的 Actor 移到自己的另一个客户端）；
-3. 注册时，若 Actor 类型的 publisher 与程序名等于 Realm Profile `package.type` 的（不论版本，即该实例的
+3. 注册时，Issuer 从已验证的 Profile 解析 `packages[primary_package]`。主包引用无效时 **MUST** 拒绝注册。
+   若 Actor 类型的 publisher 与程序名等于该主包 `type` 的（不论版本，即该实例的
    Service 及其升级版本），签名 key 属于 owner。续期与重签不再检查角色，owner 转让不影响运行中的 Service。
+
+包选择不改变成员权限和 Actor 准入规则。
 
 注册携带的连接 ACL 只作用于所注册 Actor 自己的类型；Service 的程序只有 owner 能注册，其他成员因此不能改写
 Service 的 ACL。
@@ -173,6 +178,30 @@ Actor 的验证）到期失效。改角色不撤销任何 key，
 在该成员下一份 Actor credential 生效。
 
 Realm 客户端 key 是 Actr Host 的能力，**MUST NOT** 交给 Guest workload。
+
+### 6.1 包清单注册
+
+包模式的 `RegisterRequest` 将包内 `manifest.toml` 的原始字节放入 `manifest_raw`，将原始 64 字节
+`manifest.sig` 放入 `publisher_signature`。Host **MUST NOT** 重序列化清单、补入旧字段或替换
+Publisher 签名；Realm 客户端 proof 签署精确的 Protobuf body。相同注册材料保留给 `/issuer/reissue`。
+
+| 清单 | 身份与签名 key | 请求的 `target` |
+| --- | --- | --- |
+| `format = "actr-package/2"` | `actor.publisher/name/version`、`signature.key-id`、Ed25519 | **MUST** 省略；空字符串也拒绝 |
+| 现有无版本二进制清单 | 顶层 `publisher/name/version/signing_key_id` | 必需、非空且与已签 `binary.target` 相等 |
+
+出现 format 声明或版本化的 `actor/workload/host/signature` 表后，只走版本化 parser。不支持的版本、
+`actr-package/1`、混合 schema 和损坏的 v2 **MUST NOT** 回退到无版本或 linked 路径。清单上限为
+1 MiB。请求类型必须与已签类型完全相同，key ID 必须对应验证原始字节的 Ed25519 key。格式或 target
+形态错误按非法请求拒绝（Protobuf 错误码 400），身份或签名错误按来源未验证拒绝（403）。
+
+v2 的执行要求来自已签 Workload/Host Profile。Host 检查载荷 hash、入口、ABI 和能力；Issuer 检查
+清单 schema、签名、Publisher 来源及 Realm 授权，不接收 ZIP，也不证明远端实际执行的字节。
+携带公钥不自动取得受信 Publisher 身份。Host 使用自己的 Realm 客户端 key 和公开包材料注册，
+无需 Publisher 私钥或包发布登记。
+
+续期保留已有成员、设备、Realm 和 Publisher 状态检查。重签重新验证原始包模式请求与 Actor 的持有证明、
+成员及类型绑定，并保持 ActorId。v2 注册的旧 target 记录为空；v2 重签在提交响应的同一事务中清除此前的旧 target。
 
 ## 7. 安全与隐私考虑
 

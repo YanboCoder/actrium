@@ -179,6 +179,6 @@ if [ "$OPEN_APP" = "0" ]; then
     exit 0
 fi
 
-open -n "$APP_PATH" --args --url "actro://$APP_PACKAGE"
+open -n "$APP_PATH" --args --url "actro://$APP_PACKAGE" --legacy-actor-bridge-package "$APP_PACKAGE"
 echo "Echo at Actrium is running. Press Ctrl-C to stop the demo stack."
 wait "$STACK_PID"

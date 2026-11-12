@@ -69,16 +69,19 @@ impl ValidatedActorIdentity {
     /// delegates to [`actr_protocol::ActrType::validate`] so there is exactly one
     /// identity-validity rule across parsing, verification, and storage.
     pub fn from_manifest(manifest: &PackageManifest) -> Result<Self, actr_protocol::ActrIdError> {
-        let actr_type = ActrType {
+        Self::from_actor_type(ActrType {
             publisher: manifest.publisher.clone(),
             name: manifest.name.clone(),
             version: manifest.version.clone(),
-        };
+        })
+    }
+
+    pub fn from_actor_type(actr_type: ActrType) -> Result<Self, actr_protocol::ActrIdError> {
         actr_type.validate()?;
         Ok(Self {
-            publisher: manifest.publisher.clone(),
-            name: manifest.name.clone(),
-            version: manifest.version.clone(),
+            publisher: actr_type.publisher,
+            name: actr_type.name,
+            version: actr_type.version,
         })
     }
 

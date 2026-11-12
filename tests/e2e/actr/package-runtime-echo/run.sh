@@ -65,9 +65,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "$BACKEND" != "cdylib" ]]; then
-    fail "Only --backend cdylib is supported in this scenario"
-fi
+case "$BACKEND" in
+    cdylib|v2-component) ;;
+    *) fail "Unknown backend: $BACKEND" ;;
+esac
 
 # MODE selects the scenario. The service host never holds the Publisher's
 # private key: it registers with the signed package and its Realm client key.
@@ -78,6 +79,9 @@ case "$MODE" in
     runtime|rotation) ;;
     *) fail "Unknown MODE: $MODE" ;;
 esac
+if [[ "$BACKEND" == "v2-component" && ( "$MODE" != "runtime" || "$REALM_STAGE" != "full" ) ]]; then
+    fail "The v2-component backend requires MODE=runtime and REALM_STAGE=full"
+fi
 
 for cmd in cargo curl jq sqlite3 python3 perl rustc lsof timeout; do
     require_cmd "$cmd"
@@ -167,7 +171,10 @@ run_actr() {
 
 build_local_actr_cli() {
     section "🔧 Building local actr CLI"
-    CARGO_TARGET_DIR="$ACTR_TARGET_DIR" cargo build --manifest-path "$ACTR_CLI_MANIFEST" --bin actr >/dev/null
+    if [ "$BACKEND" = v2-component ]; then
+        set -- --features wasm-engine
+    fi
+    CARGO_TARGET_DIR="$ACTR_TARGET_DIR" cargo build --manifest-path "$ACTR_CLI_MANIFEST" --bin actr "$@" >/dev/null
     ACTR_CLI_BIN="$ACTR_TARGET_DIR/debug/actr"
     [ -x "$ACTR_CLI_BIN" ] || fail "actr CLI binary missing at $ACTR_CLI_BIN"
     success "actr CLI ready: $ACTR_CLI_BIN"
@@ -352,6 +359,80 @@ build_service_package() {
     [ -f "$SERVICE_PACKAGE" ] || fail "Server package missing: $SERVICE_PACKAGE"
     run_actr pkg verify --pubkey "$SERVICE_PUBLIC_KEY" --package "$SERVICE_PACKAGE" >/dev/null
     success "Server package built: $SERVICE_PACKAGE"
+}
+
+build_v2_service_package() {
+    section "Building the v2 Echo Component package"
+    local source="$SCRIPT_DIR/../polyglot-echo/services/wasm-rust"
+    local guest="$RUN_DIR/v2-echo-component"
+    local payload="$RUN_DIR/v2-echo-payload"
+    mkdir -p "$guest/src" "$payload/workload" "$payload/contracts"
+    cp "$source/build.rs" "$guest/"
+    cp "$source/src/lib.rs" "$source/src/echo_service.rs" "$guest/src/"
+    python3 - "$source/Cargo.toml" "$guest/Cargo.toml" "$REPO_ROOT/crates" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+template, output, crates = map(Path, sys.argv[1:])
+manifest = template.read_text()
+for crate in ("actr-framework", "actr-protocol"):
+    manifest = manifest.replace(
+        f'"../../../../../../crates/{crate}"', json.dumps(str(crates / crate))
+    )
+output.write_text(manifest)
+PY
+    # Keep the disposable guest on the merged workspace's dependency versions.
+    # Metadata adds its standalone root package; the actual build stays locked.
+    cp "$REPO_ROOT/Cargo.lock" "$guest/Cargo.lock"
+    cargo metadata --manifest-path "$guest/Cargo.toml" --format-version 1 \
+        >"$RUN_DIR/v2-component-metadata.json"
+    CARGO_TARGET_DIR="$TEMP_SERVICE_TARGET_DIR" CARGO_TARGET_WASM32_WASIP2_RUSTFLAGS="-Cdebuginfo=0" \
+        cargo build --locked --manifest-path "$guest/Cargo.toml" --release --target wasm32-wasip2
+    cp "$TEMP_SERVICE_TARGET_DIR/wasm32-wasip2/release/polyglot_echo_wasm_rust.wasm" "$payload/workload/echo.wasm"
+    cp "$SCRIPT_DIR/proto/echo.proto" "$payload/contracts/echo.proto"
+
+    SERVICE_VERSION="1.0.0"
+    SERVICE_PUBLIC_KEY="$PROVISIONED_PUBLIC_KEY"
+    SERVICE_PACKAGE="$DIST_DIR/echo-v2.actr"
+    cat >"$payload/manifest.toml" <<EOF
+format = "actr-package/2"
+
+[actor]
+publisher = "$PUBLISHER"
+name = "EchoService"
+version = "$SERVICE_VERSION"
+
+[workload]
+profile = "actr.component/1"
+entry = "workload/echo.wasm"
+rpc-contract = "contracts/echo.proto"
+
+[host]
+profile = "actr.host/1"
+api = "^1.0.0"
+
+[signature]
+algorithm = "ed25519"
+key-id = "computed-at-pack-time"
+
+[[files]]
+path = "workload/echo.wasm"
+role = "workload"
+media-type = "application/wasm"
+size = 0
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[[files]]
+path = "contracts/echo.proto"
+role = "contract"
+media-type = "text/plain"
+size = 0
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+EOF
+    run_actr pkg pack --manifest-path "$payload/manifest.toml" --payload-root "$payload" \
+        --key "$SERVICE_KEYCHAIN" --output "$SERVICE_PACKAGE"
+    run_actr pkg verify --pubkey "$PROVISIONED_PUBLIC_KEY" --package "$SERVICE_PACKAGE"
 }
 
 client_guest_library_path() {
@@ -676,6 +757,12 @@ mode_runtime() {
     start_server_isolated "$home_dir" "$hyper_dir" "server.log"
     expect_server_started "server.log"
     assert_publisher_provenance
+    if [ "$BACKEND" = v2-component ]; then
+        local registrations
+        registrations="$(sqlite3 "$LORAN_DB" "SELECT count(*) FROM issued_actor_identity
+            WHERE actor_type = '$PUBLISHER/EchoService@$SERVICE_VERSION' AND target IS NULL AND auth_mode = 1;")"
+        [ "$registrations" -gt 0 ] || fail "Issuer did not record a target-less package registration"
+    fi
     # Dependency installation resolves the service over signaling, so the
     # service must also be online before the client guest lockfile is
     # generated. Reuse this server for the final echo round-trip.
@@ -808,8 +895,12 @@ login_admin
 wait_for_signer
 if [ "$REALM_MODE" = legacy ]; then ensure_realm; fi
 provision_publisher_keychain
-scaffold_service_guest
-build_service_package
+if [ "$BACKEND" = v2-component ]; then
+    build_v2_service_package
+else
+    scaffold_service_guest
+    build_service_package
+fi
 if [ "$REALM_MODE" != legacy ]; then create_profile_realm; fi
 if [ "$REALM_STAGE" = profile ]; then
     # An explicit transport diagnostic, not a successful runtime Echo. Keep

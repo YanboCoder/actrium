@@ -22,9 +22,12 @@ workspace = true
 # Core dependencies for service compatibility analysis
 actr-protocol.workspace = true
 proto-fingerprint.workspace = true
+protobuf-parse = "3.7"
+tempfile.workspace = true
 
 # Serialization support
 serde = { version = "1.0", features = ["derive"] }
+serde_json.workspace = true
 
 # Error handling
 thiserror.workspace = true

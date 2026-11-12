@@ -91,7 +91,7 @@ Provides program discovery, categorization, review, risk labeling and revocation
 
 ### 4.4 Install and verify
 
-> As a user, when I install `publisher/program@version`, I can confirm the Publisher domain, exact version, Service and Front package digests, permissions, and Marketplace risk status. Each installed release stays pinned to those two archives.
+> When I install an application, I can review the Publisher, exact version and digest of each selected package, as well as the permissions and Marketplace risk status.
 
 ### 4.5 Local development
 
@@ -127,7 +127,7 @@ UI-only programs also use the minimal Service the platform provides, instead of 
 ### G-03: Make addresses readable, copyable and recoverable
 
 - The Realm link `actr://<Realm domain>/<realm_id>` answers "which instance", i.e. where to verify and address it;
-- the Realm Profile pins the Service package, and the matching signed Program Release record pins the Front package.
+- the signed Realm Profile selects the Service and Front for this instance.
 - the address carries no secrets.
 
 ### G-04: Reuse the mature security infrastructure of the Web
@@ -178,7 +178,7 @@ The Tab, the Front Actor and the Guest can all be rebuilt; the Workspace binding
 
 ### 7.4 An exact version is immutable
 
-Once Actrium accepts `publisher/program@version`, the Service and Front package digests are fixed for that release.
+Once Actrium accepts `publisher/program@version`, the archive digest for that exact Actor type is fixed.
 
 ### 7.5 Minimal capability by default
 

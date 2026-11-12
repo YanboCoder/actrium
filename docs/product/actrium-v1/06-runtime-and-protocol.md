@@ -38,6 +38,15 @@ flowchart TB
     CB -->|"Typed Service capability"| SW
 ```
 
+### 1.1 Package selection and runtime instances
+
+Deployment configuration selects references and supplies separate Actor identities,
+state and startup parameters; catalog reads do not execute every archive. Verify
+each package and its platform/Host/ABI before execution. Registration is not business
+Ready. Only the owner registers the primary Service. Selection replaces neither
+deployment authorization nor business dependencies, and does not migrate identities,
+stop processes or delete data.
+
 ## 2. Front Actor
 
 ### 2.1 Native Front Host and Keel Guest Workload
@@ -58,7 +67,7 @@ The verified Front package declares the Front's Actor type. The Team Notes Front
 notes.example/team-notes-front@1.4.2
 ```
 
-The Service checks the Front's type against the Front package type in the verified Program Release record.
+During Attach, the Service checks the peer Front type against `packages[front_package].type` in its accepted selection.
 The Actr Host supplies these values during Attach.
 
 - the Program Release;

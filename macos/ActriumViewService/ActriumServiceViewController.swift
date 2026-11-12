@@ -1416,7 +1416,10 @@ final class ServiceReactNativeHost {
         }
 
         // Scripts
-        if let s = resolvedGuestScript(fromConfig: config) { tabDict["unifiedScript"] = s }
+        if let s = config["unifiedScript"] as? String { tabDict["unifiedScript"] = s }
+        if let s = config["capabilityManifestJSON"] as? String {
+            tabDict["capabilityManifestJSON"] = s
+        }
         if let s = config["leftPanelScript"] as? String { tabDict["leftPanelScript"] = s }
         if let s = config["rightPanelScript"] as? String { tabDict["rightPanelScript"] = s }
         if let s = config["guestScript"] as? String { tabDict["guestScript"] = s }
@@ -1424,6 +1427,13 @@ final class ServiceReactNativeHost {
             tabDict["permissions"] = permissions
         }
         if let reloadKey = config["reloadKey"] { tabDict["reloadKey"] = reloadKey }
+        if let appId = config["appId"] as? String { tabDict["appId"] = appId }
+        if let serviceCallUrl = config["serviceCallUrl"] as? String {
+            tabDict["serviceCallUrl"] = serviceCallUrl
+        }
+        if config["legacyActorBridge"] as? Bool == true {
+            tabDict["legacyActorBridge"] = true
+        }
 
         // System app data
         if let bookmarks = config["bookmarks"] { tabDict["bookmarks"] = bookmarks }
@@ -1942,10 +1952,20 @@ private func createRootViewWithConfig(for entry: TabViewControllerEntry, config:
     if let unifiedScript = resolvedGuestScript(fromConfig: config) {
         tabDict["unifiedScript"] = unifiedScript
     }
+    if let capabilityManifestJSON = config["capabilityManifestJSON"] as? String {
+        tabDict["capabilityManifestJSON"] = capabilityManifestJSON
+    }
     if let permissions = config["permissions"] as? [String] {
         tabDict["permissions"] = permissions
     }
     if let reloadKey = config["reloadKey"] { tabDict["reloadKey"] = reloadKey }
+    if let appId = config["appId"] as? String { tabDict["appId"] = appId }
+    if let serviceCallUrl = config["serviceCallUrl"] as? String {
+        tabDict["serviceCallUrl"] = serviceCallUrl
+    }
+    if config["legacyActorBridge"] as? Bool == true {
+        tabDict["legacyActorBridge"] = true
+    }
     // Copy other tab properties
     if let historyItems = config["historyItems"] { tabDict["historyItems"] = historyItems }
     if let bookmarks = config["bookmarks"] { tabDict["bookmarks"] = bookmarks }

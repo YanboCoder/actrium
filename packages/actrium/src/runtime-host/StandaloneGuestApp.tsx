@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator as NativeActivityIndicator,
+  Image as NativeImage,
   NativeModules,
   Pressable as NativePressable,
   Text as NativeText,
@@ -8,12 +9,20 @@ import {
 } from 'react-native';
 import { EventHandler, HostHttpHandler } from 'askit/host-events';
 import { Engine, type ComponentMap } from 'keel/host';
-import { ScrollView, Text, TextInput, View } from 'keel/host/preset';
-
 import {
-  actriumHostModules,
-  actriumServiceContract,
-} from './host-service';
+  FlatList,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'keel/host/preset';
+
+import { hasDeclaredCapability } from './capabilities';
+import { contract } from './contract';
+import { createHostModules, type ActorCall } from './host-modules';
+import { isAllowedImageSource, pickGuestImageProps } from './image-asset';
+import { verifyRuntimeCapabilityManifestJSON } from './runtime-capability-verify';
 import type { TabConfig } from './types';
 
 type GuestButtonProps = {
@@ -47,11 +56,31 @@ const GuestButton: React.FC<GuestButtonProps> = ({
   </NativePressable>
 );
 
+const GuestImage: React.FC<React.ComponentProps<typeof NativeImage>> = (
+  props
+) => {
+  if (!isAllowedImageSource(props.source)) {
+    return null;
+  }
+  return (
+    <NativeImage
+      {...(pickGuestImageProps(props as Record<string, unknown>) as React.ComponentProps<typeof NativeImage>)}
+    />
+  );
+};
+
 const hostComponents: ComponentMap = {
   Button: GuestButton as unknown as React.ComponentType<
     Record<string, unknown>
   >,
+  FlatList: FlatList as unknown as React.ComponentType<Record<string, unknown>>,
+  // v1 exposes images as `ImageAsset`; the guest SDK still emits `Image`.
+  Image: GuestImage as unknown as React.ComponentType<Record<string, unknown>>,
+  ImageAsset: GuestImage as unknown as React.ComponentType<
+    Record<string, unknown>
+  >,
   ScrollView: ScrollView as React.ComponentType<Record<string, unknown>>,
+  Switch: Switch as unknown as React.ComponentType<Record<string, unknown>>,
   Text: Text as React.ComponentType<Record<string, unknown>>,
   TextInput: TextInput as React.ComponentType<Record<string, unknown>>,
   View: View as React.ComponentType<Record<string, unknown>>,
@@ -86,7 +115,11 @@ export const StandaloneGuestApp: React.FC<Props> = ({
   const [content, setContent] = React.useState<React.ReactElement | null>(null);
   const [error, setError] = React.useState('');
   const guestScript = tab.unifiedScript || tab.guestScript;
-  const hasActorCallPermission = (tab.permissions ?? []).includes('actor.call');
+  const hasServiceCapability = hasDeclaredCapability(
+    tab.permissions ?? [],
+    'service'
+  );
+  const permissionsKey = [...(tab.permissions ?? [])].sort().join(',');
 
   React.useEffect(() => {
     // A reload must start from a clean state, otherwise a previous load
@@ -98,13 +131,80 @@ export const StandaloneGuestApp: React.FC<Props> = ({
       setError('The application does not contain a Keel guest bundle.');
       return;
     }
+    const capabilityManifestJSON = tab.capabilityManifestJSON;
+    if (!capabilityManifestJSON) {
+      setError('The package does not contain a capability manifest.');
+      return;
+    }
+    const verification = verifyRuntimeCapabilityManifestJSON(
+      capabilityManifestJSON,
+      tab.permissions ?? []
+    );
+    if (!verification.ok) {
+      const details = verification.details.join(' ');
+      logToNative(
+        `[StandaloneGuestApp] capability verification failed: ${details}`
+      );
+      setError(`Capability manifest verification failed: ${details}`);
+      return;
+    }
 
     let disposed = false;
-    const engine = new Engine({
-      debug: false,
-      contract: actriumServiceContract,
-      hostModules: actriumHostModules,
+    const callLegacyActor: ActorCall = async ({
+      requestId,
+      route,
+      payloadBase64,
+      timeoutMs,
+    }) => {
+      const gatewayUrl =
+        globalThis.__ACTRIUM_ACTR_GATEWAY_URL__ ??
+        'http://127.0.0.1:8391/v1/call';
+      logToNative(`[StandaloneGuestApp] legacy actor call ${route}`);
+      const result = await HostHttpHandler.handleRequest<ActorCallResult>({
+        requestId,
+        url: gatewayUrl,
+        method: 'POST',
+        body: { routeKey: route, payloadBase64, timeoutMs },
+      });
+      return {
+        success: result.success && result.data?.success === true,
+        payloadBase64: result.data?.payloadBase64,
+        message: result.data?.error ?? result.message,
+      };
+    };
+    const callServiceActor: ActorCall = async ({
+      requestId,
+      route,
+      payloadBase64,
+      timeoutMs,
+    }) => {
+      // The global echo gateway is legacy-bridge only. New service calls must
+      // target the tab's attached Service actor.
+      if (!tab.serviceCallUrl) {
+        return {
+          success: false,
+          message:
+            'Service actor context is unavailable for this tab (Attach has not supplied an endpoint).',
+        };
+      }
+      logToNative(`[StandaloneGuestApp] service call ${route}`);
+      const result = await HostHttpHandler.handleRequest<ActorCallResult>({
+        requestId,
+        url: tab.serviceCallUrl,
+        method: 'POST',
+        body: { routeKey: route, payloadBase64, timeoutMs },
+      });
+      return {
+        success: result.success && result.data?.success === true,
+        payloadBase64: result.data?.payloadBase64,
+        message: result.data?.error ?? result.message,
+      };
+    };
+    const hostModules = createHostModules({
+      hasServiceCapability,
+      callActor: callServiceActor,
     });
+    const engine = new Engine({ debug: false, contract, hostModules });
     engine.register(hostComponents);
     engine.createReceiver();
 
@@ -114,7 +214,12 @@ export const StandaloneGuestApp: React.FC<Props> = ({
       setContent(next as React.ReactElement | null);
     };
     const unsubscribeUpdate = engine.on('update', update);
-    const unsubscribeEvents = EventHandler.setup(engine, {
+    // The legacy bridge is confined to the host-designated demo package. The
+    // designation comes from launch configuration, never from package data.
+    // Every other package must use the per-tab host:service path.
+    const legacyEchoTab = tab.legacyActorBridge === true;
+    const unsubscribeEvents = legacyEchoTab
+      ? EventHandler.setup(engine, {
       tabId: tab.id,
       onLog: (direction, event) => {
         logToNative(`[StandaloneGuestApp] ${direction}: ${event}`);
@@ -129,12 +234,12 @@ export const StandaloneGuestApp: React.FC<Props> = ({
             timeoutMs?: unknown;
           }) => {
             const requestId = payload?.requestId;
-            if (!hasActorCallPermission) {
+            if (!hasServiceCapability) {
               return {
                 requestId,
                 success: false,
                 error:
-                  'The Actor package does not declare the actor.call capability.',
+                  'The application does not declare the service capability.',
               };
             }
             if (
@@ -148,39 +253,30 @@ export const StandaloneGuestApp: React.FC<Props> = ({
               };
             }
 
-            const gatewayUrl =
-              globalThis.__ACTRIUM_ACTR_GATEWAY_URL__ ??
-              'http://127.0.0.1:8391/v1/call';
-            logToNative(
-              `[StandaloneGuestApp] ACTR_CALL ${payload.routeKey}`,
-            );
-            const result = await HostHttpHandler.handleRequest<ActorCallResult>({
-              requestId,
-              url: gatewayUrl,
-              method: 'POST',
-              body: {
-                routeKey: payload.routeKey,
-                payloadBase64: payload.payloadBase64,
-                timeoutMs:
-                  typeof payload.timeoutMs === 'number'
-                    ? payload.timeoutMs
-                    : 30_000,
-              },
+            logToNative(`[StandaloneGuestApp] ACTR_CALL ${payload.routeKey}`);
+            const response = await callLegacyActor({
+              requestId: requestId ?? `actr-${Date.now()}`,
+              route: payload.routeKey,
+              payloadBase64: payload.payloadBase64,
+              timeoutMs:
+                typeof payload.timeoutMs === 'number'
+                  ? payload.timeoutMs
+                  : 30_000,
             });
-            const response = {
-              requestId,
-              success: result.success && result.data?.success === true,
-              payloadBase64: result.data?.payloadBase64,
-              error: result.data?.error ?? result.message,
-            };
             logToNative(
               `[StandaloneGuestApp] ACTR_CALL completed: ${response.success ? 'success' : 'failure'}`,
             );
-            return response;
+            return {
+              requestId,
+              success: response.success,
+              payloadBase64: response.payloadBase64,
+              error: response.message,
+            };
           },
         },
       },
-    });
+    })
+      : () => {};
 
     void engine
       .loadBundle(guestScript, { containerHeight, containerWidth })
@@ -209,9 +305,13 @@ export const StandaloneGuestApp: React.FC<Props> = ({
     // enough for the guest bundle, and RN handles later size changes.
     // reloadKey still forces a clean reload when the package changes.
     guestScript,
-    hasActorCallPermission,
+    hasServiceCapability,
     tab.id,
+    tab.legacyActorBridge,
+    tab.serviceCallUrl,
     tab.reloadKey,
+    tab.capabilityManifestJSON,
+    permissionsKey,
   ]);
 
   if (error) {

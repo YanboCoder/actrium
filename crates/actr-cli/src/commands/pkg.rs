@@ -480,24 +480,27 @@ async fn execute_verify(args: &PkgVerifyArgs, config_keychain: Option<&str>) -> 
         load_verifying_key_from_dev_key(&key_path)?
     };
 
-    if let Ok(manifest_source) = actr_pack::read_manifest_raw(&package_bytes) {
-        if let Ok(manifest) = actr_pack::ActorPackageManifest::from_toml(&manifest_source) {
-            let verified = actr_pack::verify_actor_package(&package_bytes, &pubkey)?;
+    let verified = actr_pack::verify_runtime_package_bounded(
+        &package_bytes,
+        &pubkey,
+        actr_pack::DEFAULT_MAX_VERIFIED_ENTRY_BYTES,
+    )?;
+    let manifest = match verified.manifest {
+        actr_pack::RuntimePackageManifest::V2(manifest) => {
             println!("Package verification passed");
             println!();
             println!("  publisher: {}", manifest.actor.publisher);
-            println!("  type:         {}", verified.manifest.actor_type());
+            println!("  type:         {}", manifest.actor_type());
             println!("  workload:     {}", manifest.workload.entry);
             println!("  profile:      {}", manifest.workload.profile);
             println!("  signing_key:  {}", manifest.signature.key_id);
             println!("  files:        {}", manifest.files.len());
             return Ok(());
         }
-    }
+        actr_pack::RuntimePackageManifest::Legacy(manifest) => manifest,
+    };
 
-    let verified = actr_pack::verify(&package_bytes, &pubkey)?;
-
-    if let Some(ref manifest_key_id) = verified.manifest.signing_key_id {
+    if let Some(ref manifest_key_id) = manifest.signing_key_id {
         let expected_key_id = actr_pack::compute_key_id(&pubkey.to_bytes());
         if manifest_key_id != &expected_key_id {
             anyhow::bail!(
@@ -518,19 +521,16 @@ async fn execute_verify(args: &PkgVerifyArgs, config_keychain: Option<&str>) -> 
 
     println!("Package verification passed");
     println!();
-    println!("  publisher: {}", verified.manifest.publisher);
-    println!("  type:         {}", verified.manifest.actr_type_str());
-    println!("  binary:       {}", verified.manifest.binary.path);
-    println!(
-        "  binary_hash:  {}...",
-        &verified.manifest.binary.hash[..16]
-    );
-    println!("  target:       {}", verified.manifest.binary.target);
-    if let Some(ref key_id) = verified.manifest.signing_key_id {
+    println!("  publisher: {}", manifest.publisher);
+    println!("  type:         {}", manifest.actr_type_str());
+    println!("  binary:       {}", manifest.binary.path);
+    println!("  binary_hash:  {}...", &manifest.binary.hash[..16]);
+    println!("  target:       {}", manifest.binary.target);
+    if let Some(ref key_id) = manifest.signing_key_id {
         println!("  signing_key:  {}", key_id);
     }
-    if !verified.manifest.resources.is_empty() {
-        println!("  resources:    {}", verified.manifest.resources.len());
+    if !manifest.resources.is_empty() {
+        println!("  resources:    {}", manifest.resources.len());
     }
 
     Ok(())

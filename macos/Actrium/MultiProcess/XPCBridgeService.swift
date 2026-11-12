@@ -25,11 +25,14 @@ let ActriumHostProcessId = ProcessInfo.processInfo.processIdentifier
 /// Tab Configure Data
 struct XPCTabConfig {
     let tabId: UUID
+    let appId: String?
+    let legacyActorBridge: Bool
     let title: String
     let backgroundColor: String
     let containerSize: CGSize
     let systemAppType: String?
     let unifiedScript: String?
+    let capabilityManifestJSON: String?
     let leftPanelScript: String?
     let leftPanelVisible: Bool
     let rightPanelVisible: Bool
@@ -37,6 +40,7 @@ struct XPCTabConfig {
     let bookmarks: [[String: Any]]
     let recentHistory: [[String: Any]]
     let reloadKey: Int
+    let serviceCallUrl: String?
 
     func toDictionary(isOverviewMode: Bool) -> [String: Any] {
         var dict: [String: Any] = [
@@ -59,8 +63,20 @@ struct XPCTabConfig {
         if let unifiedScript = unifiedScript {
             dict["unifiedScript"] = unifiedScript
         }
+        if let capabilityManifestJSON = capabilityManifestJSON {
+            dict["capabilityManifestJSON"] = capabilityManifestJSON
+        }
         if let leftPanelScript = leftPanelScript {
             dict["leftPanelScript"] = leftPanelScript
+        }
+        if let serviceCallUrl = serviceCallUrl {
+            dict["serviceCallUrl"] = serviceCallUrl
+        }
+        if let appId = appId {
+            dict["appId"] = appId
+        }
+        if legacyActorBridge {
+            dict["legacyActorBridge"] = true
         }
         return dict
     }

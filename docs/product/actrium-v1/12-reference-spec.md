@@ -107,84 +107,7 @@ Chinese only).
 
 ## 3. Package download
 
-The Realm Profile's `package` identifies the instance's Service package (sample in §6.2).
-
-```json
-{
-  "package": {
-    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
-    "type": "notes.example/team-notes@1.4.2"
-  }
-}
-```
-
-Actrium downloads `href` per [Realm Profile protocol](../../../actr/protocols/realm-profile.md) §6
-(an HTTPS GET without credentials), checks `sha256`, and then verifies the manifest signature with
-the package signing key from the Publisher Profile (§2); the Actor type the manifest declares is
-the instance's program. The download address can be anywhere (a Publisher CDN, Loran package
-hosting, object storage) — it is not a trust source.
-
-Actrium matches the Service package's Actor type and SHA-256 to a Publisher-signed Program Release
-record, then independently verifies the Front package pinned by that record.
-
-### 3.1 Signed Program Release record
-
-The release record names both packages. The archive SHA-256 values and signature below are illustrative.
-
-```json
-{
-  "schema": "actrium.program-release/v1",
-  "release_id": "notes.example/team-notes@1.4.2",
-  "service": {
-    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
-    "type": "notes.example/team-notes@1.4.2"
-  },
-  "front": {
-    "href": "https://cdn.notes.example/team-notes-front-1.4.2.actr",
-    "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
-    "type": "notes.example/team-notes-front@1.4.2"
-  },
-  "privacy_contract": {
-    "href": "https://cdn.notes.example/team-notes-1.4.2.privacy.toml",
-    "sha256": "0f9e4a476a26c7d6896f8be66f3dec4ebfb3168addde52d3ff339662e12d2147"
-  },
-  "signature": {
-    "key_id": "actr-pub-3f9a1c0d2b7e4a61",
-    "algorithm": "Ed25519",
-    "value": "<base64>"
-  }
-}
-```
-
-`schema` is `actrium.program-release/v1`. `release_id` is the Service Actor type in
-`publisher/program@version` form. The two Actor types must be distinct and belong to that Publisher.
-The `service` and `front` members identify the package roles and bind each archive's HTTPS address,
-SHA-256, and exact Actor type. Within a release, both package types and digests,
-and the presence and digest of a Privacy Contract, are fixed. Download addresses can change.
-
-The Publisher signs the record with an active package signing key from the Publisher Profile's
-`keys`. The signature covers the record with the `signature` member removed, canonicalized
-using RFC 8785 JCS. The signature value is the base64-encoded Ed25519 signature. Actrium
-verifies it with the trusted Publisher key selected by `signature.key_id`, following the key
-acceptance and revocation rules for package signatures.
-
-Workspace requirements are declared by `[workspace]` in the signed Service manifest, as described
-in [03 §5.3](03-user-experience.md#53-workspace-selection).
-
-When a release uses a Program Privacy Contract, its signed record must include `privacy_contract`
-with the HTTPS address and SHA-256 of that file's exact bytes. Actrium verifies the record, then
-checks the fetched contract against that digest before using its declarations for authorization.
-It also checks the contract's `release_id` and both package digests against the record.
-Contract contents and binding must pass verification before the Host can grant capabilities
-governed by that contract. See [14 §4.2](14-privacy-primitives-and-attestation.md#42-program-privacy-contract).
-
-Actrium can use a verified local record or obtain a record from the Publisher or Marketplace.
-When opening a Realm, the record's `service.type` and `service.sha256` must match
-`Realm Profile.package`. Installing a published release requires a verified matching record. Actrium rejects
-conflicting package or Privacy Contract bindings for an accepted release. See
-[05 §3](05-program-package-and-distribution.md#3-where-a-package-comes-from) for package selection.
+Resolve `primary_package` and `front_package` in the verified Realm Profile. For each selected archive, fetch `href` over HTTPS without credentials, verify its SHA-256, and verify `manifest.sig` with the Publisher key for its exact Actor type. Check the Front's required Service dependency and RPC contract before loading. See [§6.2](#62-realm-profile) for the complete example.
 
 ## 4. `.actr` Manifest
 
@@ -235,6 +158,13 @@ role = "contract"
 media-type = "text/plain"
 size = 1204
 sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+
+[[files]]
+path = "contracts/privacy.toml"
+role = "contract"
+media-type = "application/toml"
+size = 530
+sha256 = "50037be0a33ed2265fe5a79b3f6a0b36762d81de6bff066ea33c6a9d21f0f171"
 ```
 
 ### 4.2 Front package
@@ -438,89 +368,7 @@ via a `realm-management` link (protocol `actr-realm-management/1`).
 
 ### 6.2 Realm Profile
 
-The entry point is the `realms` relation's `href` plus the `realm_id`:
-
-```text
-https://realms.provider.example/acme.com/k7m2q9xh
-```
-
-Sample:
-
-```json
-{
-  "schema": "actr.realm/v1",
-  "sequence": 31,
-  "realm": {
-    "name": "k7m2q9xh@acme.com",
-    "display_name": "Acme Notes",
-    "status": "active"
-  },
-  "package": {
-    "href": "https://cdn.notes.example/team-notes-1.4.2.actr",
-    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
-    "type": "notes.example/team-notes@1.4.2"
-  },
-  "issuer": {
-    "url": "https://identity.provider.example/realms/acme.com/k7m2q9xh",
-    "keys": [
-      {
-        "id": "7",
-        "algorithm": "Ed25519",
-        "public_key": "<base64>",
-        "status": "active"
-      }
-    ]
-  },
-  "provider": {
-    "id": "provider.example",
-    "signaling": [
-      {
-        "url": "wss://signal-a.provider.example/ws",
-        "priority": 10,
-        "control_plane_id": "provider.example/v1",
-        "ticket_audience": "signal-a"
-      },
-      {
-        "url": "wss://signal-b.provider.example:8443/ws",
-        "priority": 20,
-        "control_plane_id": "provider.example/v1",
-        "ticket_audience": "signal-b"
-      }
-    ],
-    "ice": [
-      {
-        "urls": ["stun:stun.provider.example:3478"]
-      },
-      {
-        "urls": ["turns:turn.provider.example:5349"],
-        "credential_audience": "turn-pool-1"
-      }
-    ]
-  },
-  "policy": {
-    "membership": "invite-only"
-  },
-  "issued_at": "2026-07-29T00:00:00Z",
-  "signature": {
-    "key_id": "rs-2026-1",
-    "algorithm": "Ed25519",
-    "value": "<base64>"
-  }
-}
-```
-
-`signature` is signed by an `active` key from `realm_signing_keys`; an Actor credential's issuer is
-exactly `realm.name`, and where the Realm Profile is stored does not affect its validity. An
-existing Realm Profile signed by a key that was later retired remains valid until superseded by a
-higher `sequence`. A Realm Profile carries no expiry; rollback protection relies solely on
-`sequence`. `provider.id` is the Actr Facility Provider's normalized DNS authority and is immutable for the
-life of the Realm. Multiple signaling endpoints sharing a `control_plane_id` are replicas or
-failover entry points of the same Actr Facility Provider presence/control plane, not v1 federation.
-`package` pins the instance's Service archive (§3). Upgrading the program means publishing a Realm
-Profile with a different `package` and a higher `sequence`. Rotating the Realm issuer key or
-changing endpoints under the same Actr Facility Provider likewise means publishing a Realm Profile with a
-higher `sequence`; retiring publishes a new Realm Profile with `status` set to `retired`, valid
-forever after.
+In the [complete signed Echo example](../../../actr/protocols/examples/realm-profile.json), `primary_package: "echo"` selects the Service and `front_package: "ui"` selects its Front. The Realm signs the complete Profile and increases `sequence` whenever its selection changes. See [Realm Profile §4](../../../actr/protocols/realm-profile.md#4-profile-format) for the test public key and field definitions.
 
 ## 7. Service Inventory Record
 

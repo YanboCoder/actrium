@@ -612,8 +612,9 @@ mod tests {
             hex::encode(Sha256::digest(&bytes)) == package.sha256,
             "PACKAGE_DIGEST_MISMATCH"
         );
-        let manifest = actr_pack::read_manifest(&bytes)?;
-        let publisher = ActrUri::from_domain(&manifest.publisher)?;
+        let manifest = actr_pack::read_runtime_manifest(&bytes)?;
+        let identity = actr_pack::ValidatedActorIdentity::from_actor_type(manifest.actor_type())?;
+        let publisher = ActrUri::from_domain(identity.publisher())?;
         let document =
             e2e_documents::fetch(publisher.discovery_url().context("Publisher URL")?).await?;
         let value: Value = serde_json::from_slice(&document)?;
@@ -621,22 +622,23 @@ mod tests {
         descriptor.validate_for(&publisher)?;
         let profile: actr_protocol::PublisherProfile =
             serde_json::from_value(value["publisher"].clone())?;
-        let keys = profile.verify(&manifest.publisher, chrono::Utc::now())?;
+        let keys = profile.verify(identity.publisher(), chrono::Utc::now())?;
         let key = keys
             .keys
             .iter()
-            .find(|key| Some(&key.id) == manifest.signing_key_id.as_ref())
+            .find(|key| Some(key.id.as_str()) == manifest.signing_key_id())
             .context("package signing key is not listed by Publisher")?;
         let public_key: [u8; 32] = BASE64
             .decode(&key.public_key)?
             .try_into()
             .map_err(|_| anyhow::anyhow!("invalid package public key"))?;
-        let verified = actr_pack::verify(
+        let verified = actr_pack::verify_runtime_package_bounded(
             &bytes,
             &ed25519_dalek::VerifyingKey::from_bytes(&public_key)?,
+            actr_pack::DEFAULT_MAX_VERIFIED_ENTRY_BYTES,
         )?;
         anyhow::ensure!(
-            verified.manifest.actr_type_str() == package.r#type,
+            verified.manifest.actor_type().to_program_identity() == package.r#type,
             "SERVICE_ACTOR_TYPE_MISMATCH"
         );
         let output = std::path::Path::new(output);

@@ -129,9 +129,9 @@ async fn actr_package_roundtrip() {
         .verify_package(&WorkloadPackage::new(package))
         .await
         .unwrap();
-    assert_eq!(verified.manifest.publisher, "test-publisher");
-    assert_eq!(verified.manifest.name, "MyActor");
-    assert_eq!(verified.manifest.version, "1.2.3");
+    assert_eq!(verified.manifest.actor_type().publisher, "test-publisher");
+    assert_eq!(verified.manifest.actor_type().name, "MyActor");
+    assert_eq!(verified.manifest.actor_type().version, "1.2.3");
 }
 
 #[tokio::test]
@@ -217,7 +217,10 @@ async fn load_workload_package_selects_wasm_backend() {
         .unwrap();
 
     assert_eq!(loaded.binary_kind, BinaryKind::Wasm);
-    assert_eq!(loaded.manifest().binary.target, "wasm32-wasip2");
+    assert_eq!(
+        loaded.manifest().as_legacy().unwrap().binary.target,
+        "wasm32-wasip2"
+    );
 }
 
 #[cfg(feature = "wasm-engine")]

@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "types": ["react", "react-native", "node", "bun"],
     "paths": {
       "react": ["./node_modules/@types/react/index.d.ts"],
       "react-native": ["./node_modules/react-native/types/index.d.ts"],
@@ -10,10 +11,16 @@
       "askit/core": ["../actrium-app-sdk/src/core/index.ts"],
       "askit/contracts": ["../actrium-app-sdk/src/contracts/index.ts"],
       "keel": ["../keel/src/index.ts"],
+      "keel/contract": ["../keel/src/contract/index.ts"],
       "keel/host": ["../keel/src/host/index.ts"],
       "keel/host/preset": ["../keel/src/host/preset/index.ts"]
     }
   },
-  "include": ["index.ts", "src"],
-  "exclude": ["node_modules", "../keel/src/guest", "../keel/src/cli", "../keel/src/devtools"]
+  "include": ["index.ts", "index-system.tsx", "src"],
+  "exclude": [
+    "node_modules",
+    "../keel/src/guest",
+    "../keel/src/cli",
+    "../keel/src/devtools"
+  ]
 }

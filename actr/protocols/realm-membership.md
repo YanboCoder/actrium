@@ -97,7 +97,9 @@ no `requester`.
 | `set_role` | `member_id`, `role` (`editor`/`viewer`) | The owner (not for itself) | Changes only the role |
 | `transfer_owner` | `member_id`, optional `previous_owner_role` (default `editor`) | The owner | Atomically hands ownership to another active member that has at least one unrevoked client key; the previous owner takes the given role |
 | `leave` | none | A member other than the owner | Removes itself, with the effect of `remove_member` |
-| `update_realm` | optional `package`, `display_name`, or `status: "retired"` | The owner; only for Realms under the Actr Facility Provider's domain | The Actr Facility Provider signs and publishes a Realm Profile with a higher sequence (Realm Profile sections 7.2 and 7.4); responds `{realm, sequence}` |
+| `update_realm` | optional complete selection (`primary_package`, `front_package` and `packages`), `display_name`, or `status: "retired"` | Owner of a Realm under the AFP domain | The AFP validates and signs a higher-sequence Profile and returns `{realm, sequence}` (Realm Profile Sections 7.2 and 7.4). |
+
+After a selection update, the caller verifies the signed Profile and compares both selectors and the complete map with its request. See [Realm Profile Section 7.2](realm-profile.md#72-updates).
 
 In a `join` request, `signature.key_id` **MUST** equal the `key_id` computed
 from `public_key`; the signature is the proof of possession. For every other
@@ -210,11 +212,14 @@ The Issuer issues only when all of the following hold:
    Actor private key can move its Actor to another of its clients). Relay
    identity enrollment also requires the currently bound key and an unexpired
    renewal token;
-3. at registration, if the Actor type's publisher and program name equal those
-   of the Realm Profile's `package.type` (in any version, that is, the
+3. at registration, resolve `packages[primary_package]` from the verified Profile.
+   The Issuer **MUST** reject an invalid primary reference. If the Actor type's publisher and
+   program name equal those of this primary's `type` (in any version, that is, the
    instance's Service and its upgrades), the signing key belongs to the owner.
    Renewal and reissue do not check the role again, so an ownership transfer
    does not affect a running Service.
+
+Package selection does not change membership or Actor-admission rules.
 
 A connection ACL carried by a registration applies only to the registering
 Actor's own type; since only the owner can register the Service's program,
@@ -252,6 +257,41 @@ without a key binding are refused; clients obtain bound credentials by renewal.
 
 A Realm client key is a capability of the Actr Host and **MUST NOT** be given
 to Guest workloads.
+
+### 6.1 Package manifest registration
+
+Package-mode `RegisterRequest` carries the original `manifest.toml` bytes in
+`manifest_raw` and the original 64-byte `manifest.sig` in `publisher_signature`.
+The Host **MUST NOT** reserialize the manifest, inject legacy fields, or replace
+the Publisher signature. Its Realm client proof signs the exact Protobuf body.
+The same registration material is retained for `/issuer/reissue`.
+
+| Manifest | Identity and signing key | Request `target` |
+| --- | --- | --- |
+| `format = "actr-package/2"` | `actor.publisher/name/version`, `signature.key-id`, Ed25519 | **MUST** be absent; an empty string is also rejected |
+| Existing unversioned binary manifest | Top-level `publisher/name/version/signing_key_id` | Required, nonempty, and equal to signed `binary.target` |
+
+A format declaration or versioned `actor/workload/host/signature` table selects
+the versioned parser exclusively. Unsupported versions, `actr-package/1`, mixed
+schemas and invalid v2 documents **MUST NOT** fall back to the unversioned or
+linked path. The manifest is bounded to 1 MiB. The requested Actor type must
+exactly equal the signed type, and the key id must identify the Ed25519 key that
+verifies the original bytes. Format/target-shape failures are rejected as invalid
+requests (Protobuf error code 400); identity/signature failures are rejected as
+unverified provenance (403).
+
+For v2, execution requirements come from the signed workload/Host profiles.
+The Host checks payload hashes, entry points, ABI and capabilities. Issuer
+validates the manifest schema, signature, Publisher provenance and Realm
+authorization; it does not receive the ZIP or attest to remotely executed code.
+Supplying a public key does not grant trusted Publisher provenance. The Host
+needs its own Realm client key and public package material, not the Publisher
+private key or a package-publication record.
+
+Renewal keeps the existing member/client/Realm/Publisher checks. Reissue verifies
+the original package-mode request and the Actor possession/member/type binding,
+and preserves ActorId. A v2 registration records a null legacy target; a successful
+v2 reissue clears any previous legacy target atomically with its response.
 
 ## 7. Security and privacy considerations
 

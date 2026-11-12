@@ -1005,6 +1005,7 @@ dictionary ActrPackageManifestInfo {
     string? contract_name;
     u32? contract_version;
     sequence<string> permissions;
+    string? capabilities;
     string? system_app_type;
     string? theme_color;
 };

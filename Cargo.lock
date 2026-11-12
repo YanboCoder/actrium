@@ -246,6 +246,7 @@ dependencies = [
  "rustls-native-certs",
  "rustls-pki-types",
  "rustls-webpki",
+ "semver",
  "serde",
  "serde_json",
  "sha1 0.10.6",
@@ -434,8 +435,11 @@ dependencies = [
  "anyhow",
  "chrono",
  "proto-fingerprint",
+ "protobuf-parse",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
@@ -3499,6 +3503,7 @@ version = "0.10.7"
 dependencies = [
  "actr-hyper",
  "actr-mock-loran",
+ "actr-pack",
  "actr-protocol",
  "actr-relay-security",
  "aes-gcm",
@@ -3529,7 +3534,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
- "toml 0.8.23",
  "tonic",
  "tower",
  "tower-http 0.5.2",
