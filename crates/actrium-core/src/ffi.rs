@@ -5345,7 +5345,7 @@ mod tests {
             "": "BMP",
             "😀": "astral",
             "numbers": [1, 1.5],
-            "text": "cafe"
+            "text": "caf\u00e9"
         },
         "signature": {
             "key_id": "rs-a",
@@ -5484,7 +5484,7 @@ mod tests {
             "": "BMP",
             "😀": "astral",
             "numbers": [1, 1.5],
-            "text": "cafe"
+            "text": "caf\u00e9"
         },
         "signature": {
             "key_id": "rs-a",
