@@ -68,6 +68,20 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
     /// actr:// link awaiting invite-code redemption (临时方案 sheet presented).
     @Published var pendingInviteRedeem: PendingInviteRedeem?
 
+    /// Realms this installation has already redeemed an invite for. Opening
+    /// their actr:// links skips the invite sheet (re-asking would dead-end
+    /// in `invite_used`). Persisted across launches.
+    private var redeemedRealms: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "actr.redeemedRealms") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "actr.redeemedRealms") }
+    }
+
+    private func markRedeemed(_ realmName: String) {
+        var updated = redeemedRealms
+        updated.insert(realmName)
+        redeemedRealms = updated
+    }
+
     /// Current download task handle, kept for cancellation.
     private var packageDownloadTask: Task<Void, Never>?
 
@@ -697,9 +711,14 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
     /// - Load if input is a local file path ACTR Apply
     /// - Otherwise, as app id Process
     func navigateCurrentTab(to input: String) {
+        // Address-bar navigation must always land somewhere: create a tab
+        // when the window has none (e.g. right after a relaunch).
+        if currentTabId == nil || tabs.firstIndex(where: { $0.id == currentTabId }) == nil {
+            addNewTab(focusAddressBar: false)
+        }
         guard let currentTabId = currentTabId,
               let index = tabs.firstIndex(where: { $0.id == currentTabId }) else {
-            logger.warning("⚠️ [navigateCurrentTab] No Current tab")
+            logger.warning("⚠️ [navigateCurrentTab] No Current tab after creating one")
             return
         }
 
@@ -714,9 +733,14 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 uri: trimmed,
                 installationId: InstallationIdProvider.getOrCreate()
             )
-            // 临时方案:打开任何 actr:// 链接前先要求邀请码。兑换后由 Rust
-            // 提供的方法接管后续流程(FFI 未接入前不直接进入解析流程)。
+            // 临时方案:打开任何 actr:// 链接前先要求邀请码;已兑换过的 Realm
+            // 直接放行(join 的 RealmMembership 身份已在 Keychain 中)。
+            let realmName = [info.realmId, info.domain].compactMap { $0 }.joined(separator: "@")
             guard pendingInviteRedeem == nil else { return }
+            guard !redeemedRealms.contains(realmName) else {
+                handleResolvedRealmLink(info, input: trimmed, tabIndex: index)
+                return
+            }
             pendingInviteRedeem = PendingInviteRedeem(uri: trimmed, domain: info.domain)
             return
         } catch {
@@ -910,17 +934,29 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         pendingInviteRedeem = nil
     }
 
-    /// 兑换:调用 Rust 提供的方法处理后续流程(FFI 接入点,当前为占位)。
+    /// 兑换:调用 RealmJoinService 完成完整兑换流程(解码 → ②③验证 → 设备
+    /// 身份 → join),成功后标记 Realm 已兑换并自动打开实例链接。
     func confirmInviteRedeem(code: String) {
         guard let pending = pendingInviteRedeem else { return }
         pendingInviteRedeem = nil
         let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedCode.isEmpty else { return }
-        // TODO(rust-ffi): 调用 Rust 提供的兑换方法(入参 pending.uri + 邀请码),
-        // 由它接管后续流程(验证/发现/打开)。
-        logger.notice(
-            "🎟️ [InviteRedeem] redeem requested for \(pending.uri), code length \(trimmedCode.count) — rust FFI TODO"
-        )
+
+        Task { @MainActor in
+            do {
+                let result = try await RealmJoinService.joinWithInvite(
+                    inviteText: trimmedCode,
+                    label: Host.current().localizedName ?? "Mac"
+                )
+                markRedeemed(result.realmName)
+                logger.notice("🎟️ [InviteRedeem] joined \(result.realmName): member=\(result.memberId), role=\(result.role), key=\(result.keyId)")
+                // 已兑换集合命中后,这里不会再弹邀请码 sheet,直接走 ①—④。
+                navigateCurrentTab(to: result.instanceURL.absoluteString)
+            } catch {
+                logger.warning("⚠️ [InviteRedeem] redemption failed: \(error)")
+                presentRealmLinkError(error)
+            }
+        }
     }
 
     func confirmInstanceCreation() {
