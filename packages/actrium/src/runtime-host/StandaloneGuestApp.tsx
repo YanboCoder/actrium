@@ -10,6 +10,10 @@ import { EventHandler, HostHttpHandler } from 'askit/host-events';
 import { Engine, type ComponentMap } from 'keel/host';
 import { ScrollView, Text, TextInput, View } from 'keel/host/preset';
 
+import {
+  actriumHostModules,
+  actriumServiceContract,
+} from './host-service';
 import type { TabConfig } from './types';
 
 type GuestButtonProps = {
@@ -96,7 +100,11 @@ export const StandaloneGuestApp: React.FC<Props> = ({
     }
 
     let disposed = false;
-    const engine = new Engine({ debug: false });
+    const engine = new Engine({
+      debug: false,
+      contract: actriumServiceContract,
+      hostModules: actriumHostModules,
+    });
     engine.register(hostComponents);
     engine.createReceiver();
 
