@@ -19,6 +19,12 @@ export type ActorCall = (request: {
   timeoutMs: number;
 }) => Promise<ServiceCallResult>;
 
+export type ActorTell = (request: {
+  requestId: string;
+  route: string;
+  payloadBase64: string;
+}) => Promise<ServiceCallResult>;
+
 export type HostModules = {
   'host:service': {
     call: (input: ServiceCallRequest) => Promise<{ payloadBase64: string }>;
@@ -31,7 +37,7 @@ export type HostModules = {
 
 /** Methods with a real Host implementation, excluding throwing placeholders. */
 export const HOST_SUPPORTED_METHODS: Readonly<Record<string, ReadonlySet<string>>> = {
-  'host:service': new Set(['call']),
+  'host:service': new Set(['call', 'tell']),
 };
 
 /** Modules with a real Host implementation, not just a contract declaration. */
@@ -63,6 +69,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 export function createHostModules(options: {
   hasServiceCapability: boolean;
   callActor: ActorCall;
+  tellActor?: ActorTell;
 }): HostModules {
   let requestSequence = 0;
 
@@ -90,8 +97,24 @@ export function createHostModules(options: {
         }
         return { payloadBase64: result.payloadBase64 };
       },
-      tell: async () => {
-        throw new Error('host:service.tell is not implemented yet.');
+      tell: async (input: ServiceTellInput) => {
+        if (!options.hasServiceCapability) {
+          throw new Error(
+            'The application does not declare the service capability.'
+          );
+        }
+        if (!options.tellActor) {
+          throw new Error('host:service.tell is not available on this host.');
+        }
+        requestSequence += 1;
+        const result = await options.tellActor({
+          requestId: `service-tell-${Date.now()}-${requestSequence}`,
+          route: input.route,
+          payloadBase64: input.payloadBase64,
+        });
+        if (!result.success) {
+          throw new Error(result.message ?? 'Service tell failed');
+        }
       },
       on: () => {
         throw new Error('host:service.on is not implemented yet.');

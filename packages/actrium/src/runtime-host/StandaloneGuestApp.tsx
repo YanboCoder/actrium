@@ -20,7 +20,12 @@ import {
 
 import { hasDeclaredCapability } from './capabilities';
 import { contract } from './contract';
-import { createHostModules, type ActorCall } from './host-modules';
+import { ActrServiceError, actrServiceClient } from './host-service';
+import {
+  createHostModules,
+  type ActorCall,
+  type ActorTell,
+} from './host-modules';
 import { isAllowedImageSource, pickGuestImageProps } from './image-asset';
 import { verifyRuntimeCapabilityManifestJSON } from './runtime-capability-verify';
 import type { TabConfig } from './types';
@@ -172,37 +177,46 @@ export const StandaloneGuestApp: React.FC<Props> = ({
         message: result.data?.error ?? result.message,
       };
     };
+    // Route through the shared host:service client: it prefers the per-tab
+    // native module (Renderer → Host IPC) and falls back to the tab's
+    // `serviceCallUrl`. With neither available it fails closed.
     const callServiceActor: ActorCall = async ({
-      requestId,
       route,
       payloadBase64,
       timeoutMs,
     }) => {
-      // The global echo gateway is legacy-bridge only. New service calls must
-      // target the tab's attached Service actor.
-      if (!tab.serviceCallUrl) {
-        return {
-          success: false,
-          message:
-            'Service actor context is unavailable for this tab (Attach has not supplied an endpoint).',
-        };
+      try {
+        const result = await actrServiceClient.call(
+          { route, payloadBase64, timeoutMs },
+          { tabId: tab.id, serviceCallUrl: tab.serviceCallUrl }
+        );
+        return { success: true, payloadBase64: result.payloadBase64 };
+      } catch (cause) {
+        const code =
+          cause instanceof ActrServiceError ? cause.code : 'INTERNAL';
+        const message = cause instanceof Error ? cause.message : String(cause);
+        logToNative(`[StandaloneGuestApp] service call failed ${code}: ${message}`);
+        return { success: false, message: `${code}: ${message}` };
       }
-      logToNative(`[StandaloneGuestApp] service call ${route}`);
-      const result = await HostHttpHandler.handleRequest<ActorCallResult>({
-        requestId,
-        url: tab.serviceCallUrl,
-        method: 'POST',
-        body: { routeKey: route, payloadBase64, timeoutMs },
-      });
-      return {
-        success: result.success && result.data?.success === true,
-        payloadBase64: result.data?.payloadBase64,
-        message: result.data?.error ?? result.message,
-      };
+    };
+    const tellServiceActor: ActorTell = async ({ route, payloadBase64 }) => {
+      try {
+        await actrServiceClient.tell(
+          { route, payloadBase64 },
+          { tabId: tab.id, serviceCallUrl: tab.serviceCallUrl }
+        );
+        return { success: true };
+      } catch (cause) {
+        const code =
+          cause instanceof ActrServiceError ? cause.code : 'INTERNAL';
+        const message = cause instanceof Error ? cause.message : String(cause);
+        return { success: false, message: `${code}: ${message}` };
+      }
     };
     const hostModules = createHostModules({
       hasServiceCapability,
       callActor: callServiceActor,
+      tellActor: tellServiceActor,
     });
     const engine = new Engine({ debug: false, contract, hostModules });
     engine.register(hostComponents);

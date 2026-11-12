@@ -1,17 +1,19 @@
 /**
  * Transport for `host:service`.
  *
- * Phase 0 keeps two interchangeable backends:
+ * The Guest runs in the Renderer process, which cannot reach the Actr runtime
+ * directly. Two interchangeable transports carry a call to the tab's Service
+ * actor:
  *
- *  1. `NativeModules.ActrServiceModule` — the RN native module that will carry
- *     service calls across the renderer/main boundary once the ActrNode host is
- *     linked in the main process.
- *  2. The local Actr HTTP gateway — the same endpoint the existing ACTR_CALL
- *     event handler uses. It keeps the bridge usable before the native module
- *     (and the Actr runtime) are available.
+ *  1. `NativeModules.ActrServiceModule` — the RN native module that forwards
+ *     the call across the Renderer boundary to the per-tab loopback endpoint
+ *     registered by the Host.
+ *  2. The tab's `serviceCallUrl` over loopback HTTP — used on platforms (or
+ *     test hosts) without the native module.
  *
- * The guest-facing call sites do not change when backend (2) is replaced by an
- * IPC-backed native module.
+ * There is deliberately no global gateway fallback: when neither transport is
+ * available the call fails closed with `SERVICE_NOT_FOUND`, so a stale tab can
+ * never silently talk to an unrelated actor.
  */
 
 import { HostHttpHandler } from 'askit/host-events';
@@ -25,8 +27,6 @@ import {
   type ServiceTellInput,
 } from './types';
 
-const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:8391/v1/call';
-
 type GatewayResponse = {
   success?: boolean;
   payloadBase64?: string;
@@ -35,11 +35,22 @@ type GatewayResponse = {
 
 type NativeActrServiceModule = {
   call?: (
+    tabId: string,
     route: string,
     payloadBase64: string,
     timeoutMs: number
   ) => Promise<unknown>;
-  tell?: (route: string, payloadBase64: string) => Promise<unknown>;
+  tell?: (
+    tabId: string,
+    route: string,
+    payloadBase64: string
+  ) => Promise<unknown>;
+};
+
+/** Identifies which tab's Service actor the call belongs to. */
+export type ServiceCallContext = {
+  tabId: string;
+  serviceCallUrl?: string;
 };
 
 let requestSequence = 0;
@@ -47,10 +58,6 @@ let requestSequence = 0;
 function nextRequestId(): string {
   requestSequence += 1;
   return `service-call-${requestSequence}`;
-}
-
-function gatewayURL(): string {
-  return globalThis.__ACTRIUM_ACTR_GATEWAY_URL__ ?? DEFAULT_GATEWAY_URL;
 }
 
 function nativeModule(): NativeActrServiceModule | undefined {
@@ -85,17 +92,30 @@ function asError(cause: unknown): ActrServiceError {
 }
 
 function decodePayload(value: unknown): ServiceCallOutput {
-  if (typeof value !== 'string' || value.length === 0) {
+  // An empty protobuf message encodes to "", which is a valid payload; only a
+  // missing/non-string value is malformed.
+  if (typeof value !== 'string') {
     throw new ActrServiceError(
       'INVALID_RESPONSE',
-      'Actr service returned an empty payload.'
+      'Actr service returned no payload.'
     );
   }
   return { payloadBase64: value };
 }
 
+function tellURL(serviceCallUrl: string): string {
+  try {
+    const url = new URL(serviceCallUrl);
+    url.pathname = '/v1/tell';
+    return url.toString();
+  } catch {
+    return serviceCallUrl;
+  }
+}
+
 async function callViaNative(
   module: NativeActrServiceModule,
+  context: ServiceCallContext,
   input: ServiceCallInput
 ): Promise<ServiceCallOutput> {
   if (!module.call) {
@@ -106,6 +126,7 @@ async function callViaNative(
   }
   try {
     const payload = await module.call(
+      context.tabId,
       input.route,
       input.payloadBase64,
       input.timeoutMs ?? 30_000
@@ -116,12 +137,35 @@ async function callViaNative(
   }
 }
 
-async function callViaGateway(
+async function tellViaNative(
+  module: NativeActrServiceModule,
+  context: ServiceCallContext,
+  input: ServiceTellInput
+): Promise<void> {
+  if (!module.tell) {
+    throw new ActrServiceError(
+      'TRANSPORT_ERROR',
+      'ActrServiceModule has no tell method.'
+    );
+  }
+  try {
+    await module.tell(context.tabId, input.route, input.payloadBase64);
+  } catch (cause) {
+    throw asError(cause);
+  }
+}
+
+function gatewayErrorCode(message: string | undefined): ActrServiceErrorCode {
+  return message?.toLowerCase().includes('timed out') ? 'TIMED_OUT' : 'TRANSPORT_ERROR';
+}
+
+async function callViaHTTP(
+  serviceCallUrl: string,
   input: ServiceCallInput
 ): Promise<ServiceCallOutput> {
   const response = await HostHttpHandler.handleRequest<GatewayResponse>({
     requestId: nextRequestId(),
-    url: gatewayURL(),
+    url: serviceCallUrl,
     method: 'POST',
     body: {
       routeKey: input.route,
@@ -132,43 +176,77 @@ async function callViaGateway(
 
   if (!response.success) {
     throw new ActrServiceError(
-      'TRANSPORT_ERROR',
-      response.message ?? 'Actr gateway request failed.'
+      gatewayErrorCode(response.message),
+      response.message ?? 'Actr service request failed.'
     );
   }
   if (response.data?.success !== true) {
     throw new ActrServiceError(
       'INTERNAL',
-      response.data?.error ?? 'Actr gateway returned a failed result.'
+      response.data?.error ?? 'Actr service returned a failed result.'
     );
   }
 
   return decodePayload(response.data?.payloadBase64);
 }
 
+async function tellViaHTTP(
+  serviceCallUrl: string,
+  input: ServiceTellInput
+): Promise<void> {
+  const response = await HostHttpHandler.handleRequest<GatewayResponse>({
+    requestId: nextRequestId(),
+    url: tellURL(serviceCallUrl),
+    method: 'POST',
+    body: {
+      routeKey: input.route,
+      payloadBase64: input.payloadBase64,
+    },
+  });
+
+  if (!response.success) {
+    throw new ActrServiceError(
+      gatewayErrorCode(response.message),
+      response.message ?? 'Actr service tell failed.'
+    );
+  }
+  if (response.data?.success !== true) {
+    throw new ActrServiceError(
+      'INTERNAL',
+      response.data?.error ?? 'Actr service returned a failed tell.'
+    );
+  }
+}
+
+function serviceNotFound(context: ServiceCallContext): ActrServiceError {
+  return new ActrServiceError(
+    'SERVICE_NOT_FOUND',
+    `No Service actor endpoint is attached to tab ${context.tabId}.`
+  );
+}
+
 export const actrServiceClient = {
-  async call(input: ServiceCallInput): Promise<ServiceCallOutput> {
+  async call(
+    input: ServiceCallInput,
+    context: ServiceCallContext
+  ): Promise<ServiceCallOutput> {
     const module = nativeModule();
-    if (module) return callViaNative(module, input);
-    return callViaGateway(input);
+    if (module?.call) return callViaNative(module, context, input);
+    if (context.serviceCallUrl) {
+      return callViaHTTP(context.serviceCallUrl, input);
+    }
+    throw serviceNotFound(context);
   },
 
-  async tell(input: ServiceTellInput): Promise<void> {
+  async tell(
+    input: ServiceTellInput,
+    context: ServiceCallContext
+  ): Promise<void> {
     const module = nativeModule();
-    if (module?.tell) {
-      try {
-        await module.tell(input.route, input.payloadBase64);
-        return;
-      } catch (cause) {
-        throw asError(cause);
-      }
+    if (module?.tell) return tellViaNative(module, context, input);
+    if (context.serviceCallUrl) {
+      return tellViaHTTP(context.serviceCallUrl, input);
     }
-
-    // The gateway currently exposes request/response only; a tell is a call
-    // whose reply we intentionally discard.
-    await callViaGateway({
-      route: input.route,
-      payloadBase64: input.payloadBase64,
-    });
+    throw serviceNotFound(context);
   },
 };

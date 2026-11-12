@@ -1,6 +1,7 @@
 export { actriumServiceContract } from './contract';
-export { actriumHostModules } from './implementation';
+export { createActriumHostModules } from './implementation';
 export { actrServiceClient } from './client';
+export type { ServiceCallContext } from './client';
 export { ActrServiceError } from './types';
 export type {
   ActrServiceErrorCode,

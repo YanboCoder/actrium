@@ -76,15 +76,59 @@ describe('host:service implementation', () => {
     );
   });
 
-  test('fails closed for tell and on until implemented', async () => {
+  test('tell forwards to the tab-scoped transport', async () => {
+    const captured: { route?: string; payloadBase64?: string } = {};
+    const hostModules = createHostModules({
+      hasServiceCapability: true,
+      callActor: async () => ({ success: true }),
+      tellActor: async (request) => {
+        captured.route = request.route;
+        captured.payloadBase64 = request.payloadBase64;
+        return { success: true };
+      },
+    });
+
+    await expect(hostModules['host:service'].tell(input)).resolves.toBeUndefined();
+    expect(captured).toEqual({
+      route: 'echo.EchoService.Echo',
+      payloadBase64: 'AAEC',
+    });
+  });
+
+  test('fails closed when tell is not wired to a transport', async () => {
     const hostModules = createHostModules({
       hasServiceCapability: true,
       callActor: async () => ({ success: true }),
     });
 
     await expect(hostModules['host:service'].tell(input)).rejects.toThrow(
-      'not implemented'
+      'not available on this host'
     );
+  });
+
+  test('rejects tell when the service capability is not declared', async () => {
+    let called = false;
+    const hostModules = createHostModules({
+      hasServiceCapability: false,
+      callActor: async () => ({ success: true }),
+      tellActor: async () => {
+        called = true;
+        return { success: true };
+      },
+    });
+
+    await expect(hostModules['host:service'].tell(input)).rejects.toThrow(
+      'service capability'
+    );
+    expect(called).toBe(false);
+  });
+
+  test('on fails closed until events are implemented', () => {
+    const hostModules = createHostModules({
+      hasServiceCapability: true,
+      callActor: async () => ({ success: true }),
+    });
+
     expect(() => hostModules['host:service'].on(() => {})).toThrow(
       'not implemented'
     );
