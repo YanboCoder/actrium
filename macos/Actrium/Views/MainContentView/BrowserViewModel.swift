@@ -92,10 +92,10 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
     /// Package import awaiting instance-creation confirmation (confirm sheet).
     @Published var pendingInstanceCreation: PendingInstanceCreation?
 
-    /// Prototype instance store (15 §5: the mock ActorId skeleton keeps the
-    /// interface identical to the real ID; switch to the real actr-ffi
-    /// backend once delivered — shell call sites unchanged).
-    private let serviceInstanceStore: ActrServiceInstanceProviding = MockActrServiceInstanceStore()
+    /// Package-backed Service runtime (15-B B9): starts a real `ActrNode` per
+    /// instance and exposes it through a per-instance loopback endpoint.
+    /// `MockActrServiceInstanceStore` remains available for tests only.
+    private let serviceInstanceStore: ActrServiceInstanceProviding = ActrServiceRuntime()
 
     // MARK: - Grid Slot Position Management
 
@@ -1000,6 +1000,10 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         else { return }
         let oldURL = tabs[index].url?.absoluteString ?? "nil"
         tabs[index].url = instanceURL
+        tabs[index].serviceCallUrl = handle.serviceCallUrl
+        // The renderer only re-sends tab config when the size or reload nonce
+        // changes; attach the endpoint and force one config push.
+        tabs[index].reloadNonce &+= 1
         if let displayName = pending.displayName, !displayName.isEmpty {
             tabs[index].title = displayName
         }
@@ -2131,107 +2135,14 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-                try unzipActrPackage(archive: resolvedURL, to: tempDir)
-            } catch {
-                logger.error(" .actr Loading failed:\(error.localizedDescription)")
-                return
-            }
-            rootDir = tempDir
-        }
-
-        do {
-            let manifestInfo = try readPackageManifest(fromRoot: rootDir)
-            let tabTitle = manifestInfo.name ?? resolvedURL.deletingPathExtension().lastPathComponent
-
-            let guestScript = readGuestScript(fromRoot: rootDir)
-
-            var unifiedScript: String? = nil
-            if let unifiedFileName = manifestInfo.unifiedScript {
-                unifiedScript = readScript(fromRoot: rootDir, fileName: unifiedFileName)
-            }
-
-            var leftPanelScript: String? = nil
-            var rightPanelScript: String? = nil
-            if let leftFileName = manifestInfo.leftPanelScript {
-                leftPanelScript = readScript(fromRoot: rootDir, fileName: leftFileName)
-            }
-            if let rightFileName = manifestInfo.rightPanelScript {
-                rightPanelScript = readScript(fromRoot: rootDir, fileName: rightFileName)
-            }
-
-            // Update UI on main thread
-            DispatchQueue.main.async { [weak self] in
-                if let unified = unifiedScript {
-                    self?.appendRuntimeTab(
-                        title: tabTitle,
-                        sourceURL: resolvedURL,
-                        appId: manifestInfo.appId,
-                        unifiedScript: unified,
-                        contractName: manifestInfo.contractName,
-                        contractVersion: manifestInfo.contractVersion,
-                        permissions: manifestInfo.permissions,
-                        capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
-                        leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
-                        rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
-                        themeColor: manifestInfo.themeColor
-                    )
-                } else if leftPanelScript != nil || rightPanelScript != nil {
-                    self?.appendRuntimeTab(
-                        title: tabTitle,
-                        sourceURL: resolvedURL,
-                        appId: manifestInfo.appId,
-                        leftPanelScript: leftPanelScript,
-                        rightPanelScript: rightPanelScript,
-                        contractName: manifestInfo.contractName,
-                        contractVersion: manifestInfo.contractVersion,
-                        permissions: manifestInfo.permissions,
-                        capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
-                        leftPanelDefaultVisible: manifestInfo.leftPanelDefaultVisible,
-                        rightPanelDefaultVisible: manifestInfo.rightPanelDefaultVisible,
-                        themeColor: manifestInfo.themeColor
-                    )
-                } else if let script = guestScript {
-                    self?.appendRuntimeTab(
-                        title: tabTitle,
-                        sourceURL: resolvedURL,
-                        appId: manifestInfo.appId,
-                        guestScript: script,
-                        contractName: manifestInfo.contractName,
-                        contractVersion: manifestInfo.contractVersion,
-                        permissions: manifestInfo.permissions,
-                        capabilityManifestJSON: manifestInfo.capabilityManifestJSON,
-                        themeColor: manifestInfo.themeColor
-                    )
-                } else {
-                    let html = self?.renderACTRInfoHTML(
-                        name: manifestInfo.name ?? "Unknown App",
-                        version: manifestInfo.version ?? "0.0.0",
-                        description: manifestInfo.description ?? "No description provided.",
-                        sourcePath: resolvedURL.path
-                    ) ?? ""
-                    self?.appendRuntimeTab(
-                        title: tabTitle,
-                        sourceURL: resolvedURL,
-                        appId: manifestInfo.appId,
-                        htmlContent: html
-                    )
-                }
-            }
-        } catch {
-            logger.error(" .actr Loading failed:\(error.localizedDescription)")
-            DispatchQueue.main.async { [weak self] in
-                let fallbackHTML = self?.renderACTRInfoHTML(
-                    name: resolvedURL.deletingPathExtension().lastPathComponent,
-                    version: "unknown",
-                    description: "Loading failed:\(error.localizedDescription)",
-                    sourcePath: resolvedURL.path
-                ) ?? ""
-                self?.appendRuntimeTab(
-                    title: resolvedURL.deletingPathExtension().lastPathComponent,
-                    sourceURL: resolvedURL,
-                    htmlContent: fallbackHTML
+                let handle = try await self.serviceInstanceStore.serviceRecover(
+                    actorId: actorId,
+                    expectedPackageDigest: expectedDigest
                 )
+                // The archive cache is digest-addressed, so recovery never
+                // re-downloads: importACTRPackage extracts/reuses the verified
+                // cache entry and then we restore the instance address and the
+                // tab's service endpoint.
                 let archiveURL = ActrPackageCache.archiveURL(forDigest: handle.packageDigest)
                 guard FileManager.default.fileExists(atPath: archiveURL.path) else {
                     logger.error("❌ [RestoreSession] package cache miss (digest \(handle.packageDigest.prefix(12))…)")
@@ -2242,10 +2153,12 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     knownDigest: handle.packageDigest,
                     presentInstanceCreation: false
                 ) else { return }
-                // Restore the instance address (not the actro:// package address).
                 if let index = self.tabs.firstIndex(where: { $0.id == tab.id }) {
                     self.tabs[index].url = address
                     self.tabs[index].title = title
+                    self.tabs[index].serviceCallUrl = handle.serviceCallUrl
+                    // Force the renderer to pick up the recovered endpoint.
+                    self.tabs[index].reloadNonce &+= 1
                 }
                 if isActiveTab {
                     self.currentTabId = tab.id
@@ -2444,6 +2357,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         leftPanelDefaultVisible: Bool = true,
         rightPanelDefaultVisible: Bool = false,
         themeColor: String? = nil,
+        serviceCallUrl: String? = nil,
         recordHistoryVisit: Bool = true,
         replacingTabId: UUID? = nil
     ) -> Tab {
@@ -2469,6 +2383,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             tabs[index].contractName = contractName
             tabs[index].contractVersion = contractVersion
             tabs[index].permissions = permissions
+            if let serviceCallUrl { tabs[index].serviceCallUrl = serviceCallUrl }
             tabs[index].leftPanelDefaultVisible = leftPanelDefaultVisible
             tabs[index].rightPanelDefaultVisible = rightPanelDefaultVisible
             if let themeColor { tabs[index].backgroundColor = themeColor }
@@ -2486,7 +2401,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             return tabs[index]
         }
 
-        let newTab = Tab(
+        var newTab = Tab(
             title: title,
             url: appURL,
             appId: appId,
@@ -2496,6 +2411,8 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             leftPanelScript: leftPanelScript,
             rightPanelScript: rightPanelScript,
             unifiedScript: unifiedScript,
+            guestExtractedPath: guestExtractedPath,
+            guestEntry: guestEntry,
             capabilityManifestJSON: capabilityManifestJSON,
             contractName: contractName,
             contractVersion: contractVersion,
@@ -2504,6 +2421,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             rightPanelDefaultVisible: rightPanelDefaultVisible,
             backgroundColor: themeColor
         )
+        newTab.serviceCallUrl = serviceCallUrl
         logger.debug("📝 [appendRuntimeTab] Create New Tab: \(title), ID=\(newTab.id.uuidString.prefix(8)), bg=\(newTab.backgroundColor)")
         tabs.append(newTab)
         currentTabId = newTab.id

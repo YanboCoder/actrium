@@ -2555,6 +2555,12 @@ struct UnifiedReactNativeLayer: View {
         if let unifiedScript = tab.unifiedScript {
             tabConfig["unifiedScript"] = unifiedScript
         }
+        if let guestExtractedPath = tab.guestExtractedPath {
+            tabConfig["guestExtractedPath"] = guestExtractedPath
+        }
+        if let guestEntry = tab.guestEntry {
+            tabConfig["guestEntry"] = guestEntry
+        }
         if let capabilityManifestJSON = tab.capabilityManifestJSON {
             tabConfig["capabilityManifestJSON"] = capabilityManifestJSON
         }

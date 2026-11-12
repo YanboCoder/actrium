@@ -110,6 +110,12 @@ struct Tab: Identifiable {
     /// v2.0 unified script (unified-app.js) for the single-engine architecture.
     var unifiedScript: String?
 
+    /// Digest-addressed extraction directory holding the verified guest bytes
+    /// (15-B B4). The renderer prefers this over the inline `unifiedScript`.
+    var guestExtractedPath: String?
+    /// Manifest-declared entry file, resolved relative to `guestExtractedPath`.
+    var guestEntry: String?
+
     /// Raw capability manifest from the verified package payload.
     var capabilityManifestJSON: String?
 
@@ -148,6 +154,8 @@ struct Tab: Identifiable {
         leftPanelScript: String? = nil,
         rightPanelScript: String? = nil,
         unifiedScript: String? = nil,
+        guestExtractedPath: String? = nil,
+        guestEntry: String? = nil,
         capabilityManifestJSON: String? = nil,
         contractName: String? = nil,
         contractVersion: Int? = nil,
@@ -170,6 +178,8 @@ struct Tab: Identifiable {
         self.leftPanelScript = leftPanelScript
         self.rightPanelScript = rightPanelScript
         self.unifiedScript = unifiedScript
+        self.guestExtractedPath = guestExtractedPath
+        self.guestEntry = guestEntry
         self.capabilityManifestJSON = capabilityManifestJSON
         self.contractName = contractName
         self.contractVersion = contractVersion

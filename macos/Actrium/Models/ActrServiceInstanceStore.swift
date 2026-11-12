@@ -99,6 +99,9 @@ struct ActrServiceHandle {
     let actorId: String
     let packageDigest: String
     let displayName: String?
+    /// Loopback `/v1/call` endpoint the Renderer forwards `host:service` calls
+    /// to. Nil until the real runtime has started the instance.
+    let serviceCallUrl: String?
 }
 
 /// Errors aligned with the stable codes of 04 §7 / 12 §10.
@@ -106,6 +109,8 @@ enum ActrServiceInstanceError: LocalizedError {
     case idempotencyConflict
     case instanceNotFound(actorId: String)
     case digestMismatch(expected: String, actual: String)
+    case packageCacheMiss(digest: String)
+    case internalFailure(String)
 
     var errorDescription: String? {
         switch self {
@@ -115,6 +120,10 @@ enum ActrServiceInstanceError: LocalizedError {
             return "Instance not found (SERVICE_NOT_FOUND): \(actorId)"
         case .digestMismatch(let expected, let actual):
             return "Package digest mismatch (PACKAGE_DIGEST_MISMATCH): expected \(expected.prefix(12))…, actual \(actual.prefix(12))…"
+        case .packageCacheMiss(let digest):
+            return "Package cache miss for digest \(digest.prefix(12))… (SERVICE_NOT_FOUND)"
+        case .internalFailure(let message):
+            return "Service runtime failure (INTERNAL): \(message)"
         }
     }
 }
@@ -142,6 +151,19 @@ protocol ActrServiceInstanceProviding: Sendable {
 
     /// Package digest the instance was created from (recover's expected digest).
     func knownDigest(actorId: String) -> String?
+
+    /// Calls one route on a live instance. Used by host-side callers that hold
+    /// the ActorId directly; the Renderer reaches the same actor over the
+    /// instance's loopback endpoint.
+    func serviceCall(
+        actorId: String,
+        route: String,
+        payload: Data,
+        timeoutMs: Int64
+    ) async throws -> Data
+
+    /// Fire-and-forget route delivery on a live instance.
+    func serviceTell(actorId: String, route: String, payload: Data) async throws
 }
 
 /// Prototype mock (15 §5: the mock ActorId skeleton is the mainline; the
@@ -196,7 +218,8 @@ final class MockActrServiceInstanceStore: ActrServiceInstanceProviding {
                 return ActrServiceHandle(
                     actorId: record.actorId,
                     packageDigest: record.packageDigest,
-                    displayName: record.displayName
+                    displayName: record.displayName,
+                    serviceCallUrl: nil
                 )
             }
 
@@ -214,7 +237,8 @@ final class MockActrServiceInstanceStore: ActrServiceInstanceProviding {
             return ActrServiceHandle(
                 actorId: actorId,
                 packageDigest: packageDigest,
-                displayName: displayName
+                displayName: displayName,
+                serviceCallUrl: nil
             )
         }
     }
@@ -233,9 +257,27 @@ final class MockActrServiceInstanceStore: ActrServiceInstanceProviding {
             return ActrServiceHandle(
                 actorId: record.actorId,
                 packageDigest: record.packageDigest,
-                displayName: record.displayName
+                displayName: record.displayName,
+                serviceCallUrl: nil
             )
         }
+    }
+
+    func serviceCall(
+        actorId: String,
+        route: String,
+        payload: Data,
+        timeoutMs: Int64
+    ) async throws -> Data {
+        throw ActrServiceInstanceError.internalFailure(
+            "mock instance store has no live Actr runtime for \(actorId)"
+        )
+    }
+
+    func serviceTell(actorId: String, route: String, payload: Data) async throws {
+        throw ActrServiceInstanceError.internalFailure(
+            "mock instance store has no live Actr runtime for \(actorId)"
+        )
     }
 
     func resolveActorId(byAddressLabel label: String) -> String? {
