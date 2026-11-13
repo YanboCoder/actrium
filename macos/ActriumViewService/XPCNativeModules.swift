@@ -8,6 +8,7 @@
 
 import Foundation
 import React
+import ActriumIPC
 
 private enum NativeHostTransport {
     static func post(name: String, userInfo: [String: Any] = [:]) {
@@ -21,6 +22,37 @@ private enum NativeHostTransport {
             deliverImmediately: true
         )
     }
+}
+
+@objc(RealmService)
+final class RealmService: NSObject {
+    @objc(call:route:payloadBase64:timeoutMs:resolver:rejecter:)
+    func call(
+        _ tabId: String,
+        route: String,
+        payloadBase64: String,
+        timeoutMs: NSNumber,
+        resolver resolve: @escaping RCTPromiseResolveBlock,
+        rejecter reject: @escaping RCTPromiseRejectBlock
+    ) {
+        guard let payload = Data(base64Encoded: payloadBase64),
+              (1...300_000).contains(timeoutMs.intValue) else {
+            reject("invalid_service_call", "Invalid Service call arguments.", nil)
+            return
+        }
+        let call = RealmServiceCall(id: UUID(), route: route, payload: payload, timeoutMs: timeoutMs.intValue)
+        DispatchQueue.main.async {
+            RendererProcessController.callRealmService(tabId: tabId, call: call) { response in
+                if let payload = response.payload {
+                    resolve(["payloadBase64": payload.base64EncodedString()])
+                } else {
+                    reject("realm_service_call_failed", response.error ?? "The Service call failed.", nil)
+                }
+            }
+        }
+    }
+
+    @objc static func requiresMainQueueSetup() -> Bool { false }
 }
 
 // MARK: - Capability Permission Module
