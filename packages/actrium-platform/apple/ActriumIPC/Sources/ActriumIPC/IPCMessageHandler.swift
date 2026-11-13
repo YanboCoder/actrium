@@ -179,6 +179,14 @@ public final class IPCConnection {
         try sendOneWay(msg)
     }
 
+    public func sendHostEvent(name: String, userInfoJSON: String, tabId: String) throws {
+        var message = Actrium_Ipc_IPCMessage()
+        message.hostEvent.name = name
+        message.hostEvent.userInfoJson = userInfoJSON
+        message.hostEvent.tabID = tabId
+        try sendOneWay(message)
+    }
+
     /// Execute JavaScript
     public func executeJS(_ code: String, tabId: String = "") async throws -> String {
         var msg = Actrium_Ipc_IPCMessage()
@@ -382,6 +390,7 @@ public final class IPCHelperConnection {
     public var onDestroyTab: ((String) -> Void)?
     public var onGetAccessibilityTree: ((String, @escaping (Actrium_Ipc_AccessibilityTree) -> Void) -> Void)?
     public var onAccessibilityAction: ((Actrium_Ipc_AccessibilityActionRequest, @escaping (Bool, String?) -> Void) -> Void)?
+    public var onHostEvent: ((String, String, String) -> Void)?
 
     public init(tabId: String, socketPath: String) {
         self.tabId = tabId
@@ -566,6 +575,9 @@ public final class IPCHelperConnection {
 
             case .inputEvent(let event):
                 onInputEvent?(event)
+
+            case .hostEvent(let event):
+                onHostEvent?(event.name, event.userInfoJson, event.tabID)
 
             case .executeJs(let req):
                 let reply: (Bool, String?, String?) -> Void = { [weak self] success, result, error in

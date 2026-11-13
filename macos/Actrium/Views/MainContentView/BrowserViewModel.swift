@@ -222,6 +222,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
     }
 
     func closeTab(id: UUID) {
+        RealmServiceBindings.shared.remove(id)
         CapabilityPermissionStore.shared.clearSessionGrants(tabId: id)
         // Get the slot position of the tab being closed
         guard let closedPosition = tabSlotPositions[id] else {
@@ -810,6 +811,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             // Check if it's an about: URL for system apps
             if let systemType = SystemTabType.from(url: url) {
                 logger.notice("📱 [navigateCurrentTab] Navigation to System Application: \(url.absoluteString)")
+                RealmServiceBindings.shared.remove(currentTabId)
                 // Update Tab to system app
                 tabs[index].systemTabType = systemType
                 tabs[index].url = url
@@ -883,6 +885,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             }
 
             logger.notice("🌐 [navigateCurrentTab] Navigator to URL: \(url.absoluteString)")
+            RealmServiceBindings.shared.remove(currentTabId)
             // Update Tab Yes Web Contents
             tabs[index].url = url
             tabs[index].title = url.host ?? url.absoluteString
@@ -1176,6 +1179,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 appURL = ActriumAppURLScheme.appURL(filePath: resolvedURL.path) ?? resolvedURL
             }
 
+            RealmServiceBindings.shared.remove(tabs[tabIndex].id)
             // Update current tab in-place (like about: URL handling)
             logger.notice("📱 [loadActrPackageIntoCurrentTab] Update Current Tab: \(tabTitle), url=\(appURL.absoluteString)")
 
@@ -1279,13 +1283,16 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
             return
         }
 
+        RealmServiceBindings.shared.remove(tabs[tabIndex].id)
+        tabs[tabIndex].reloadNonce &+= 1
         if let discoveryURL = info.discoveryUrl, let url = URL(string: discoveryURL) {
             discoverAuthority(
                 url: url,
                 domain: info.domain,
                 realmId: realmId,
-                // Same-tab replace: the package/instance replaces this tab.
-                replacingTabId: tabs[tabIndex].id
+                address: input,
+                replacingTabId: tabs[tabIndex].id,
+                navigationNonce: tabs[tabIndex].reloadNonce
             )
         }
 
@@ -1318,7 +1325,9 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         url: URL,
         domain: String,
         realmId: String,
-        replacingTabId: UUID? = nil
+        address: String,
+        replacingTabId: UUID,
+        navigationNonce: Int
     ) {
         Task { @MainActor in
             do {
@@ -1422,6 +1431,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 // path (64 MiB abort, redirect-host guard), then verified
                 // before anything is cached or executed.
                 let downloadedURL = try await ActrPackageDownloadService.download(from: packageURL)
+                defer { try? FileManager.default.removeItem(at: downloadedURL) }
                 let digest = try await ActrPackageDownloadService.sha256Digest(of: downloadedURL)
                 // 04 §3: fail closed when the bytes do not match the digest
                 // authenticated by the Realm Profile.
@@ -1456,6 +1466,9 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     archive: packageBytes,
                     trustedPublicKey: trustedKey
                 )
+                guard verified.manifest.appId == profile.packageType else {
+                    throw RealmServiceError(message: "The Front does not match the Actor type in the Realm profile.")
+                }
                 logger.notice("🔐 [navigateCurrentTab] actr-pack verified: manifest=\(verified.manifest.name) v\(verified.manifest.version), entry=\(verified.manifest.entry), workload profile=\(verified.workloadProfile), workload bytes=\(verified.workloadBytes.count), capabilities=\(verified.manifest.capabilities ?? "nil")")
 
                 let cachedArchiveURL = try ActrPackageCache.installArchive(
@@ -1474,7 +1487,7 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                     else { return nil }
                     return data
                 }
-                _ = try ActrPackageCache.extractArchiveIfNeeded(cachedArchiveURL, digest: digest) {
+                let frontDirectory = try ActrPackageCache.extractArchiveIfNeeded(cachedArchiveURL, digest: digest) {
                     try self.validateExtractedPackage(
                         at: $0,
                         requireSignature: true,
@@ -1496,21 +1509,71 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 )
                 logger.notice("🔐 [navigateCurrentTab] Package verified: digest matches the Realm Profile, manifest signature verified with \(publisherKeys.count) publisher key(s)")
 
-                // Hand over to the import pipeline: digest cache → manifest →
-                // render Guest → offer instance creation (URI replace to the
-                // instance address, 15-B B6).
-                importACTRPackage(
+                let service = try await fetchRealmService(profile)
+                let manifest = try readPackageManifest(fromRoot: frontDirectory)
+                let binding = try manifest.capabilityManifestJSON.map { capabilities in
+                    try RealmServiceBinding(
+                        profile: profile,
+                        verifiedProfileBody: profileData,
+                        front: packageBytes,
+                        service: service.archive,
+                        keys: [trustedKey, service.key],
+                        capabilitiesJSON: capabilities
+                    )
+                }
+                guard let tabIndex = tabs.firstIndex(where: {
+                    $0.id == replacingTabId && $0.url == URL(string: address)
+                        && $0.reloadNonce == navigationNonce
+                }) else { return }
+                guard importACTRPackage(
                     from: cachedArchiveURL,
                     knownDigest: digest,
+                    presentInstanceCreation: false,
                     requireSignature: true,
                     additionalTrustedKeys: publisherKeys,
                     replacingTabId: replacingTabId
-                )
+                ) != nil else { return }
+                tabs[tabIndex].url = URL(string: address)
+                if let binding { RealmServiceBindings.shared.attach(binding, to: replacingTabId) }
+                objectWillChange.send()
+                persistBrowserPageSession()
             } catch {
+                guard tabs.contains(where: {
+                    $0.id == replacingTabId && $0.url == URL(string: address)
+                        && $0.reloadNonce == navigationNonce
+                }) else { return }
                 logger.warning("⚠️ [navigateCurrentTab] Realm discovery failed: \(error)")
                 presentRealmLinkError(error)
             }
         }
+    }
+
+    private func fetchRealmService(_ profile: RealmProfileInfo) async throws -> (archive: Data, key: Data) {
+        guard let domain = profile.serviceType.split(separator: "/").first.map(String.init),
+              let publisherURL = URL(string: "https://\(domain)/.well-known/actr"),
+              let serviceURL = URL(string: profile.serviceHref), serviceURL.scheme == "https" else {
+            throw RealmServiceError(message: "The Realm Service location is invalid.")
+        }
+        let descriptor = try await Self.fetchBoundedDocument(
+            from: publisherURL, insecureMessage: "The Service Publisher requires HTTPS."
+        )
+        let publisher = try ActriumCore.acceptPublisherProfile(
+            body: String(decoding: descriptor, as: UTF8.self), domain: domain
+        )
+        let archiveURL = try await ActrPackageDownloadService.download(from: serviceURL)
+        defer { try? FileManager.default.removeItem(at: archiveURL) }
+        guard try await ActrPackageDownloadService.sha256Digest(of: archiveURL) == profile.serviceSha256.lowercased() else {
+            throw RealmServiceError(message: "The Service archive digest does not match the Realm profile.")
+        }
+        let archive = try Data(contentsOf: archiveURL)
+        for key in publisher.packageSigningKeys where key.status == "active" {
+            if let trustedKey = Data(base64Encoded: key.publicKeyBase64), trustedKey.count == 32,
+               let verified = try? ActriumCore.verifyActrPackage(archive: archive, trustedPublicKey: trustedKey),
+               verified.manifest.appId == profile.serviceType {
+                return (archive, trustedKey)
+            }
+        }
+        throw RealmServiceError(message: "The selected Service archive failed Publisher verification.")
     }
 
     /// Transport checks shared by every discovery fetch.
@@ -1707,6 +1770,14 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
         if sourceURL.scheme == "http" || sourceURL.scheme == "https" {
             logger.notice("🔄 [reloadCurrentTab] Web Content, Call WebView reload")
             WebViewHolderManager.shared.existingHolder(for: id)?.reload()
+            return
+        }
+
+        if sourceURL.scheme?.lowercased() == "actr",
+           let info = try? ActriumCore.parseActrUri(
+               uri: sourceURL.absoluteString, installationId: InstallationIdProvider.getOrCreate()
+           ), !info.isLocal {
+            navigateCurrentTab(to: sourceURL.absoluteString)
             return
         }
 
@@ -2149,11 +2220,20 @@ class BrowserViewModel: ObservableObject, ActriumModePublisher {
                 restoredTabIds.append(tab.id)
                 tabId = tab.id
             case "actr":
-                // Instance address: async serviceRecover, then re-render from
-                // the digest-addressed package cache (offerInstanceCreation off —
-                // the instance already exists).
-                tabId = nil
-                restoreInstanceTab(address: url, title: sessionTab.title, isActiveTab: index == session.activeTabIndex)
+                if let info = try? ActriumCore.parseActrUri(
+                    uri: url.absoluteString, installationId: InstallationIdProvider.getOrCreate()
+                ), !info.isLocal, let realm = info.realmId,
+                   redeemedRealms.contains("\(realm)@\(info.domain)") {
+                    let tab = Tab(title: sessionTab.title, url: url)
+                    tabs.append(tab)
+                    tabSlotPositions[tab.id] = tabs.count - 1
+                    restoredTabIds.append(tab.id)
+                    tabId = tab.id
+                    handleResolvedRealmLink(info, input: url.absoluteString, tabIndex: tabs.count - 1)
+                } else {
+                    tabId = nil
+                    restoreInstanceTab(address: url, title: sessionTab.title, isActiveTab: index == session.activeTabIndex)
+                }
             case "actro":
                 // Package address: reuse the existing package load chain.
                 let path = actroSourcePath(for: url)

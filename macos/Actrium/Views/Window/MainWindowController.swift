@@ -212,7 +212,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        // Cleanup if needed
+        for tab in viewModel.tabs { RealmServiceBindings.shared.remove(tab.id) }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {

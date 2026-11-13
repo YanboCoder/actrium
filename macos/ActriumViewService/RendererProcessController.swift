@@ -92,6 +92,35 @@ final class RendererProcessController {
 
     private let arguments: Arguments
     private let connection: IPCHelperConnection
+    private var serviceCalls: [UUID: (RealmServiceReply) -> Void] = [:]
+
+    static func callRealmService(
+        tabId: String,
+        call: RealmServiceCall,
+        reply: @escaping (RealmServiceReply) -> Void
+    ) {
+        guard let controller = RendererProcessLifetime.shared.controller,
+              controller.surfaces[tabId] != nil else {
+            reply(RealmServiceReply(id: call.id, error: "The Realm tab is unavailable."))
+            return
+        }
+        do {
+            let data = try JSONEncoder().encode(call)
+            try controller.connection.sendHostEvent(
+                name: RealmServiceCall.requestEvent,
+                userInfoJSON: String(decoding: data, as: UTF8.self),
+                tabId: tabId
+            )
+            controller.serviceCalls[call.id] = reply
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(call.timeoutMs)) { [weak controller] in
+                controller?.serviceCalls.removeValue(forKey: call.id)?(
+                    RealmServiceReply(id: call.id, error: "The Service call timed out.")
+                )
+            }
+        } catch {
+            reply(RealmServiceReply(id: call.id, error: error.localizedDescription))
+        }
+    }
     private let reactNativeHost = ServiceReactNativeHost.shared
     private var surfaces: [String: RendererTabSurface] = [:]
 
@@ -142,6 +171,14 @@ final class RendererProcessController {
     }
 
     private func configureIPC() {
+        connection.onHostEvent = { [weak self] name, json, _ in
+            guard name == RealmServiceCall.responseEvent,
+                  let response = try? JSONDecoder().decode(RealmServiceReply.self, from: Data(json.utf8)) else {
+                return
+            }
+            self?.serviceCalls.removeValue(forKey: response.id)?(response)
+        }
+
         connection.onLoadContent = { [weak self] request, reply in
             DispatchQueue.main.async {
                 self?.loadContent(request, reply: reply)

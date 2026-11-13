@@ -829,6 +829,36 @@ impl Node {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Node<Init> {
+    /// Register a signed Keel Front rendered by the embedding host. The
+    /// network node carries the Front's package identity and serves no RPCs.
+    pub async fn attach_front(
+        self,
+        front: &WorkloadPackage,
+        service: &WorkloadPackage,
+    ) -> HyperResult<Node<Attached>> {
+        let front_identity = verify_package_for_hyper(&self.hyper, front.bytes()).await?;
+        let service_identity = verify_package_for_hyper(&self.hyper, service.bytes()).await?;
+        let (
+            RuntimePackageManifest::V2(front_manifest),
+            RuntimePackageManifest::V2(service_manifest),
+        ) = (&front_identity.manifest, &service_identity.manifest)
+        else {
+            return Err(HyperError::InvalidManifest(
+                "Realm Front and Service must use actr-package/2".into(),
+            ));
+        };
+        actr_pack::realm::check_realm_pair(service_manifest, front_manifest)
+            .map_err(|error| HyperError::InvalidManifest(error.to_string()))?;
+        let mut attached = self
+            .with_actor_type(front_identity.manifest.actor_type())
+            .link(FrontWorkload)
+            .await?;
+        let attachment = attached.attachment.as_mut().expect("attached Front");
+        attachment.verified = Some(front_identity);
+        attachment.package_bytes = front.bytes.clone();
+        Ok(attached)
+    }
+
     /// Attach an already parsed dynamic manifest before linking. The manifest
     /// becomes authoritative for both actor identity and dependencies.
     pub fn with_linked_manifest(mut self, manifest: actr_config::ManifestConfig) -> Self {
@@ -1065,6 +1095,30 @@ impl Node<Init> {
         let handle: Arc<dyn workload::LinkedWorkloadHandle> =
             workload::WorkloadAdapter::new(workload);
         self.link_handle(handle).await
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct FrontWorkload;
+
+#[cfg(not(target_arch = "wasm32"))]
+impl actr_framework::Workload for FrontWorkload {
+    type Dispatcher = Self;
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[async_trait::async_trait]
+impl actr_framework::MessageDispatcher for FrontWorkload {
+    type Workload = Self;
+
+    async fn dispatch<C: actr_framework::Context>(
+        _: &Self,
+        _: actr_protocol::RpcEnvelope,
+        _: &C,
+    ) -> actr_protocol::ActorResult<bytes::Bytes> {
+        Err(actr_protocol::ActrError::NotImplemented(
+            "A Realm Front does not serve RPCs".into(),
+        ))
     }
 }
 

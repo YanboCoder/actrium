@@ -29,6 +29,17 @@ void RCTHostCallFunction(id host, NSString *module, NSString *method, NSArray *a
 
 // MARK: - Capability Permission
 
+@interface RCT_EXTERN_MODULE(RealmService, NSObject)
+
+RCT_EXTERN_METHOD(call:(NSString *)tabId
+                  route:(NSString *)route
+                  payloadBase64:(NSString *)payloadBase64
+                  timeoutMs:(NSNumber *)timeoutMs
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+@end
+
 @interface RCT_EXTERN_MODULE(CapabilityPermission, NSObject)
 
 RCT_EXTERN_METHOD(requestGrant:(NSString *)tabId capability:(NSString *)capability)

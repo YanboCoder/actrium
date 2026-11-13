@@ -255,11 +255,21 @@ export const StandaloneGuestApp: React.FC<Props> = ({
       // The global echo gateway is legacy-bridge only. New service calls must
       // target the tab's attached Service actor.
       if (!tab.serviceCallUrl) {
-        return {
-          success: false,
-          message:
-            'Service actor context is unavailable for this tab (Attach has not supplied an endpoint).',
-        };
+        const service = NativeModules.RealmService;
+        if (!service?.call) {
+          return { success: false, message: 'The native Realm Service bridge is unavailable.' };
+        }
+        try {
+          const { payloadBase64: response } = await service.call(
+            tab.id,
+            route,
+            payloadBase64,
+            timeoutMs
+          );
+          return { success: true, payloadBase64: response };
+        } catch (error) {
+          return { success: false, message: String(error) };
+        }
       }
       logToNative(`[StandaloneGuestApp] service call ${route}`);
       const result = await HostHttpHandler.handleRequest<ActorCallResult>({

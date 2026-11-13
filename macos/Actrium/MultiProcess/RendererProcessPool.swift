@@ -528,6 +528,31 @@ final class RendererProcessPool: ObservableObject {
                 )
                 return
             }
+            if name == RealmServiceCall.requestEvent {
+                guard let self, let worker, let tabId = UUID(uuidString: tab),
+                      self.worker(for: tabId) === worker,
+                      let request = try? JSONDecoder().decode(RealmServiceCall.self, from: Data(userInfoJSON.utf8)) else {
+                    return
+                }
+                Task { [weak self, weak worker] in
+                    let response: RealmServiceReply
+                    do {
+                        let payload = try await RealmServiceBindings.shared.call(request, tabId: tabId)
+                        response = RealmServiceReply(id: request.id, payload: payload)
+                    } catch {
+                        AppLogger.reactNative.warning("Realm Service call failed: \(error.localizedDescription)")
+                        response = RealmServiceReply(id: request.id, error: error.localizedDescription)
+                    }
+                    guard let self, let worker, self.worker(for: tabId) === worker,
+                          let data = try? JSONEncoder().encode(response) else { return }
+                    try? worker.connection.sendHostEvent(
+                        name: RealmServiceCall.responseEvent,
+                        userInfoJSON: String(decoding: data, as: UTF8.self),
+                        tabId: tab
+                    )
+                }
+                return
+            }
             let localName: Notification.Name
             switch name {
             case "com.actro.openBookmark":
