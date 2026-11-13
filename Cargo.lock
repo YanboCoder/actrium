@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "actr"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-config",
  "actr-framework",
@@ -16,7 +16,7 @@ dependencies = [
 
 [[package]]
 name = "actr-cabi"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-config",
  "actr-framework",
@@ -34,7 +34,7 @@ dependencies = [
 
 [[package]]
 name = "actr-cli"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr",
  "actr-cli",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "actr-config"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "chrono",
@@ -139,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "actr-framework"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "actr-web-abi",
@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "actr-framework-protoc-codegen"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-framework",
  "actr-protocol",
@@ -191,11 +191,11 @@ dependencies = [
 
 [[package]]
 name = "actr-hlc"
-version = "0.10.7"
+version = "0.11.0"
 
 [[package]]
 name = "actr-hyper"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-config",
  "actr-framework",
@@ -281,7 +281,7 @@ dependencies = [
 
 [[package]]
 name = "actr-mock-loran"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "actr-relay-security",
@@ -314,7 +314,7 @@ dependencies = [
 
 [[package]]
 name = "actr-pack"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-framework",
  "actr-protocol",
@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "actr-platform-native"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-hyper",
  "actr-platform-traits",
@@ -356,7 +356,7 @@ dependencies = [
 
 [[package]]
 name = "actr-platform-traits"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "async-trait",
  "hex",
@@ -365,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "actr-protocol"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -393,7 +393,7 @@ dependencies = [
 
 [[package]]
 name = "actr-relay-security"
-version = "0.10.5"
+version = "0.11.0"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.2.17",
@@ -408,7 +408,7 @@ dependencies = [
 
 [[package]]
 name = "actr-runtime"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-framework",
  "actr-protocol",
@@ -420,7 +420,7 @@ dependencies = [
 
 [[package]]
 name = "actr-runtime-mailbox"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "anyhow",
@@ -439,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "actr-service-compat"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "anyhow",
@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "actr-web-abi"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "async-trait",
  "js-sys",
@@ -467,7 +467,7 @@ dependencies = [
 
 [[package]]
 name = "actr-web-protoc-codegen"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3542,7 +3542,7 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "loran-admin"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "chrono",
  "hex",
@@ -3564,7 +3564,7 @@ dependencies = [
 
 [[package]]
 name = "loran-issuer"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-hyper",
  "actr-mock-loran",
@@ -3610,7 +3610,7 @@ dependencies = [
 
 [[package]]
 name = "loran-packages"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "axum",
  "hex",
@@ -3626,7 +3626,7 @@ dependencies = [
 
 [[package]]
 name = "loran-platform"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "anyhow",
@@ -3678,7 +3678,7 @@ dependencies = [
 
 [[package]]
 name = "loran-proto"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "prost",
  "prost-types",
@@ -3689,7 +3689,7 @@ dependencies = [
 
 [[package]]
 name = "loran-publisher-registry"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "axum",
@@ -3713,7 +3713,7 @@ dependencies = [
 
 [[package]]
 name = "loran-relay"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -3731,7 +3731,7 @@ dependencies = [
 
 [[package]]
 name = "loran-relay-protocol"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "bytes",
  "serde",
@@ -3741,14 +3741,14 @@ dependencies = [
 
 [[package]]
 name = "loran-sdk"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "loran-admin",
 ]
 
 [[package]]
 name = "loran-server"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "actr-relay-security",
@@ -3833,7 +3833,7 @@ dependencies = [
 
 [[package]]
 name = "loran-signaling"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "anyhow",
@@ -3865,7 +3865,7 @@ dependencies = [
 
 [[package]]
 name = "loran-signer"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3902,7 +3902,7 @@ dependencies = [
 
 [[package]]
 name = "loran-stun"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3915,7 +3915,7 @@ dependencies = [
 
 [[package]]
 name = "loran-turn"
-version = "0.10.7"
+version = "0.11.0"
 dependencies = [
  "actr-protocol",
  "anyhow",

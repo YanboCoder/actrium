@@ -56,19 +56,19 @@ axum-server = { version = "0.8.0", default-features = false, features = [
 ] }
 
 # Local dependencies
-loran-sdk = { path = "../loran-sdk", version = "0.10.7" }
+loran-sdk = { path = "../loran-sdk", version = "0.11.0" }
 actr-protocol = { workspace = true }
-loran-packages = { path = "../loran-packages", version = "0.10.7" }
-platform = { path = "../loran-platform", package = "loran-platform", version = "0.10.7" }
-signaling = { path = "../loran-signaling", package = "loran-signaling", version = "0.10.7" }
-stun = { path = "../loran-stun", package = "loran-stun", version = "0.10.7" }
-turn = { path = "../loran-turn", package = "loran-turn", version = "0.10.7" }
-issuer = { path = "../loran-issuer", package = "loran-issuer", version = "0.10.7" }
-loran-publisher-registry = { path = "../loran-publisher-registry", version = "0.10.7" }
-signer = { path = "../loran-signer", package = "loran-signer", version = "0.10.7" }
-actr-relay-security = { path = "../actr-relay-security", version = "0.10.5" }
-loran-relay = { path = "../loran-relay", version = "0.10.7" }
-loran-relay-protocol = { path = "../loran-relay-protocol", version = "0.10.7" }
+loran-packages = { path = "../loran-packages", version = "0.11.0" }
+platform = { path = "../loran-platform", package = "loran-platform", version = "0.11.0" }
+signaling = { path = "../loran-signaling", package = "loran-signaling", version = "0.11.0" }
+stun = { path = "../loran-stun", package = "loran-stun", version = "0.11.0" }
+turn = { path = "../loran-turn", package = "loran-turn", version = "0.11.0" }
+issuer = { path = "../loran-issuer", package = "loran-issuer", version = "0.11.0" }
+loran-publisher-registry = { path = "../loran-publisher-registry", version = "0.11.0" }
+signer = { path = "../loran-signer", package = "loran-signer", version = "0.11.0" }
+actr-relay-security = { path = "../actr-relay-security", version = "0.11.0" }
+loran-relay = { path = "../loran-relay", version = "0.11.0" }
+loran-relay-protocol = { path = "../loran-relay-protocol", version = "0.11.0" }
 turn_crate = { workspace = true }
 rand = "0.9.1"
 futures = "0.3.31"
@@ -111,9 +111,9 @@ tracing-opentelemetry = { version = "0.33.0", optional = true }
 nix = { version = "0.30", features = ["user", "fs"] }
 
 [dev-dependencies]
-turn = { path = "../loran-turn", package = "loran-turn", version = "0.10.7", features = ["test-utils"] }
-loran-sdk = { path = "../loran-sdk", version = "0.10.7", features = ["testing"] }
-platform = { path = "../loran-platform", package = "loran-platform", version = "0.10.7" }
+turn = { path = "../loran-turn", package = "loran-turn", version = "0.11.0", features = ["test-utils"] }
+loran-sdk = { path = "../loran-sdk", version = "0.11.0", features = ["testing"] }
+platform = { path = "../loran-platform", package = "loran-platform", version = "0.11.0" }
 rcgen = "0.14.8"
 stun-protocol = { workspace = true }
 tempfile = { workspace = true }

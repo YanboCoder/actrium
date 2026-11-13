@@ -23,7 +23,7 @@ chrono = { workspace = true }
 ## Actr framework dependencies
 actr-protocol = { workspace = true }
 actr-pack = { workspace = true }
-actr-relay-security = { path = "../actr-relay-security", version = "0.10.5" }
+actr-relay-security = { path = "../actr-relay-security", version = "0.11.0" }
 prost = { workspace = true }
 prost-types = { workspace = true }
 
@@ -51,14 +51,14 @@ governor = "0.10"
 
 
 # Internal dependencies
-platform = { path = "../loran-platform", package = "loran-platform", version = "0.10.7" }
-signer = { path = "../loran-signer", package = "loran-signer", version = "0.10.7" }
-loran-publisher-registry = { path = "../loran-publisher-registry", version = "0.10.7" }
+platform = { path = "../loran-platform", package = "loran-platform", version = "0.11.0" }
+signer = { path = "../loran-signer", package = "loran-signer", version = "0.11.0" }
+loran-publisher-registry = { path = "../loran-publisher-registry", version = "0.11.0" }
 
 [dev-dependencies]
 actr-hyper = { workspace = true }
 actr-mock-loran = { workspace = true }
-turn = { path = "../loran-turn", package = "loran-turn", version = "0.10.7" }
+turn = { path = "../loran-turn", package = "loran-turn", version = "0.11.0" }
 turn_crate = { workspace = true }
 tempfile = { workspace = true }
 nonce-auth = { workspace = true }

@@ -25,9 +25,9 @@ pwrzv = { version = "0.7.0" }
 
 sqlx = { workspace = true }
 
-platform = { path = "../loran-platform", package = "loran-platform", version = "0.10.7" }
-loran-proto = { path = "../loran-proto", version = "0.10.7" }
-loran-issuer = { path = "../loran-issuer", version = "0.10.7" }
+platform = { path = "../loran-platform", package = "loran-platform", version = "0.11.0" }
+loran-proto = { path = "../loran-proto", version = "0.11.0" }
+loran-issuer = { path = "../loran-issuer", version = "0.11.0" }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.30", features = ["signal"] }

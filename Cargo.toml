@@ -62,7 +62,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.10.7"
+version = "0.11.0"
 edition = "2024"
 rust-version = "1.95"
 license = "Apache-2.0"
@@ -75,20 +75,20 @@ collapsible_else_if = "allow"
 
 [workspace.dependencies]
 # === Internal Dependencies ===
-actr-protocol = { path = "crates/actr-protocol", version = "0.10.7" }
+actr-protocol = { path = "crates/actr-protocol", version = "0.11.0" }
 proto-fingerprint = "0.1.0"
-actr-service-compat = { path = "crates/actr-service-compat", version = "0.10.7" }
-actr-config = { path = "crates/actr-config", version = "0.10.7" }
-actr-framework = { path = "crates/actr-framework", version = "0.10.7" }
-actr-framework-protoc-codegen = { path = "tools/actr/protoc-gen/rust", version = "0.10.7" }
-actr-runtime = { path = "crates/actr-runtime", version = "0.10.7" }
-actr-runtime-mailbox = { path = "crates/actr-runtime-mailbox", version = "0.10.7" }
-actr-hyper = { path = "crates/actr-hyper", version = "0.10.7" }
-actr-platform-traits = { path = "crates/actr-platform-traits", version = "0.10.7" }
-actr-platform-native = { path = "crates/actr-platform-native", version = "0.10.7" }
-actr-pack = { path = "crates/actr-pack", version = "0.10.7" }
+actr-service-compat = { path = "crates/actr-service-compat", version = "0.11.0" }
+actr-config = { path = "crates/actr-config", version = "0.11.0" }
+actr-framework = { path = "crates/actr-framework", version = "0.11.0" }
+actr-framework-protoc-codegen = { path = "tools/actr/protoc-gen/rust", version = "0.11.0" }
+actr-runtime = { path = "crates/actr-runtime", version = "0.11.0" }
+actr-runtime-mailbox = { path = "crates/actr-runtime-mailbox", version = "0.11.0" }
+actr-hyper = { path = "crates/actr-hyper", version = "0.11.0" }
+actr-platform-traits = { path = "crates/actr-platform-traits", version = "0.11.0" }
+actr-platform-native = { path = "crates/actr-platform-native", version = "0.11.0" }
+actr-pack = { path = "crates/actr-pack", version = "0.11.0" }
 actr-hlc = { path = "crates/actr-hlc", version = "0.5.9" }
-actr-mock-loran = { path = "crates/actr-mock-loran", version = "0.10.7" }
+actr-mock-loran = { path = "crates/actr-mock-loran", version = "0.11.0" }
 
 # === Async Runtime ===
 tokio = { version = "1.48", features = ["full"] }

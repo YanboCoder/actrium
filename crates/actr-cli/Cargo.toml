@@ -1,6 +1,6 @@
 [package]
 name = "actr-cli"
-version = "0.10.7"
+version = "0.11.0"
 edition = "2024"
 rust-version.workspace = true
 license = "Apache-2.0"
@@ -34,34 +34,34 @@ path = "src/main.rs"
 
 [dependencies]
 # Actor-RTC main crate with config feature (includes protocol, config, version)
-actr = { path = "../actr", version = "0.10.7", features = ["config"] }
+actr = { path = "../actr", version = "0.11.0", features = ["config"] }
 
 # Hyper layer - binary hash computation and manifest embed for dev tooling
-actr-hyper = { path = "../actr-hyper", version = "0.10.7" }
+actr-hyper = { path = "../actr-hyper", version = "0.11.0" }
 
 # Package format (.actr ZIP STORE)
 actr-pack = { workspace = true, features = ["profile-validation"] }
 
 # Platform provider for native execution
-actr-platform-native = { path = "../actr-platform-native", version = "0.10.7" }
+actr-platform-native = { path = "../actr-platform-native", version = "0.11.0" }
 
 # Key generation for actr dev keygen
 rand.workspace = true
 
 # DLQ storage (for actr dlq subcommand)
-actr-runtime-mailbox = { path = "../actr-runtime-mailbox", version = "0.10.7" }
+actr-runtime-mailbox = { path = "../actr-runtime-mailbox", version = "0.11.0" }
 
 
 # Direct access to config/protocol for CLI-specific types
 # (These have different APIs than actr umbrella re-exports)
-actr-config = { path = "../actr-config", version = "0.10.7" }
-actr-protocol = { path = "../actr-protocol", version = "0.10.7" }
+actr-config = { path = "../actr-config", version = "0.11.0" }
+actr-protocol = { path = "../actr-protocol", version = "0.11.0" }
 
 # Version / fingerprint utilities
-actr-service-compat = { path = "../actr-service-compat", version = "0.10.7" }
+actr-service-compat = { path = "../actr-service-compat", version = "0.11.0" }
 
 # Protoc code generator - CLI specific tool
-actr-framework-protoc-codegen = { path = "../../tools/actr/protoc-gen/rust", version = "0.10.7" }
+actr-framework-protoc-codegen = { path = "../../tools/actr/protoc-gen/rust", version = "0.11.0" }
 
 # Command line interface
 clap = { version = "4.5", features = ["derive", "cargo"] }

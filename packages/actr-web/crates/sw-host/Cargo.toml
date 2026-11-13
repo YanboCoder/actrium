@@ -14,7 +14,7 @@ workspace = true
 crate-type = ["cdylib", "rlib"] # Build both WASM and Rust library outputs
 
 [dependencies]
-actr-relay-security = { path = "../../../../crates/actr-relay-security", version = "0.10.5" }
+actr-relay-security = { path = "../../../../crates/actr-relay-security", version = "0.11.0" }
 # Shared code
 actr-web-common = { path = "../common" }
 actr-protocol.workspace = true
@@ -26,7 +26,7 @@ actr-platform-web = { path = "../platform-web" }
 actr-mailbox-web = { path = "../mailbox-web" }
 
 # Package verification (replaces the old JS verifyActrPackage)
-actr-pack = { path = "../../../../crates/actr-pack", version = "0.10.7" }
+actr-pack = { path = "../../../../crates/actr-pack", version = "0.11.0" }
 ed25519-dalek = "2"
 sha2 = "0.10"
 base64 = "0.22"

@@ -57,7 +57,7 @@ hex = { workspace = true }
 async-trait = "0.1"
 
 # Internal dependencies
-loran-proto = { path = "../loran-proto", version = "0.10.7" }
+loran-proto = { path = "../loran-proto", version = "0.11.0" }
 # Note: circular dependency avoided - platform depends on signer for client types
 
 # Monitoring

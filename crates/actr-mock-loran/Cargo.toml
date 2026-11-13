@@ -1,6 +1,6 @@
 [package]
 name = "actr-mock-loran"
-version = "0.10.7"
+version = "0.11.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -12,10 +12,10 @@ name = "mock-loran"
 path = "src/bin/mock_loran.rs"
 
 [dependencies]
-actr-relay-security = { path = "../actr-relay-security", version = "0.10.5" }
+actr-relay-security = { path = "../actr-relay-security", version = "0.11.0" }
 actr-protocol = { workspace = true }
-loran-relay = { path = "../loran-relay", version = "0.10.7" }
-loran-relay-protocol = { path = "../loran-relay-protocol", version = "0.10.7" }
+loran-relay = { path = "../loran-relay", version = "0.11.0" }
+loran-relay-protocol = { path = "../loran-relay-protocol", version = "0.11.0" }
 async-trait.workspace = true
 
 tokio = { workspace = true }

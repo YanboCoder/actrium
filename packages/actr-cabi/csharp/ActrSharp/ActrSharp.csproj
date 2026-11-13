@@ -11,7 +11,7 @@
          workspace version (Cargo.toml [workspace.package] version); the
          publish workflow verifies this before pushing. Bump both together. -->
     <PackageId>ActrSharp</PackageId>
-    <Version>0.10.7</Version>
+    <Version>0.11.0</Version>
     <Authors>Actor-RTC Contributors</Authors>
     <Company>Actrium</Company>
     <Description>C# wrapper over the actr-cabi C ABI — Rust core + .NET UI (WinUI 3 / WPF / Console).</Description>
