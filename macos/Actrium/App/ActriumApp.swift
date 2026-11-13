@@ -278,7 +278,8 @@ struct ActriumApp: App {
                 .frame(width: 0, height: 0)
                 .hidden()
         }
-        .defaultSize(width: 0, height: 0)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .commands {
             // New Window command
             CommandGroup(before: .newItem) {

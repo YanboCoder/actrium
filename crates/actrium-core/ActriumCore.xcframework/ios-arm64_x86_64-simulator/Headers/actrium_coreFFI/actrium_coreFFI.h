@@ -251,6 +251,21 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStr
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACCEPT_AUTHORITY_DESCRIPTOR
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACCEPT_AUTHORITY_DESCRIPTOR
+RustBuffer uniffi_actrium_core_fn_func_accept_authority_descriptor(RustBuffer body, RustBuffer domain, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACCEPT_PUBLISHER_PROFILE
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACCEPT_PUBLISHER_PROFILE
+RustBuffer uniffi_actrium_core_fn_func_accept_publisher_profile(RustBuffer body, RustBuffer domain, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACCEPT_REALM_PROFILE
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACCEPT_REALM_PROFILE
+RustBuffer uniffi_actrium_core_fn_func_accept_realm_profile(RustBuffer body, RustBuffer realm_name, RustBuffer signing_keys_json, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACTIVE_TAB_FROM_ROW
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_ACTIVE_TAB_FROM_ROW
 RustBuffer uniffi_actrium_core_fn_func_active_tab_from_row(RustBuffer row, RustCallStatus *_Nonnull out_status
@@ -1082,6 +1097,11 @@ RustBuffer uniffi_actrium_core_fn_func_core_tag_update_params(RustBuffer name, R
 RustBuffer uniffi_actrium_core_fn_func_create_actr_integrity_plan(RustBuffer manifest_toml, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_DECODE_ACTR_INVITE
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_DECODE_ACTR_INVITE
+RustBuffer uniffi_actrium_core_fn_func_decode_actr_invite(RustBuffer invite_text, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_DEFAULT_RUNTIME_APP_STATUS
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_DEFAULT_RUNTIME_APP_STATUS
 RustBuffer uniffi_actrium_core_fn_func_default_runtime_app_status(RustCallStatus *_Nonnull out_status
@@ -1125,6 +1145,12 @@ RustBuffer uniffi_actrium_core_fn_func_evaluate_contract(RustBuffer name, uint32
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_EXTRACT_APP_ID_FROM_URL
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_EXTRACT_APP_ID_FROM_URL
 RustBuffer uniffi_actrium_core_fn_func_extract_app_id_from_url(RustBuffer url, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_GENERATE_INSTALLATION_ID
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_GENERATE_INSTALLATION_ID
+RustBuffer uniffi_actrium_core_fn_func_generate_installation_id(RustCallStatus *_Nonnull out_status
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_IS_ASSET_PATH
@@ -1210,6 +1236,11 @@ RustBuffer uniffi_actrium_core_fn_func_parse_actr_actor_type(RustBuffer raw, Rus
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_PARSE_ACTR_PACKAGE_MANIFEST
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_PARSE_ACTR_PACKAGE_MANIFEST
 RustBuffer uniffi_actrium_core_fn_func_parse_actr_package_manifest(RustBuffer source, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_PARSE_ACTR_URI
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_PARSE_ACTR_URI
+RustBuffer uniffi_actrium_core_fn_func_parse_actr_uri(RustBuffer uri, RustBuffer installation_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_PARSE_APP_SOURCE_TYPE
@@ -1618,6 +1649,11 @@ RustBuffer uniffi_actrium_core_fn_func_user_info_bridge_contract(RustCallStatus 
 void uniffi_actrium_core_fn_func_validate_actr_package_manifest(RustBuffer source, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_VALIDATE_INSTALLATION_ID
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_VALIDATE_INSTALLATION_ID
+void uniffi_actrium_core_fn_func_validate_installation_id(RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_VERIFY_ACTR_PACKAGE
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_FN_FUNC_VERIFY_ACTR_PACKAGE
 RustBuffer uniffi_actrium_core_fn_func_verify_actr_package(RustBuffer archive, RustBuffer trusted_public_key, RustCallStatus *_Nonnull out_status
@@ -1901,6 +1937,24 @@ void ffi_actrium_core_rust_future_free_void(uint64_t handle
 #ifndef UNIFFI_FFIDEF_FFI_ACTRIUM_CORE_RUST_FUTURE_COMPLETE_VOID
 #define UNIFFI_FFIDEF_FFI_ACTRIUM_CORE_RUST_FUTURE_COMPLETE_VOID
 void ffi_actrium_core_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACCEPT_AUTHORITY_DESCRIPTOR
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACCEPT_AUTHORITY_DESCRIPTOR
+uint16_t uniffi_actrium_core_checksum_func_accept_authority_descriptor(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACCEPT_PUBLISHER_PROFILE
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACCEPT_PUBLISHER_PROFILE
+uint16_t uniffi_actrium_core_checksum_func_accept_publisher_profile(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACCEPT_REALM_PROFILE
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACCEPT_REALM_PROFILE
+uint16_t uniffi_actrium_core_checksum_func_accept_realm_profile(void
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_ACTIVE_TAB_FROM_ROW
@@ -2845,6 +2899,12 @@ uint16_t uniffi_actrium_core_checksum_func_create_actr_integrity_plan(void
 
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_DECODE_ACTR_INVITE
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_DECODE_ACTR_INVITE
+uint16_t uniffi_actrium_core_checksum_func_decode_actr_invite(void
+
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_DEFAULT_RUNTIME_APP_STATUS
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_DEFAULT_RUNTIME_APP_STATUS
 uint16_t uniffi_actrium_core_checksum_func_default_runtime_app_status(void
@@ -2890,6 +2950,12 @@ uint16_t uniffi_actrium_core_checksum_func_evaluate_contract(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_EXTRACT_APP_ID_FROM_URL
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_EXTRACT_APP_ID_FROM_URL
 uint16_t uniffi_actrium_core_checksum_func_extract_app_id_from_url(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_GENERATE_INSTALLATION_ID
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_GENERATE_INSTALLATION_ID
+uint16_t uniffi_actrium_core_checksum_func_generate_installation_id(void
 
 );
 #endif
@@ -2992,6 +3058,12 @@ uint16_t uniffi_actrium_core_checksum_func_parse_actr_actor_type(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_PARSE_ACTR_PACKAGE_MANIFEST
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_PARSE_ACTR_PACKAGE_MANIFEST
 uint16_t uniffi_actrium_core_checksum_func_parse_actr_package_manifest(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_PARSE_ACTR_URI
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_PARSE_ACTR_URI
+uint16_t uniffi_actrium_core_checksum_func_parse_actr_uri(void
 
 );
 #endif
@@ -3421,6 +3493,12 @@ uint16_t uniffi_actrium_core_checksum_func_validate_actr_package_manifest(void
 
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_VALIDATE_INSTALLATION_ID
+#define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_VALIDATE_INSTALLATION_ID
+uint16_t uniffi_actrium_core_checksum_func_validate_installation_id(void
+
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_VERIFY_ACTR_PACKAGE
 #define UNIFFI_FFIDEF_UNIFFI_ACTRIUM_CORE_CHECKSUM_FUNC_VERIFY_ACTR_PACKAGE
 uint16_t uniffi_actrium_core_checksum_func_verify_actr_package(void
@@ -3433,3 +3511,4 @@ uint32_t ffi_actrium_core_uniffi_contract_version(void
 
 );
 #endif
+

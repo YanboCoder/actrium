@@ -210,18 +210,15 @@ jobs:
             packages/actr-kotlin/build
             tools/actr/protoc-gen/kotlin/build
           key: gradle-build-${{ runner.os }}-${{ hashFiles('packages/actr-kotlin/**/*.kt', 'tools/actr/protoc-gen/kotlin/**/*.kt', 'packages/actr-kotlin/**/build.gradle.kts', 'tools/actr/protoc-gen/kotlin/**/build.gradle.kts') }}
-      - name: Compile Kotlin demo and build protoc plugin (parallel)
+      - name: Compile Kotlin demo and build protoc plugin
         run: |
-          # Wait on each PID explicitly: bare `wait` with no args always
-          # returns 0 even if a background job failed, which would silently
-          # mask compile failures. Keep failures in an `||` list so `bash -e`
-          # still reaps both jobs before the step exits.
-          (cd packages/actr-kotlin && ./gradlew :demo:compileDebugKotlin --no-daemon) & pid1=$!
-          (cd tools/actr/protoc-gen/kotlin && ./gradlew protocPluginJar --no-daemon) & pid2=$!
-          rc1=0
-          rc2=0
-          wait "$pid1" || rc1=$?
-          wait "$pid2" || rc2=$?
-          exit $((rc1 | rc2))
+          # Run the two builds sequentially. `--no-daemon` still forks a
+          # single-use daemon, and concurrent invocations share one daemon
+          # registry under GRADLE_USER_HOME. When the first build finishes and
+          # its single-use daemon exits, the second client can be left waiting
+          # on that dead daemon and fail with "Timeout waiting to connect to
+          # the Gradle daemon" even though its own build is fine.
+          (cd packages/actr-kotlin && ./gradlew :demo:compileDebugKotlin --no-daemon)
+          (cd tools/actr/protoc-gen/kotlin && ./gradlew protocPluginJar --no-daemon)
       - name: Run Kotlin codegen integration tests
         run: cargo test -p actr-cli --test kotlin_echo --verbose

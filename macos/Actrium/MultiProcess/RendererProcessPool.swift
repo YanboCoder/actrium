@@ -32,6 +32,7 @@ extension Notification.Name {
     static let rendererProcessCrashed = Notification.Name("rendererProcessCrashed")
     static let rendererViewportApplied = Notification.Name("rendererViewportApplied")
     static let rendererAccessibilityUpdated = Notification.Name("rendererAccessibilityUpdated")
+    static let rendererCaretUpdated = Notification.Name("rendererCaretUpdated")
 }
 
 /// Browser-style broker for a dynamically sized pool of homogeneous Renderer
@@ -513,7 +514,20 @@ final class RendererProcessPool: ObservableObject {
             }
         }
 
-        worker.connection.onHostEvent = { name, userInfoJSON, _ in
+        worker.connection.onHostEvent = { [weak self, weak worker] name, userInfoJSON, tab in
+            if name == "com.actrium.rendererCaret" {
+                guard let self, let worker, let tabId = UUID(uuidString: tab),
+                      self.worker(for: tabId) === worker else { return }
+                var userInfo: [String: Any] = ["tabId": tabId]
+                if userInfoJSON != "null" {
+                    guard let rect = try? JSONDecoder().decode(CGRect.self, from: Data(userInfoJSON.utf8)) else { return }
+                    userInfo["rect"] = rect
+                }
+                NotificationCenter.default.post(
+                    name: .rendererCaretUpdated, object: nil, userInfo: userInfo
+                )
+                return
+            }
             let localName: Notification.Name
             switch name {
             case "com.actro.openBookmark":

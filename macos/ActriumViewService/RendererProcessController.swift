@@ -340,6 +340,15 @@ final class RendererProcessController {
         try? connection.sendAccessibilityTree(surface.accessibilityTree())
     }
 
+    func publishCaret(tabId: String, rect: CGRect?) {
+        guard let encoded = try? JSONEncoder().encode(rect) else { return }
+        try? connection.sendHostEvent(
+            name: "com.actrium.rendererCaret",
+            userInfoJSON: String(decoding: encoded, as: UTF8.self),
+            tabId: tabId
+        )
+    }
+
     private func destroyTab(_ tabId: String) {
         surfaces.removeValue(forKey: tabId)?.close()
         reactNativeHost.destroyRendererEntry(tabId: tabId)
@@ -410,8 +419,12 @@ private final class RendererTabSurface {
     let context: RendererCAContext
     private var generation: UInt64 = 0
     private var hasCommitted = false
+    private weak var focusedEditor: NSTextView?
+    private var lastCaretRect: CGRect?
     private var accessibilityObservers: [NSObjectProtocol] = []
     private var accessibilityPublishWork: DispatchWorkItem?
+    private var pressedRecognizers: [UInt32: [NSGestureRecognizer]] = [:]
+    private var textInputPresses: Set<UInt32> = []
 
     var contextId: UInt32 {
         context.contextId
@@ -444,7 +457,6 @@ private final class RendererTabSurface {
 
         container.frame = NSRect(origin: .zero, size: size)
         container.wantsLayer = true
-        context.layer = container.layer
         commit()
         observeAccessibility()
     }
@@ -470,7 +482,9 @@ private final class RendererTabSurface {
     }
 
     func commit() {
-        context.layer = container.layer
+        if context.layer !== container.layer {
+            context.layer = container.layer
+        }
         // The first commit happens on an empty view tree, so lay it out once.
         // Later commits rely on AppKit/RN marking the container dirty
         // (addSubview, surface stage change, resize); Fabric sets frames
@@ -481,6 +495,7 @@ private final class RendererTabSurface {
             container.layoutSubtreeIfNeeded()
             hasCommitted = true
         }
+        publishCaret()
         CATransaction.flush()
     }
 
@@ -541,7 +556,7 @@ private final class RendererTabSurface {
         let modifiers = modifierFlags(from: input.modifiers)
         // IPC coordinates are top-left based, while AppKit window events use
         // bottom-left based window coordinates.
-        let location = NSPoint(x: input.x, y: container.bounds.height - input.y)
+        let location = container.convert(NSPoint(x: input.x, y: input.y), to: nil)
         let timestamp = ProcessInfo.processInfo.systemUptime
 
         switch input.type {
@@ -571,23 +586,40 @@ private final class RendererTabSurface {
                 return
             }
 
-            let hitView = window.contentView?.hitTest(location)
+            let hitView = hitTest(at: location)
             // Editable RN controls keep AppKit's native focus path; routing
             // their clicks through the JS responder revokes first responder.
-            let isNativeTextInput = hitView is RCTUITextView || hitView is NSTextField
-            if input.type == .mouseDown || input.type == .mouseUp, !isNativeTextInput {
-                forwardMouseToGestureRecognizers(event, in: hitView ?? container)
-            }
             if input.type == .mouseDown {
+                let ancestors = sequence(first: hitView, next: { $0?.superview })
+                    .prefix(while: { $0 != nil }).compactMap { $0 }
+                let textInput = ancestors.first { $0 is NSTextView || $0 is NSTextField }
+                if input.button == 0, let textInput {
+                    textInputPresses.insert(input.button)
+                    focusTextInput(textInput, at: location, modifiers: modifiers)
+                    publishCaret()
+                    // AppKit adds the field editor to the offscreen view
+                    // hierarchy on focus. Republish after that update.
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.window.contentView === self.container else { return }
+                        self.commit()
+                    }
+                    return
+                }
                 window.makeFirstResponder(hitView ?? container)
+                let recognizers = ancestors.flatMap(\.gestureRecognizers)
+                forwardMouse(event, to: recognizers)
+                pressedRecognizers[input.button] = recognizers
+            } else if input.type == .mouseUp {
+                if textInputPresses.remove(input.button) != nil { return }
+                if let recognizers = pressedRecognizers.removeValue(forKey: input.button) {
+                    forwardMouse(event, to: recognizers)
+                }
             }
             window.sendEvent(event)
-            if input.type == .mouseDown || input.type == .mouseUp {
-                commit()
-            }
+            if input.type == .mouseDown { publishCaret() }
 
         case .scroll:
-            guard let hitView = window.contentView?.hitTest(location) else { return }
+            guard let hitView = hitTest(at: location) else { return }
             let scrollView = sequence(first: hitView, next: \.superview)
                 .compactMap { $0 as? NSScrollView }
                 .first { candidate in
@@ -626,9 +658,16 @@ private final class RendererTabSurface {
             ) else {
                 return
             }
-            window.sendEvent(event)
+            if let textView = window.firstResponder as? NSTextView {
+                if input.type == .keyDown { textView.keyDown(with: event) }
+                else { textView.keyUp(with: event) }
+            } else {
+                window.sendEvent(event)
+            }
             if input.type == .keyDown {
-                commit()
+                // Fabric publishes content changes after mounting. A caret
+                // movement alone does not need to flush the remote surface.
+                publishCaret()
             }
 
         case .mouseEntered, .mouseExited, .UNRECOGNIZED(_):
@@ -636,37 +675,71 @@ private final class RendererTabSurface {
         }
     }
 
-    private func forwardMouseToGestureRecognizers(_ event: NSEvent, in view: NSView) {
-        // Synthetic events sent to the offscreen window do not reach gesture
-        // recognizers. Drive only the hit view's ancestor chain so unrelated
-        // RN roots cannot claim the same press or move the text focus.
-        var current: NSView? = view
-        while let currentView = current {
-            for recognizer in currentView.gestureRecognizers {
-                switch event.type {
-                case .leftMouseDown:
-                    recognizer.mouseDown(with: event)
-                case .rightMouseDown:
-                    recognizer.rightMouseDown(with: event)
-                case .otherMouseDown:
-                    recognizer.otherMouseDown(with: event)
-                case .leftMouseUp:
-                    recognizer.mouseUp(with: event)
-                case .rightMouseUp:
-                    recognizer.rightMouseUp(with: event)
-                case .otherMouseUp:
-                    recognizer.otherMouseUp(with: event)
-                case .leftMouseDragged:
-                    recognizer.mouseDragged(with: event)
-                case .rightMouseDragged:
-                    recognizer.rightMouseDragged(with: event)
-                case .otherMouseDragged:
-                    recognizer.otherMouseDragged(with: event)
-                default:
-                    break
-                }
+    private func hitTest(at location: NSPoint) -> NSView? {
+        let point = container.superview?.convert(location, from: nil) ?? location
+        return container.hitTest(point)
+    }
+
+    private func focusTextInput(_ view: NSView, at location: NSPoint, modifiers: NSEvent.ModifierFlags) {
+        // AppKit's native mouse tracking waits synchronously for mouse-up.
+        // Renderer mouse-up arrives on the main queue over IPC.
+        let focused = window.makeFirstResponder(view)
+        let editor = (view as? NSTextField)?.currentEditor() as? NSTextView ?? view as? NSTextView
+        focusedEditor = focused ? editor : nil
+        guard focused, let editor, !modifiers.contains(.shift) else { return }
+        let point = editor.convert(location, from: nil)
+        let index = editor.characterIndexForInsertion(at: point)
+        guard index != NSNotFound, index <= (editor.string as NSString).length else { return }
+        editor.setSelectedRange(NSRange(location: index, length: 0))
+    }
+
+    private func publishCaret() {
+        let rect = caretRect()
+        guard rect != lastCaretRect else { return }
+        lastCaretRect = rect
+        RendererProcessLifetime.shared.controller?.publishCaret(tabId: tabId, rect: rect)
+    }
+
+    private func caretRect() -> CGRect? {
+        guard let editor = focusedEditor, window.firstResponder === editor, editor.isEditable,
+              editor.selectedRange().length == 0 else {
+            return nil
+        }
+        let screenRect = editor.firstRect(forCharacterRange: editor.selectedRange(), actualRange: nil)
+        let localRect: NSRect
+        if editor.string.isEmpty {
+            // AppKit can return an empty character rectangle for an empty field.
+            let origin = editor.textContainerOrigin
+            let inset = editor.textContainer?.lineFragmentPadding ?? 0
+            let lineHeight = editor.font.map {
+                editor.layoutManager?.defaultLineHeight(for: $0) ?? $0.pointSize
+            } ?? NSFont.systemFontSize
+            let height = min(editor.bounds.height, lineHeight)
+            let rect = NSRect(x: origin.x + inset, y: editor.bounds.midY - height / 2,
+                              width: 2, height: height)
+            localRect = container.convert(rect, from: editor)
+        } else {
+            guard screenRect.height > 0 else {
+                return nil
             }
-            current = currentView.superview
+            localRect = container.convert(window.convertFromScreen(screenRect), from: nil)
+        }
+        return CGRect(x: localRect.minX, y: localRect.minY, width: 2, height: localRect.height)
+    }
+
+    private func forwardMouse(_ event: NSEvent, to recognizers: [NSGestureRecognizer]) {
+        // Synthetic AppKit events do not drive recognizers in this offscreen
+        // window. Release only the recognizers that received the press.
+        for recognizer in recognizers {
+            switch event.type {
+            case .leftMouseDown: recognizer.mouseDown(with: event)
+            case .rightMouseDown: recognizer.rightMouseDown(with: event)
+            case .otherMouseDown: recognizer.otherMouseDown(with: event)
+            case .leftMouseUp: recognizer.mouseUp(with: event)
+            case .rightMouseUp: recognizer.rightMouseUp(with: event)
+            case .otherMouseUp: recognizer.otherMouseUp(with: event)
+            default: break
+            }
         }
     }
 

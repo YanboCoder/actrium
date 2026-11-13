@@ -9,6 +9,14 @@ set -euo pipefail
 # Outputs:
 # - ./dist/ActrBindings/** (Actr.swift + headers + modulemap)
 # - ./dist/ActrFFI.xcframework/**
+#
+# The macOS slice is a DYNAMIC framework (cdylib): two rustc-built staticlibs
+# cannot share one Mach-O — libactr.a linked next to the static libactrium_core.a
+# trips hundreds of duplicate std/core symbols, because both archives embed the
+# same toolchain runtime. Shipping the macOS slice as a versioned @rpath dylib
+# framework keeps the two FFI chains coexisting in one app (be148b6df). An
+# xcframework cannot mix framework and library slices, so the iOS slices are
+# dynamic frameworks too (SwiftPM embeds them in the consuming app).
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${ROOT_DIR}"
@@ -122,10 +130,10 @@ rm -f \
   "${HEADERS_DIR}/actrFFI.h"
 
 echo "[2/4] Generating Swift bindings (host: ${HOST_TARGET})"
-REUSE_HOST_MACOS_STATICLIB=0
+REUSE_HOST_MACOS_BUILD=0
 if [[ "${HOST_TARGET}" == "aarch64-apple-darwin" ]]; then
   HOST_FEATURE_ARGS=(--features macos-oslog)
-  REUSE_HOST_MACOS_STATICLIB=1
+  REUSE_HOST_MACOS_BUILD=1
 fi
 
 cargo_build_libactr "${HOST_TARGET}" "${HOST_FEATURE_ARGS[@]+"${HOST_FEATURE_ARGS[@]}"}"
@@ -208,7 +216,7 @@ if [[ -f "${MODULEMAP_FILE}" ]]; then
 fi
 
 if [[ "${XCFRAMEWORK_TARGETS}" == "all" ]]; then
-  echo "[3/4] Building Rust static libraries (iOS + macOS - ARM64 only) in parallel"
+  echo "[3/4] Building Rust static libraries (iOS) in parallel"
 
   # Use separate target directories to allow concurrent cargo invocations.
   IOS_TARGET_DIR="${TARGET_DIR}/xcframework-ios"
@@ -253,39 +261,151 @@ if [[ "${XCFRAMEWORK_TARGETS}" == "all" ]]; then
   mkdir -p "${TARGET_DIR}/aarch64-apple-ios-sim/${CARGO_PROFILE_DIR}"
   cp "${IOS_LIB}" "${TARGET_DIR}/aarch64-apple-ios/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.a"
   cp "${IOS_SIM_LIB}" "${TARGET_DIR}/aarch64-apple-ios-sim/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.a"
+  cp "${IOS_TARGET_DIR}/aarch64-apple-ios/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.dylib" \
+    "${TARGET_DIR}/aarch64-apple-ios/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.dylib"
+  cp "${IOS_SIM_TARGET_DIR}/aarch64-apple-ios-sim/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.dylib" \
+    "${TARGET_DIR}/aarch64-apple-ios-sim/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.dylib"
 
   # Clean up temporary target directories.
   rm -rf "${IOS_TARGET_DIR}" "${IOS_SIM_TARGET_DIR}"
 
   echo "  ✅ All targets built successfully"
 else
-  echo "[3/4] Building Rust static library (macOS - ARM64 only)"
+  echo "[3/4] Skipping iOS slices (ACTR_XCFRAMEWORK_TARGETS=macos)"
 fi
-if [[ "${REUSE_HOST_MACOS_STATICLIB}" -eq 1 ]]; then
-  echo "Reusing host build for aarch64-apple-darwin static library"
+if [[ "${REUSE_HOST_MACOS_BUILD}" -eq 1 ]]; then
+  echo "Reusing host build for aarch64-apple-darwin"
 else
   cargo_build_libactr aarch64-apple-darwin --features macos-oslog
 fi
+# macOS slice is Apple Silicon only: the app targets macOS 26.1 and is built
+# arm64-only (see ARCHS in the Xcode project), so no x86_64 build is required.
 
-echo "[4/4] Creating XCFramework"
+echo "[4/4] Creating XCFramework (macOS slice: dynamic framework)"
 rm -rf "${XCFRAMEWORK_DIR}"
+
+write_framework_info_plist() {
+  cat > "$1" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>ActrFFI</string>
+	<key>CFBundleIdentifier</key>
+	<string>org.actr.ActrFFI</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>ActrFFI</string>
+	<key>CFBundlePackageType</key>
+	<string>FMWK</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+</dict>
+</plist>
+PLIST
+}
+
+write_framework_modulemap() {
+  cat > "$1" <<MODULEMAP
+framework module ${FRAMEWORK_NAME} {
+    header "Headers/actrFFI.h"
+    export *
+}
+MODULEMAP
+}
+
+# Assemble a versioned ActrFFI.framework bundle around the arm64 macOS
+# dylib: Versions/A/{ActrFFI, Headers, Modules, Resources}, Current +
+# top-level symlinks, ad-hoc signature (Xcode re-signs on embed).
+create_macos_dylib_framework() {
+  local arm64_dylib="${TARGET_DIR}/aarch64-apple-darwin/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.dylib"
+  require_file "${arm64_dylib}"
+
+  local staging
+  staging="$(mktemp -d)"
+  local fw="${staging}/${FRAMEWORK_NAME}.framework"
+  mkdir -p \
+    "${fw}/Versions/A/Headers" \
+    "${fw}/Versions/A/Modules" \
+    "${fw}/Versions/A/Resources"
+
+  cp "${arm64_dylib}" "${fw}/Versions/A/${FRAMEWORK_NAME}"
+  install_name_tool \
+    -id "@rpath/${FRAMEWORK_NAME}.framework/Versions/A/${FRAMEWORK_NAME}" \
+    "${fw}/Versions/A/${FRAMEWORK_NAME}"
+
+  cp "${HEADERS_DIR}/actrFFI.h" "${fw}/Versions/A/Headers/"
+  write_framework_modulemap "${fw}/Versions/A/Modules/module.modulemap"
+  write_framework_info_plist "${fw}/Versions/A/Resources/Info.plist"
+
+  (cd "${fw}/Versions" && ln -sfh A Current)
+  (cd "${fw}" \
+    && ln -sfh "Versions/Current/${FRAMEWORK_NAME}" "${FRAMEWORK_NAME}" \
+    && ln -sfh Versions/Current/Headers Headers \
+    && ln -sfh Versions/Current/Modules Modules \
+    && ln -sfh Versions/Current/Resources Resources)
+
+  codesign --force -s - "${fw}"
+  echo "${fw}"
+}
+
+# Flat iOS-style ActrFFI.framework around a single-arch dylib.
+create_ios_dylib_framework() {
+  local dylib="$1"
+  require_file "${dylib}"
+
+  local staging
+  staging="$(mktemp -d)"
+  local fw="${staging}/${FRAMEWORK_NAME}.framework"
+  mkdir -p "${fw}/Headers" "${fw}/Modules"
+
+  cp "${dylib}" "${fw}/${FRAMEWORK_NAME}"
+  install_name_tool \
+    -id "@rpath/${FRAMEWORK_NAME}.framework/${FRAMEWORK_NAME}" \
+    "${fw}/${FRAMEWORK_NAME}"
+  cp "${HEADERS_DIR}/actrFFI.h" "${fw}/Headers/"
+  write_framework_modulemap "${fw}/Modules/module.modulemap"
+  write_framework_info_plist "${fw}/Info.plist"
+
+  codesign --force -s - "${fw}"
+  echo "${fw}"
+}
+
+# An xcframework cannot mix framework and library slices, so every slice is a
+# dynamic framework; on iOS the app embeds it through SwiftPM like on macOS.
+MACOS_FRAMEWORK_DIR="$(create_macos_dylib_framework)"
+IOS_FRAMEWORK_DIR=""
+IOS_SIM_FRAMEWORK_DIR=""
+if [[ "${XCFRAMEWORK_TARGETS}" == "all" ]]; then
+  IOS_FRAMEWORK_DIR="$(create_ios_dylib_framework \
+    "${TARGET_DIR}/aarch64-apple-ios/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.dylib")"
+  IOS_SIM_FRAMEWORK_DIR="$(create_ios_dylib_framework \
+    "${TARGET_DIR}/aarch64-apple-ios-sim/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.dylib")"
+fi
 
 declare -a XCODEBUILD_ARGS
 if [[ "${XCFRAMEWORK_TARGETS}" == "all" ]]; then
   XCODEBUILD_ARGS+=(
-    -library "${TARGET_DIR}/aarch64-apple-ios/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.a"
-    -headers "${HEADERS_DIR}"
-    -library "${TARGET_DIR}/aarch64-apple-ios-sim/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.a"
-    -headers "${HEADERS_DIR}"
+    -framework "${IOS_FRAMEWORK_DIR}"
+    -framework "${IOS_SIM_FRAMEWORK_DIR}"
   )
 fi
 XCODEBUILD_ARGS+=(
-  -library "${TARGET_DIR}/aarch64-apple-darwin/${CARGO_PROFILE_DIR}/lib${CRATE_LIB_NAME}.a"
-  -headers "${HEADERS_DIR}"
+  -framework "${MACOS_FRAMEWORK_DIR}"
   -output "${XCFRAMEWORK_DIR}"
 )
 
 xcodebuild -create-xcframework "${XCODEBUILD_ARGS[@]}"
+
+rm -rf "$(dirname "${MACOS_FRAMEWORK_DIR}")"
+[[ -n "${IOS_FRAMEWORK_DIR}" ]] && rm -rf "$(dirname "${IOS_FRAMEWORK_DIR}")"
+[[ -n "${IOS_SIM_FRAMEWORK_DIR}" ]] && rm -rf "$(dirname "${IOS_SIM_FRAMEWORK_DIR}")"
 
 echo ""
 echo "✅ XCFramework build complete!"

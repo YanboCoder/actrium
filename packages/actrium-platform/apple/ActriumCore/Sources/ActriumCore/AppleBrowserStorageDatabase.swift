@@ -618,6 +618,21 @@ public final class AppleBrowserStorageDatabase {
     private func coreNormalizedSessionSnapshot(
         _ snapshot: AppleBrowserSessionSnapshot
     ) -> AppleBrowserSessionSnapshot? {
+        // The core's session address normalization only accepts about/http/
+        // https/file (browser_data.rs `normalize_session_address`). Actrium
+        // instance (actr://) and package (actro://) tabs would be silently
+        // dropped from a mixed snapshot, so persist those snapshots verbatim
+        // instead of partially normalizing them (15-B B7).
+        let hasNonCoreScheme = snapshot.tabs.contains { tab in
+            guard let scheme = URLComponents(string: tab.address)?.scheme?.lowercased() else {
+                return false
+            }
+            return scheme == "actr" || scheme == "actro"
+        }
+        if hasNonCoreScheme {
+            return nil
+        }
+
         let request: [String: Any] = [
             // Browser-data snapshot contract version; the core stamps its own
             // version on the normalized output.

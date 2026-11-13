@@ -65,6 +65,8 @@ final class RendererSurfaceHostView: NSView {
     private var lastSentSize: CGSize?
     private var recoveryAttempt = 0
     private var accessibilityObserver: NSObjectProtocol?
+    private var caretObserver: NSObjectProtocol?
+    private let caretLayer = CALayer()
     private var accessibilityElements: [RemoteAccessibilityElement] = []
     private var accessibilityById: [UInt64: RemoteAccessibilityElement] = [:]
     private var accessibilityTree = Actrium_Ipc_AccessibilityTree()
@@ -92,12 +94,34 @@ final class RendererSurfaceHostView: NSView {
         if let accessibilityObserver {
             NotificationCenter.default.removeObserver(accessibilityObserver)
         }
+        if let caretObserver {
+            NotificationCenter.default.removeObserver(caretObserver)
+        }
     }
 
     private func setup() {
         wantsLayer = true
         layer?.backgroundColor = NSColor(white: 0.10, alpha: 1).cgColor
         layer?.masksToBounds = true
+        caretLayer.backgroundColor = NSColor.controlAccentColor.cgColor
+        caretLayer.zPosition = 1
+        caretLayer.isHidden = true
+        layer?.addSublayer(caretLayer)
+        caretObserver = NotificationCenter.default.addObserver(
+            forName: .rendererCaretUpdated, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self, let tabId = self.tabId, notification.userInfo?["tabId"] as? UUID == tabId else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            defer { CATransaction.commit() }
+            guard let rect = notification.userInfo?["rect"] as? CGRect, self.window?.firstResponder === self,
+                  rect.width > 0, rect.height > 0, self.bounds.intersects(rect) else {
+                self.caretLayer.isHidden = true
+                return
+            }
+            self.caretLayer.frame = self.convertToLayer(rect)
+            self.caretLayer.isHidden = false
+        }
 
         surfaceObserver = NotificationCenter.default.addObserver(
             forName: .rendererSurfaceUpdated,
@@ -299,6 +323,7 @@ final class RendererSurfaceHostView: NSView {
 
     private func showPlaceholder() {
         contextId = 0
+        caretLayer.isHidden = true
         hostLayer?.removeFromSuperlayer()
         hostLayer = nil
     }
@@ -373,6 +398,10 @@ final class RendererSurfaceHostView: NSView {
     }
 
     override var acceptsFirstResponder: Bool { true }
+    override func resignFirstResponder() -> Bool {
+        caretLayer.isHidden = true
+        return super.resignFirstResponder()
+    }
     override var isFlipped: Bool { true }
 
     override func isAccessibilityElement() -> Bool { true }
@@ -445,7 +474,8 @@ final class RendererSurfaceHostView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        allowsInput && bounds.contains(point) ? self : nil
+        guard allowsInput, super.hitTest(point) != nil else { return nil }
+        return self
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -453,7 +483,14 @@ final class RendererSurfaceHostView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
+        let focused = window?.makeFirstResponder(self) == true
+        #if DEBUG
+        if let tabId {
+            let point = convert(event.locationInWindow, from: nil)
+            NSLog("Renderer mouse down: tab=%@ x=%.0f y=%.0f focused=%d",
+                  tabId.uuidString, point.x, point.y, focused ? 1 : 0)
+        }
+        #endif
         forwardMouse(event, type: .mouseDown)
     }
 

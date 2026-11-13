@@ -1,3 +1,9 @@
+use actr_protocol::authority::{
+    self, AuthorityDescriptor, AuthorityDescriptorError, RealmSigningKeys,
+};
+use actr_protocol::realm_membership::RealmInvite;
+use actr_protocol::realm_profile::{RealmProfile, RealmProfileError, RealmStatus};
+use actr_protocol::uri::{ActrUri, ActrUriError};
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, VerifyingKey};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -11,6 +17,7 @@ use crate::browser;
 use crate::browser_data;
 use crate::domain::{AppSourceType, Contract, SystemAppType, Tag as DomainTag};
 use crate::persistence;
+use crate::realm_link;
 use crate::runtime_persistence;
 use crate::speech;
 
@@ -684,6 +691,45 @@ pub enum CoreError {
     UnknownAppSourceType(String),
     #[error("invalid Actr actor type `{0}`, expected `publisher/program@version`")]
     InvalidActrActorType(String),
+    #[error("invalid actr URI scheme: {0}")]
+    UriSchemeInvalid(String),
+    #[error("invalid actr URI Realm domain: {0}")]
+    UriDomainInvalid(String),
+    #[error("invalid actr URI RealmId or ActorId: {0}")]
+    UriLabelInvalid(String),
+    #[error("legacy actr URI form is not supported: {0}")]
+    UriLegacyForm(String),
+    #[error("local actr Realm does not belong to this installation: {0}")]
+    UriLocalRealmForeign(String),
+    #[error("invalid installation id, expected 26 lowercase base32 characters")]
+    InvalidInstallationId,
+    #[error("authority descriptor is invalid: {0}")]
+    AuthorityDescriptorInvalid(String),
+    #[error("Realm Profile is invalid: {0}")]
+    RealmProfileInvalid(String),
+    #[error("Realm '{0}' is retired")]
+    RealmRetired(String),
+}
+
+impl From<AuthorityDescriptorError> for CoreError {
+    fn from(error: AuthorityDescriptorError) -> Self {
+        Self::AuthorityDescriptorInvalid(error.to_string())
+    }
+}
+
+impl From<ActrUriError> for CoreError {
+    fn from(error: ActrUriError) -> Self {
+        Self::AuthorityDescriptorInvalid(error.to_string())
+    }
+}
+
+impl From<RealmProfileError> for CoreError {
+    fn from(error: RealmProfileError) -> Self {
+        match error {
+            RealmProfileError::Retired(name) => Self::RealmRetired(name),
+            other => Self::RealmProfileInvalid(other.to_string()),
+        }
+    }
 }
 
 impl From<ManifestError> for CoreError {
@@ -738,6 +784,311 @@ pub fn verify_actr_package(
         workload_profile: verified.manifest.workload.profile.clone(),
         manifest: verified.manifest.into(),
         workload_bytes,
+    })
+}
+
+/// Parsed `actr://` Realm link or Actor address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActrUriInfo {
+    /// Lowercase IDNA A-label domain, or `<installation-id>.actr.alt`.
+    pub domain: String,
+    pub realm_id: Option<String>,
+    pub serial: Option<String>,
+    /// Whether the link targets this installation's local Realm.
+    pub is_local: bool,
+    /// `https://<domain>/.well-known/actr`; `None` for a local Realm.
+    pub discovery_url: Option<String>,
+}
+
+/// A trusted realm signing key from an accepted authority descriptor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RealmSigningKeyInfo {
+    pub id: String,
+    /// Base64 Ed25519 public key, as listed by the descriptor.
+    pub public_key_base64: String,
+    /// `active` or `retired`.
+    pub status: String,
+}
+
+/// Validated authority descriptor for a Realm domain: the trusted realm
+/// signing keys and the realms service location that feeds Realm Profile
+/// discovery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthorityDiscoveryInfo {
+    pub realms_href: String,
+    /// Sequence of the accepted `realm_signing_keys` member.
+    pub keys_sequence: u64,
+    pub signing_keys: Vec<RealmSigningKeyInfo>,
+    /// The accepted member serialized; pass back to `accept_realm_profile`.
+    pub signing_keys_json: String,
+}
+
+/// A verified Realm Profile: the package selection and endpoints that feed
+/// package acquisition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RealmProfileInfo {
+    /// Canonical Realm name `<realm_id>@<domain>`.
+    pub realm_name: String,
+    pub display_name: String,
+    /// Always `active`; retired Realms are rejected.
+    pub status: String,
+    pub sequence: u64,
+    /// Front package: the archive this shell fetches and loads.
+    pub package_href: String,
+    /// Lowercase hex SHA-256 the Front package must match.
+    pub package_sha256: String,
+    /// Actor type `publisher/program@version` of the Front package.
+    pub package_type: String,
+    /// Service package: deployed and verified by the Service Host.
+    pub service_href: String,
+    pub service_sha256: String,
+    pub service_type: String,
+    /// Issuer endpoint that serves Actor credentials.
+    pub issuer_url: String,
+    /// Actr Facility Provider ID; a membership client binds to it.
+    pub provider_id: String,
+}
+
+/// The Realm name carried by a `ri_` invite text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActrInviteInfo {
+    pub realm_name: String,
+}
+
+/// A package signing key from a verified Publisher Profile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublisherPackageKeyInfo {
+    /// `actr-pub-` + 16 lowercase hex characters of the key digest.
+    pub id: String,
+    /// Base64 Ed25519 public key.
+    pub public_key_base64: String,
+    /// `active` or `retired`.
+    pub status: String,
+}
+
+/// Verified Publisher Profile for a publisher domain: the package signing
+/// keys that step 5 verifies the `.actr` package signature with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublisherProfileInfo {
+    pub domain: String,
+    pub profile_sequence: u64,
+    /// RFC 3339; past this point the profile must be re-fetched.
+    pub profile_expires_at: String,
+    pub package_signing_keys: Vec<PublisherPackageKeyInfo>,
+}
+
+/// Generate a fresh installation id: 16 bytes from the OS CSPRNG encoded as
+/// 26 unpadded lowercase RFC 4648 base32 characters.
+pub fn generate_installation_id() -> String {
+    use rand::RngCore;
+
+    let mut bytes = [0u8; 16];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    encode_base32_lowercase(&bytes)
+}
+
+/// Validate an installation id against the `.actr.alt` domain rules.
+pub fn validate_installation_id(id: String) -> Result<(), CoreError> {
+    let valid = id.len() == 26
+        && id
+            .bytes()
+            .all(|byte| matches!(byte, b'a'..=b'z' | b'2'..=b'7'));
+    if valid {
+        Ok(())
+    } else {
+        Err(CoreError::InvalidInstallationId)
+    }
+}
+
+/// Lowercase RFC 4648 base32 without padding. 16 bytes yield exactly 26
+/// characters, matching the shape `ActrUri::normalize_domain` accepts.
+fn encode_base32_lowercase(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
+    let mut output = String::with_capacity((bytes.len() * 8 + 4) / 5);
+    let mut buffer = 0u32;
+    let mut bits = 0u32;
+    for &byte in bytes {
+        buffer = (buffer << 8) | u32::from(byte);
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            output.push(ALPHABET[((buffer >> bits) & 0x1f) as usize] as char);
+        }
+    }
+    if bits > 0 {
+        output.push(ALPHABET[((buffer << (5 - bits)) & 0x1f) as usize] as char);
+    }
+    output
+}
+
+/// Parse and validate an `actr://` Realm link or Actor address.
+///
+/// Layer-0 verification-funnel step: zero network access. Delegates to
+/// `realm_link::open_realm_link`, which validates installation ownership
+/// and rejects authority-only URIs, then dispatches a matching local Realm
+/// to `open_local` and a DNS Realm to `discover_remote`.
+pub fn parse_actr_uri(uri: String, installation_id: String) -> Result<ActrUriInfo, CoreError> {
+    realm_link::open_realm_link::<ActrUriInfo, CoreError>(
+        &uri,
+        &installation_id,
+        |parsed| {
+            Ok(ActrUriInfo {
+                domain: parsed.domain().to_string(),
+                realm_id: parsed.realm_id().map(ToOwned::to_owned),
+                serial: parsed.serial().map(ToOwned::to_owned),
+                is_local: parsed.is_local(),
+                discovery_url: parsed.discovery_url(),
+            })
+        },
+        |parsed| {
+            Ok(ActrUriInfo {
+                domain: parsed.domain().to_string(),
+                realm_id: parsed.realm_id().map(ToOwned::to_owned),
+                serial: parsed.serial().map(ToOwned::to_owned),
+                is_local: false,
+                discovery_url: parsed.discovery_url(),
+            })
+        },
+    )
+}
+
+/// Validate an authority descriptor response for `domain` and extract the
+/// trusted realm signing keys plus the realms service href.
+pub fn accept_authority_descriptor(
+    body: String,
+    domain: String,
+) -> Result<AuthorityDiscoveryInfo, CoreError> {
+    let invalid = CoreError::AuthorityDescriptorInvalid;
+
+    let value: serde_json::Value =
+        serde_json::from_str(&body).map_err(|error| invalid(format!("not valid JSON: {error}")))?;
+    let descriptor: AuthorityDescriptor = serde_json::from_value(value.clone())
+        .map_err(|error| invalid(format!("malformed descriptor: {error}")))?;
+
+    let requested = ActrUri::from_domain(&domain)
+        .map_err(|error| invalid(format!("invalid discovery domain: {error}")))?;
+    descriptor.validate_for(&requested)?;
+
+    let realms_href = descriptor
+        .require_service("realms")
+        .map_err(CoreError::from)?
+        .href
+        .clone();
+
+    let member = value
+        .get("realm_signing_keys")
+        .ok_or_else(|| invalid("descriptor carries no realm_signing_keys".to_string()))?;
+    let (keys, _outcome) =
+        authority::RealmSigningKeys::accept(member, None).map_err(CoreError::from)?;
+
+    Ok(AuthorityDiscoveryInfo {
+        realms_href,
+        keys_sequence: keys.sequence,
+        signing_keys_json: serde_json::to_string(&keys)
+            .map_err(|error| invalid(format!("cannot serialize signing keys: {error}")))?,
+        signing_keys: keys
+            .keys
+            .iter()
+            .map(|key| RealmSigningKeyInfo {
+                id: key.id.clone(),
+                public_key_base64: key.public_key.clone(),
+                status: format!("{:?}", key.status).to_lowercase(),
+            })
+            .collect(),
+    })
+}
+
+/// Validate a Realm Profile response for `realm_name` and extract the
+/// package selection.
+pub fn accept_realm_profile(
+    body: String,
+    realm_name: String,
+    signing_keys_json: String,
+) -> Result<RealmProfileInfo, CoreError> {
+    let keys: RealmSigningKeys = serde_json::from_str(&signing_keys_json).map_err(|error| {
+        CoreError::RealmProfileInvalid(format!("malformed signing keys: {error}"))
+    })?;
+    let profile = RealmProfile::verify(body.as_bytes(), &realm_name, &keys)?;
+    if profile.realm.status != RealmStatus::Active {
+        return Err(CoreError::RealmRetired(profile.realm.name.clone()));
+    }
+    let selection = profile.selection.as_ref().ok_or_else(|| {
+        CoreError::RealmProfileInvalid("active Realm has no package selection".to_string())
+    })?;
+    let (service, front) = selection
+        .selected()
+        .map_err(|error| CoreError::RealmProfileInvalid(format!("package selection: {error}")))?;
+
+    Ok(RealmProfileInfo {
+        realm_name: profile.realm.name.clone(),
+        display_name: profile.realm.display_name.clone(),
+        status: "active".to_string(),
+        sequence: profile.sequence,
+        package_href: front.href.clone(),
+        package_sha256: front.sha256.clone(),
+        package_type: front.r#type.clone(),
+        service_href: service.href.clone(),
+        service_sha256: service.sha256.clone(),
+        service_type: service.r#type.clone(),
+        issuer_url: profile.issuer.url.clone(),
+        provider_id: profile.provider.id.clone(),
+    })
+}
+
+/// Validate the well-known document served by a publisher domain and
+/// extract its package signing keys.
+pub fn accept_publisher_profile(
+    body: String,
+    domain: String,
+) -> Result<PublisherProfileInfo, CoreError> {
+    let invalid = |reason: String| {
+        CoreError::AuthorityDescriptorInvalid(format!(
+            "publisher information for '{domain}' is unusable: {reason}"
+        ))
+    };
+
+    let value: serde_json::Value =
+        serde_json::from_str(&body).map_err(|error| invalid(format!("not valid JSON: {error}")))?;
+    let publisher = value
+        .get("publisher")
+        .ok_or_else(|| invalid("descriptor carries no publisher profile".into()))?;
+    let keys = publisher
+        .get("keys")
+        .and_then(|keys| keys.as_array())
+        .ok_or_else(|| invalid("publisher profile carries no signing keys".into()))?;
+
+    let package_signing_keys: Vec<PublisherPackageKeyInfo> = keys
+        .iter()
+        .filter_map(|key| {
+            Some(PublisherPackageKeyInfo {
+                id: key.get("id")?.as_str()?.to_string(),
+                public_key_base64: key.get("public_key")?.as_str()?.to_string(),
+                status: key.get("status")?.as_str()?.to_string(),
+            })
+        })
+        .collect();
+
+    Ok(PublisherProfileInfo {
+        domain,
+        profile_sequence: publisher
+            .get("sequence")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0),
+        profile_expires_at: publisher
+            .get("profile_expires_at")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        package_signing_keys,
+    })
+}
+
+pub fn decode_actr_invite(invite_text: String) -> Result<ActrInviteInfo, CoreError> {
+    let invite = RealmInvite::decode(&invite_text).map_err(|error| {
+        CoreError::AuthorityDescriptorInvalid(format!("invalid invite: {error}"))
+    })?;
+    Ok(ActrInviteInfo {
+        realm_name: invite.realm,
     })
 }
 

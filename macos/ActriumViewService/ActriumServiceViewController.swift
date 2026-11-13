@@ -1416,7 +1416,7 @@ final class ServiceReactNativeHost {
         }
 
         // Scripts
-        if let s = config["unifiedScript"] as? String { tabDict["unifiedScript"] = s }
+        if let s = resolvedGuestScript(fromConfig: config) { tabDict["unifiedScript"] = s }
         if let s = config["capabilityManifestJSON"] as? String {
             tabDict["capabilityManifestJSON"] = s
         }
@@ -1873,7 +1873,27 @@ private func setupReactNativeContent(for entry: TabViewControllerEntry) {
     // Root view will be created when tab config is received (event-driven)
 }
 
-/// Create root view with the received config (called when tab config arrives)
+/// Read the manifest entry from a verified extraction when one is provided.
+private func resolvedGuestScript(fromConfig config: [String: Any]) -> String? {
+    guard let extractedPath = config["guestExtractedPath"] as? String else {
+        return config["unifiedScript"] as? String
+    }
+    guard let entry = config["guestEntry"] as? String, !entry.isEmpty, !entry.hasPrefix("/") else {
+        return nil
+    }
+
+    let root = URL(fileURLWithPath: extractedPath, isDirectory: true)
+        .resolvingSymlinksInPath().standardizedFileURL
+    let candidate = root.appendingPathComponent(entry)
+        .resolvingSymlinksInPath().standardizedFileURL
+    guard candidate.path.hasPrefix(root.path + "/"),
+          let script = try? String(contentsOf: candidate, encoding: .utf8),
+          !script.isEmpty else {
+        return nil
+    }
+    return script
+}
+
 private func createRootViewWithConfig(for entry: TabViewControllerEntry, config: [String: Any]) {
     let logTabId = config["tabId"] as? String ?? entry.internalId
     let logSystemAppType = config["systemAppType"] as? String ?? "nil"
@@ -1921,7 +1941,7 @@ private func createRootViewWithConfig(for entry: TabViewControllerEntry, config:
     if let systemAppType = systemAppType {
         tabDict["systemAppType"] = systemAppType
     }
-    if let unifiedScript = config["unifiedScript"] as? String {
+    if let unifiedScript = resolvedGuestScript(fromConfig: config) {
         tabDict["unifiedScript"] = unifiedScript
     }
     if let capabilityManifestJSON = config["capabilityManifestJSON"] as? String {

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1A2B3C4D5E6F7890ABCD0001 /* ActriumIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 1A2B3C4D5E6F7890ABCD0002 /* ActriumIPC */; };
 		1A2B3C4D5E6F7890ABCD0003 /* ActriumIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 1A2B3C4D5E6F7890ABCD0002 /* ActriumIPC */; };
+		5C0B1A2D3E4F506172830001 /* Actr in Frameworks */ = {isa = PBXBuildFile; productRef = 5C0B1A2D3E4F506172830002 /* Actr */; };
 		36ED6B68B2DE67F2DB1523A7 /* libPods-ActriumRenderer.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1394BEA9FE9BE0BE89646222 /* libPods-ActriumRenderer.a */; };
 		457EEA1F5D65241F37B32E2D /* libPods-Actrium.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 68501CEF0142AD9A599B85C8 /* libPods-Actrium.a */; };
 		A90D97D7984E951158B896D0 /* libPods-ActriumTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DACA28DED8E4818311DAAB4D /* libPods-ActriumTests.a */; };
@@ -119,15 +120,11 @@
 		};
 		B3E458B22EC731A40014D74C /* ActriumTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = ActriumTests;
 			sourceTree = "<group>";
 		};
 		B3E458BC2EC731A40014D74C /* ActriumUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = ActriumUITests;
 			sourceTree = "<group>";
 		};
@@ -150,6 +147,7 @@
 				AB00110022003300AA00BB02 /* ActriumCore in Frameworks */,
 				AA00110022003300AA00BB02 /* ActriumVault in Frameworks */,
 				1A2B3C4D5E6F7890ABCD0001 /* ActriumIPC in Frameworks */,
+				5C0B1A2D3E4F506172830001 /* Actr in Frameworks */,
 				B3E78A292F02AFD7001F9589 /* Highlightr in Frameworks */,
 				457EEA1F5D65241F37B32E2D /* libPods-Actrium.a in Frameworks */,
 			);
@@ -343,15 +341,6 @@
 						CreatedOnToolsVersion = 26.1.1;
 						TestTargetID = B3E4589F2EC731A30014D74C;
 					};
-					CC11220033004400AA00BB20 = {
-						CreatedOnToolsVersion = 26.2;
-					};
-					DD11220033004400AA00BB20 = {
-						CreatedOnToolsVersion = 26.2;
-					};
-					EE11220033004400AA00BB20 = {
-						CreatedOnToolsVersion = 26.2;
-					};
 				};
 			};
 			buildConfigurationList = B3E4589B2EC731A30014D74C /* Build configuration list for PBXProject "Actrium" */;
@@ -364,9 +353,10 @@
 			mainGroup = B3E458972EC731A30014D74C;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				1A2B3C4D5E6F7890ABCD0005 /* XCLocalSwiftPackageReference "ActriumIPC" */,
-				AB00110022003300AA00BB05 /* XCLocalSwiftPackageReference "ActriumCore" */,
-				AA00110022003300AA00BB05 /* XCLocalSwiftPackageReference "ActriumVault" */,
+				1A2B3C4D5E6F7890ABCD0005 /* XCLocalSwiftPackageReference "../packages/actrium-platform/apple/ActriumIPC" */,
+				AB00110022003300AA00BB05 /* XCLocalSwiftPackageReference "../packages/actrium-platform/apple/ActriumCore" */,
+				AA00110022003300AA00BB05 /* XCLocalSwiftPackageReference "../packages/actrium-platform/apple/ActriumVault" */,
+				5C0B1A2D3E4F506172830003 /* XCLocalSwiftPackageReference "../packages/actr-swift" */,
 				B3E78A272F02AF3B001F9589 /* XCRemoteSwiftPackageReference "Highlightr" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -424,9 +414,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-ActriumTests/Pods-ActriumTests-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-ActriumTests/Pods-ActriumTests-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -441,9 +435,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-ActriumRenderer/Pods-ActriumRenderer-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-ActriumRenderer/Pods-ActriumRenderer-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -480,9 +478,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-ActriumRenderer/Pods-ActriumRenderer-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-ActriumRenderer/Pods-ActriumRenderer-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -497,9 +499,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-ActriumTests/Pods-ActriumTests-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-ActriumTests/Pods-ActriumTests-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -712,6 +718,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -766,10 +773,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../packages/actrium/node_modules/react-native-macos";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
@@ -782,6 +786,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -829,10 +834,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../packages/actrium/node_modules/react-native-macos";
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -1052,17 +1054,21 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		1A2B3C4D5E6F7890ABCD0005 /* XCLocalSwiftPackageReference "ActriumIPC" */ = {
+		1A2B3C4D5E6F7890ABCD0005 /* XCLocalSwiftPackageReference "../packages/actrium-platform/apple/ActriumIPC" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../packages/actrium-platform/apple/ActriumIPC;
+			relativePath = "../packages/actrium-platform/apple/ActriumIPC";
 		};
-		AA00110022003300AA00BB05 /* XCLocalSwiftPackageReference "ActriumVault" */ = {
+		5C0B1A2D3E4F506172830003 /* XCLocalSwiftPackageReference "../packages/actr-swift" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../packages/actrium-platform/apple/ActriumVault;
+			relativePath = "../packages/actr-swift";
 		};
-		AB00110022003300AA00BB05 /* XCLocalSwiftPackageReference "ActriumCore" */ = {
+		AA00110022003300AA00BB05 /* XCLocalSwiftPackageReference "../packages/actrium-platform/apple/ActriumVault" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../packages/actrium-platform/apple/ActriumCore;
+			relativePath = "../packages/actrium-platform/apple/ActriumVault";
+		};
+		AB00110022003300AA00BB05 /* XCLocalSwiftPackageReference "../packages/actrium-platform/apple/ActriumCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../packages/actrium-platform/apple/ActriumCore";
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -1081,6 +1087,10 @@
 		1A2B3C4D5E6F7890ABCD0002 /* ActriumIPC */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ActriumIPC;
+		};
+		5C0B1A2D3E4F506172830002 /* Actr */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Actr;
 		};
 		AA00110022003300AA00BB03 /* ActriumVault */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -236,6 +236,8 @@
     },
     "macos/Actrium/Database/BrowserDataRepository.swift": {
       "Actro": 1,
+      "actro": 1,
+      "actro://": 2,
       "actro:": 1,
       "io.actrium.actro.browserSync.localFolderProvider": 1
     },
@@ -273,6 +275,9 @@
     "macos/Actrium/Info.plist": {
       "actro": 1,
       "group.io.actrium.actro.broker": 1,
+      "io.actrium.actro": 1
+    },
+    "macos/Actrium/Models/ActrPackageCache.swift": {
       "io.actrium.actro": 1
     },
     "macos/Actrium/Models/ActriumAppURLScheme.swift": {
@@ -329,14 +334,16 @@
       "com.actro.dismissAddressBarFocus": 1
     },
     "macos/Actrium/Views/MainContentView/BrowserViewModel.swift": {
-      "actro://": 5,
+      "actro": 1,
+      "actro://": 8,
       "actro://...": 1,
       "actro:///Users/example-dev-2/path/to/app": 1,
       "actro:///absolute/path": 2,
-      "actro:///path": 1,
+      "actro:///path": 2,
       "actro:///path/to/app": 1,
       "actro://bundleId": 2,
-      "actro://com.example.app": 1
+      "actro://com.example.app": 1,
+      "actroSourcePath": 2
     },
     "macos/Actrium/Views/Sidebar/TabOutlineView.swift": {
       "com.actro.tabCrossWindowData": 1,
@@ -458,8 +465,18 @@
       "io.actrium.actro.rctviewservice2": 1,
       "io.actrium.actro.rctviewservice3": 1
     },
+    "packages/actrium-platform/apple/ActriumCore/Sources/ActriumCore/AppleBrowserStorageDatabase.swift": {
+      "actro": 1,
+      "actro://": 1
+    },
     "packages/actrium-platform/apple/ActriumCore/Sources/ActriumCore/KeychainStore.swift": {
       "io.actrium.actro": 1
+    },
+    "packages/actrium-platform/apple/ActriumCore/Tests/ActriumCoreTests/AppleBrowserSessionActrTabTests.swift": {
+      "actr/actro": 1,
+      "actro://": 1,
+      "actro://io.actrium.demo": 2,
+      "testMixedSessionKeepsActrAndActroTabs": 1
     },
     "packages/actrium-platform/apple/ActriumCore/Tests/ActriumCoreTests/AppleBrowserStorageDatabaseTests.swift": {
       "Actro/BrowserSync": 1,

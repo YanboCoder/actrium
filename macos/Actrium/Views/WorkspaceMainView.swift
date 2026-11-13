@@ -739,6 +739,42 @@ struct WorkspaceMainView: View {
             fputs("🤏 Received pinchToOverview → exitToOverview()\n", stderr)
             exitToOverview()
         }
+        // ━━━━ Package direct-link download sheets (15-B B1) ━━━━
+        .sheet(item: $viewModel.pendingPackageDownload) { pending in
+            PackageDownloadConfirmSheet(
+                pending: pending,
+                onConfirm: { viewModel.confirmPendingPackageDownload() },
+                onCancel: { viewModel.cancelPendingPackageDownload() }
+            )
+        }
+        // ━━━━ Instance creation confirm sheet (15-B B6) ━━━━
+        .sheet(item: $viewModel.pendingInstanceCreation) { pending in
+            PackageInstanceConfirmSheet(
+                pending: pending,
+                onConfirm: { viewModel.confirmInstanceCreation() },
+                onCancel: { viewModel.cancelInstanceCreation() }
+            )
+        }
+        .sheet(item: $viewModel.activePackageDownload) { active in
+            ActivePackageDownloadSheet(
+                active: active,
+                onRetry: { viewModel.retryActivePackageDownload() },
+                onCancel: { viewModel.cancelActivePackageDownload() }
+            )
+        }
+        .sheet(item: $viewModel.actrUriNotice) { notice in
+            ActrUriNoticeSheet(notice: notice) {
+                viewModel.actrUriNotice = nil
+            }
+        }
+        // ━━━━ Invite-code redeem sheet (temporary flow) ━━━━
+        .sheet(item: $viewModel.pendingInviteRedeem) { pending in
+            InviteCodeRedeemSheet(
+                pending: pending,
+                onConfirm: { code in viewModel.confirmInviteRedeem(code: code) },
+                onCancel: { viewModel.cancelInviteRedeem() }
+            )
+        }
     }
 
     // MARK: - Mode Switching (Unified entrance)

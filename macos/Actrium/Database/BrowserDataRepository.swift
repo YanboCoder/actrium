@@ -361,10 +361,38 @@ final class BrowserDataRepository {
         }
     }
 
+    /// Restorable session tabs: web pages plus actr:// instance addresses and
+    /// actro:// package addresses (15-B B7 — previously only http/https were
+    /// persisted, so ActorIds never survived restarts).
+    static func isSessionRestorableURL(_ url: URL) -> Bool {
+        let scheme = url.scheme?.lowercased()
+        return scheme == "http" || scheme == "https"
+            || scheme == "actr" || scheme == "actro"
+    }
+
+    struct RestoredSessionTab {
+        let title: String
+        let address: String
+    }
+
+    struct RestoredSession {
+        let tabs: [RestoredSessionTab]
+        let activeTabIndex: Int
+    }
+
+    /// Loads the last persisted session (15-B B7 restart restore).
+    func restoreSession() -> RestoredSession? {
+        guard let snapshot = database?.loadSession(), !snapshot.tabs.isEmpty else { return nil }
+        return RestoredSession(
+            tabs: snapshot.tabs.map { RestoredSessionTab(title: $0.title, address: $0.address) },
+            activeTabIndex: max(0, Int(snapshot.activeTabIndex))
+        )
+    }
+
     func saveSession(tabs: [Tab], currentTabId: UUID?) {
         let now = Int64(Date().timeIntervalSince1970)
         let browserTabs = tabs.compactMap { tab -> (id: UUID, item: AppleBrowserSessionTab)? in
-            guard let url = tab.url, Self.isBrowserPageURL(url) else { return nil }
+            guard let url = tab.url, Self.isSessionRestorableURL(url) else { return nil }
             let item = AppleBrowserSessionTab(
                 id: tab.id.uuidString,
                 title: normalizedTitle(tab.title, url: url),
@@ -388,6 +416,12 @@ final class BrowserDataRepository {
             tabs: browserTabs.map { $0.item },
             surfaceKind: "macos"
         )
+        // Core's session normalization accepts only about/http/https/file
+        // (browser_data.rs normalize_session_address); AppleCore therefore
+        // persists snapshots containing actr:// / actro:// tabs verbatim
+        // (AppleBrowserStorageDatabase.coreNormalizedSessionSnapshot returns
+        // nil) so instance addresses survive restarts (15-B B7). Extending the
+        // Core whitelist itself still belongs to the Rust side (team A, out of scope here).
         if database?.saveSession(snapshot: snapshot) == true {
             scheduleSyncAfterLocalChange()
         }
