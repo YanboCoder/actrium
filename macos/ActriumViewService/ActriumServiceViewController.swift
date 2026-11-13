@@ -1874,12 +1874,17 @@ private func setupReactNativeContent(for entry: TabViewControllerEntry) {
 }
 
 /// Read the manifest entry from a verified extraction when one is provided.
+///
+/// The renderer prefers the digest-addressed extraction directory, but falls
+/// back to the inline `unifiedScript` when the bytes are unavailable — for
+/// example when the sandboxed renderer cannot read the Host's package cache.
 private func resolvedGuestScript(fromConfig config: [String: Any]) -> String? {
+    let inlineScript = config["unifiedScript"] as? String
     guard let extractedPath = config["guestExtractedPath"] as? String else {
-        return config["unifiedScript"] as? String
+        return inlineScript
     }
     guard let entry = config["guestEntry"] as? String, !entry.isEmpty, !entry.hasPrefix("/") else {
-        return nil
+        return inlineScript
     }
 
     let root = URL(fileURLWithPath: extractedPath, isDirectory: true)
@@ -1889,7 +1894,7 @@ private func resolvedGuestScript(fromConfig config: [String: Any]) -> String? {
     guard candidate.path.hasPrefix(root.path + "/"),
           let script = try? String(contentsOf: candidate, encoding: .utf8),
           !script.isEmpty else {
-        return nil
+        return inlineScript
     }
     return script
 }
